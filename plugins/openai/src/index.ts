@@ -1,17 +1,169 @@
-import type { Plugin } from "@mnemos/plugin-sdk";
+import OpenAI from "openai";
+import type {
+  Plugin,
+  ChatProvider,
+  EmbeddingProvider,
+  ChatMessage,
+  ChatOptions,
+  ChatChunk,
+  ModelInfo,
+  CredentialSchema,
+} from "@mnemos/plugin-sdk";
 
-/**
- * @mnemos/plugin-openai
- * v0.1 scaffold stub. Full implementation lands in next build pass.
- */
+const credentialSchema: CredentialSchema = {
+  type: "openAIApi",
+  displayName: "OpenAI API",
+  fields: [
+    {
+      key: "apiKey",
+      label: "API Key",
+      type: "password",
+      required: true,
+      description: "Get one at https://platform.openai.com/api-keys",
+    },
+    {
+      key: "baseURL",
+      label: "Base URL (optional)",
+      type: "url",
+      required: false,
+      description:
+        "For OpenAI-compatible endpoints. Leave blank for api.openai.com.",
+    },
+  ],
+};
+
+const CHAT_MODELS: readonly ModelInfo[] = [
+  { id: "gpt-5.5", displayName: "GPT-5.5", contextWindow: 200000 },
+  { id: "gpt-5.4", displayName: "GPT-5.4", contextWindow: 200000 },
+  { id: "gpt-4o", displayName: "GPT-4o", contextWindow: 128000 },
+  { id: "gpt-4o-mini", displayName: "GPT-4o mini", contextWindow: 128000 },
+];
+
+const DEFAULT_CHAT_MODEL = "gpt-5.5";
+const DEFAULT_MAX_TOKENS = 2048;
+
+class OpenAIChatProvider implements ChatProvider {
+  readonly id = "openai";
+  readonly displayName = "OpenAI";
+  readonly credentialSchema = credentialSchema;
+
+  private client: OpenAI | null = null;
+
+  async initialize(credentials: Record<string, string>): Promise<void> {
+    const apiKey = credentials.apiKey;
+    if (!apiKey) {
+      throw new Error("OpenAI provider requires 'apiKey' in credentials");
+    }
+    this.client = new OpenAI({
+      apiKey,
+      ...(credentials.baseURL ? { baseURL: credentials.baseURL } : {}),
+    });
+  }
+
+  async *chat(
+    messages: ChatMessage[],
+    opts?: ChatOptions,
+  ): AsyncIterable<ChatChunk> {
+    if (!this.client) {
+      throw new Error("OpenAI provider not initialized. Call initialize() first.");
+    }
+
+    const stream = await this.client.chat.completions.create({
+      model: opts?.model ?? DEFAULT_CHAT_MODEL,
+      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      max_tokens: opts?.maxTokens ?? DEFAULT_MAX_TOKENS,
+      temperature: opts?.temperature,
+      stream: true,
+    });
+
+    for await (const chunk of stream) {
+      if (opts?.signal?.aborted) {
+        stream.controller.abort();
+        return;
+      }
+      const choice = chunk.choices[0];
+      if (!choice) continue;
+      const delta = choice.delta?.content;
+      if (delta) yield { delta };
+      if (choice.finish_reason) {
+        yield {
+          delta: "",
+          finishReason:
+            choice.finish_reason === "stop"
+              ? "stop"
+              : choice.finish_reason === "length"
+                ? "length"
+                : "error",
+        };
+      }
+    }
+  }
+
+  async listModels(): Promise<ModelInfo[]> {
+    return [...CHAT_MODELS];
+  }
+}
+
+const EMBEDDING_MODELS = {
+  "text-embedding-3-small": 1536,
+  "text-embedding-3-large": 3072,
+} as const;
+
+type EmbeddingModelName = keyof typeof EMBEDDING_MODELS;
+
+const DEFAULT_EMBEDDING_MODEL: EmbeddingModelName = "text-embedding-3-small";
+
+class OpenAIEmbeddingProvider implements EmbeddingProvider {
+  readonly id = "openai";
+  readonly displayName = "OpenAI Embeddings";
+  readonly dimensions = EMBEDDING_MODELS[DEFAULT_EMBEDDING_MODEL];
+  readonly credentialSchema = credentialSchema;
+
+  private client: OpenAI | null = null;
+  private model: EmbeddingModelName = DEFAULT_EMBEDDING_MODEL;
+
+  async initialize(credentials: Record<string, string>): Promise<void> {
+    const apiKey = credentials.apiKey;
+    if (!apiKey) {
+      throw new Error(
+        "OpenAI embedding provider requires 'apiKey' in credentials",
+      );
+    }
+    this.client = new OpenAI({
+      apiKey,
+      ...(credentials.baseURL ? { baseURL: credentials.baseURL } : {}),
+    });
+    const requested = credentials.embeddingModel;
+    if (requested && requested in EMBEDDING_MODELS) {
+      this.model = requested as EmbeddingModelName;
+    }
+  }
+
+  async embed(texts: string[]): Promise<number[][]> {
+    if (!this.client) {
+      throw new Error(
+        "OpenAI embedding provider not initialized. Call initialize() first.",
+      );
+    }
+    if (texts.length === 0) return [];
+    const response = await this.client.embeddings.create({
+      model: this.model,
+      input: texts,
+    });
+    return response.data.map((d) => d.embedding);
+  }
+}
+
 const plugin: Plugin = {
   manifest: {
     id: "mnemos-plugin-openai",
-    displayName: "openai (stub)",
+    displayName: "OpenAI",
     version: "0.1.0",
     apiVersion: "0.1",
     author: "Mnemos",
   },
+  chatProviders: [new OpenAIChatProvider()],
+  embeddingProviders: [new OpenAIEmbeddingProvider()],
 };
 
 export default plugin;

@@ -1,21 +1,36 @@
 /**
  * @mnemos/core
  *
- * The RAG runtime. Provider-agnostic.
+ * The RAG runtime. Provider-agnostic, plugin-driven.
  *
- * Pipeline stages (each is a discrete module):
- *   - ingest/   File loading, hashing, chunking, embedding, upsert
- *   - query/    Embed query, retrieve, assemble prompt, generate, cite
- *   - memory/   Conversation buffer
- *   - audit/    Append-only audit log
- *   - registry/ Plugin loading + provider lookup
+ * Public API:
+ *   - Plugin registry: loadBundledPlugins, getChatProvider, getEmbeddingProvider, getDocumentLoader
+ *   - Crypto: encrypt/decrypt (AES-GCM for credentials at rest)
+ *   - Pipeline: ingest + query (coming in next pass)
  *
- * v0.1 ships skeletons here. Implementation lands incrementally in the next pass.
+ * Re-exports types from plugin-sdk and db for caller convenience.
  */
 
 export const VERSION = "0.1.0";
 
-// Re-export plugin SDK types for convenience
+// Registry
+export {
+  loadBundledPlugins,
+  getChatProvider,
+  getEmbeddingProvider,
+  getDocumentLoader,
+  PluginValidationError,
+  type PluginRegistry,
+} from "./registry.js";
+
+// Crypto
+export {
+  generateEncryptionKey,
+  encryptString,
+  decryptString,
+} from "./crypto.js";
+
+// Re-export plugin SDK types
 export type {
   ChatProvider,
   EmbeddingProvider,
@@ -26,6 +41,8 @@ export type {
   ChatOptions,
   ChatChunk,
   ModelInfo,
+  CredentialSchema,
+  CredentialField,
 } from "@mnemos/plugin-sdk";
 
 // Re-export db types
@@ -36,14 +53,5 @@ export type {
   Credential,
   Session,
   AuditEvent,
+  SearchHit,
 } from "@mnemos/db";
-
-// Stub exports — to be filled in next pass
-export const __coming_in_next_pass__ = [
-  "ingest.ingestFolder()",
-  "query.runQuery()",
-  "registry.loadPlugins()",
-  "registry.getChatProvider()",
-  "registry.getEmbeddingProvider()",
-  "audit.append()",
-] as const;

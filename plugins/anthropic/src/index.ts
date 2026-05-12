@@ -1,3 +1,4 @@
+import Anthropic from "@anthropic-ai/sdk";
 import type {
   Plugin,
   ChatProvider,
@@ -22,27 +23,103 @@ const credentialSchema: CredentialSchema = {
   ],
 };
 
+const KNOWN_MODELS: readonly ModelInfo[] = [
+  {
+    id: "claude-opus-4-7",
+    displayName: "Claude Opus 4.7",
+    contextWindow: 200000,
+    inputCostPer1M: 15.0,
+    outputCostPer1M: 75.0,
+  },
+  {
+    id: "claude-sonnet-4-6",
+    displayName: "Claude Sonnet 4.6",
+    contextWindow: 200000,
+    inputCostPer1M: 3.0,
+    outputCostPer1M: 15.0,
+  },
+  {
+    id: "claude-haiku-4-5",
+    displayName: "Claude Haiku 4.5",
+    contextWindow: 200000,
+    inputCostPer1M: 0.8,
+    outputCostPer1M: 4.0,
+  },
+];
+
+const DEFAULT_MODEL = "claude-sonnet-4-6";
+const DEFAULT_MAX_TOKENS = 2048;
+
 class AnthropicProvider implements ChatProvider {
   readonly id = "anthropic";
   readonly displayName = "Anthropic Claude";
   readonly credentialSchema = credentialSchema;
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async initialize(_credentials: Record<string, string>): Promise<void> {
-    // v0.1 stub: wire Anthropic SDK client in next pass
+  private client: Anthropic | null = null;
+
+  async initialize(credentials: Record<string, string>): Promise<void> {
+    const apiKey = credentials.apiKey;
+    if (!apiKey) {
+      throw new Error("Anthropic provider requires 'apiKey' in credentials");
+    }
+    this.client = new Anthropic({ apiKey });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async *chat(_messages: ChatMessage[], _opts?: ChatOptions): AsyncIterable<ChatChunk> {
-    yield { delta: "[anthropic plugin stub — implementation in next pass]" };
+  async *chat(
+    messages: ChatMessage[],
+    opts?: ChatOptions,
+  ): AsyncIterable<ChatChunk> {
+    if (!this.client) {
+      throw new Error("Anthropic provider not initialized. Call initialize() first.");
+    }
+
+    // Anthropic API takes system as a separate field, not as a message role.
+    const systemMessages = messages
+      .filter((m) => m.role === "system")
+      .map((m) => m.content)
+      .join("\n\n");
+    const turns = messages.filter((m) => m.role !== "system");
+
+    const stream = this.client.messages.stream({
+      model: opts?.model ?? DEFAULT_MODEL,
+      max_tokens: opts?.maxTokens ?? DEFAULT_MAX_TOKENS,
+      temperature: opts?.temperature,
+      ...(systemMessages ? { system: systemMessages } : {}),
+      messages: turns.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      })),
+    });
+
+    try {
+      for await (const event of stream) {
+        if (opts?.signal?.aborted) {
+          stream.controller.abort();
+          throw new Error("Aborted");
+        }
+        if (
+          event.type === "content_block_delta" &&
+          event.delta.type === "text_delta"
+        ) {
+          yield { delta: event.delta.text };
+        }
+      }
+      const final = await stream.finalMessage();
+      yield {
+        delta: "",
+        finishReason: final.stop_reason === "end_turn" ? "stop" : "length",
+      };
+    } catch (err) {
+      if (err instanceof Error && err.message === "Aborted") {
+        yield { delta: "", finishReason: "error" };
+        return;
+      }
+      throw err;
+    }
   }
 
   async listModels(): Promise<ModelInfo[]> {
-    return [
-      { id: "claude-opus-4-7", displayName: "Claude Opus 4.7", contextWindow: 200000 },
-      { id: "claude-sonnet-4-6", displayName: "Claude Sonnet 4.6", contextWindow: 200000 },
-      { id: "claude-haiku-4-5", displayName: "Claude Haiku 4.5", contextWindow: 200000 },
-    ];
+    return [...KNOWN_MODELS];
   }
 }
 

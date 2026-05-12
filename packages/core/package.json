@@ -1,7 +1,7 @@
 {
   "name": "@mnemos/core",
   "version": "0.1.0",
-  "description": "Core RAG pipeline for Mnemos. Provider-agnostic.",
+  "description": "Core RAG pipeline + plugin registry for Mnemos.",
   "license": "MIT",
   "type": "module",
   "main": "./src/index.ts",
@@ -20,6 +20,16 @@
   "dependencies": {
     "@mnemos/db": "workspace:*",
     "@mnemos/plugin-sdk": "workspace:*",
+    "@mnemos/plugin-anthropic": "workspace:*",
+    "@mnemos/plugin-openai": "workspace:*",
+    "@mnemos/plugin-gemini": "workspace:*",
+    "@mnemos/plugin-ollama": "workspace:*",
+    "@mnemos/plugin-llama-cpp": "workspace:*",
+    "@mnemos/plugin-loader-pdf": "workspace:*",
+    "@mnemos/plugin-loader-markdown": "workspace:*",
+    "@mnemos/plugin-loader-plaintext": "workspace:*",
+    "@mnemos/plugin-loader-web": "workspace:*",
+    "@mnemos/plugin-loader-code": "workspace:*",
     "zod": "^3.23.0"
   },
   "devDependencies": {
