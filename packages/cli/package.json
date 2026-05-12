@@ -1,0 +1,25 @@
+{
+  "name": "@mnemos/cli",
+  "version": "0.1.0",
+  "description": "Mnemos CLI: pair, ingest, auth, doctor.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "bin": {
+    "mnemos": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@mnemos/core": "workspace:*",
+    "@mnemos/db": "workspace:*",
+    "@mnemos/plugin-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "mnemos-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal RAG. Local-first. Drop a folder, ask a question.",
+  "homepage": "https://github.com/sammuthu/mnemos",
+  "license": "MIT",
+  "author": "Sam Muthu",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @mnemos/web dev",
+    "build": "pnpm -r --filter=!@mnemos/web build && pnpm --filter @mnemos/web build",
+    "start": "pnpm --filter @mnemos/web start",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "oxlint .",
+    "format": "oxfmt .",
+    "clean": "pnpm -r clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "oxlint": "^0.13.0",
+    "@oxfmt/oxfmt": "^0.1.0"
+  },
+  "pnpm": {
+    "minimumReleaseAge": 2880
+  }
+}

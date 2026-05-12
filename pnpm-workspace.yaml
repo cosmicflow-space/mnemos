@@ -1,0 +1,12 @@
+packages:
+  - apps/*
+  - packages/*
+  - plugins/*
+
+minimumReleaseAge: 2880
+
+allowBuilds:
+  - better-sqlite3
+  - sqlite-vec
+  - node-llama-cpp
+  - sharp

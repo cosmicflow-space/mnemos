@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build artifacts
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Mnemos runtime state (should never be in repo)
+.mnemos/
+mnemos.db
+mnemos.db-*
+audit.log
+auth.key
+encryption.key
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Docker
+.dockerignore.local
+
+# pnpm
+.pnpm-debug.log
+
+# Caches
+.turbo/
+.cache/

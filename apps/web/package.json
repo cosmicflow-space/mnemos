@@ -1,0 +1,33 @@
+{
+  "name": "@mnemos/web",
+  "version": "0.1.0",
+  "description": "Mnemos Next.js UI + API routes.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 3030 -H ${MNEMOS_BIND:-127.0.0.1}",
+    "build": "next build",
+    "start": "next start -p 3030 -H ${MNEMOS_BIND:-0.0.0.0}",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .next *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@mnemos/core": "workspace:*",
+    "@mnemos/db": "workspace:*",
+    "@mnemos/plugin-sdk": "workspace:*",
+    "next": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.6.0"
+  }
+}

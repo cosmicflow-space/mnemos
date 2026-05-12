@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+@theme {
+  --color-mnemos-bg: #0a0a14;
+  --color-mnemos-accent-cyan: #06b6d4;
+  --color-mnemos-accent-purple: #a855f7;
+  --color-mnemos-accent-pink: #ec4899;
+}
