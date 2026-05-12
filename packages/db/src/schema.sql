@@ -39,12 +39,16 @@ CREATE TABLE IF NOT EXISTS chunk (
 );
 CREATE INDEX IF NOT EXISTS idx_chunk_file ON chunk(file_id);
 
--- Vector storage via sqlite-vec virtual table
--- Default dimension 1536 matches OpenAI text-embedding-3-small.
--- Re-create with different dimensions only if changing embedding provider.
+-- Vector storage via sqlite-vec virtual table.
+-- Dimension 384 is the v0.1 standard across all bundled embedding providers:
+--   - embed-local (BGE-small-en-v1.5): 384 native
+--   - Ollama (all-minilm): 384 native
+--   - OpenAI (text-embedding-3-small with dimensions=384): Matryoshka truncation
+-- Providers that natively use other dimensions adapt via truncation or model choice.
+-- v0.2 will support multi-dimension installs via migration.
 CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunk USING vec0(
   chunk_id INTEGER PRIMARY KEY,
-  embedding FLOAT[1536]
+  embedding FLOAT[384]
 );
 
 -- Encrypted credentials

@@ -20,6 +20,7 @@
   "dependencies": {
     "@mnemos/db": "workspace:*",
     "@mnemos/plugin-sdk": "workspace:*",
+    "@mnemos/plugin-embed-local": "workspace:*",
     "@mnemos/plugin-anthropic": "workspace:*",
     "@mnemos/plugin-openai": "workspace:*",
     "@mnemos/plugin-gemini": "workspace:*",

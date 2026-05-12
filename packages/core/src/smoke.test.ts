@@ -38,6 +38,8 @@ import {
   generateEncryptionKey,
   encryptString,
   decryptString,
+  DEFAULT_EMBEDDING_PROVIDER_ID,
+  MNEMOS_EMBEDDING_DIM,
 } from "./index.js";
 
 describe("smoke: db + registry + crypto", () => {
@@ -141,12 +143,12 @@ describe("smoke: db + registry + crypto", () => {
 });
 
 describe("smoke: plugin registry", () => {
-  it("loads all 10 bundled plugins without validation errors", () => {
+  it("loads all 11 bundled plugins without validation errors", () => {
     const registry = loadBundledPlugins();
-    expect(registry.plugins.length).toBe(10);
+    expect(registry.plugins.length).toBe(11);
   });
 
-  it("registers 5 chat providers (anthropic, openai, gemini, ollama, llama-cpp)", () => {
+  it("registers chat providers (anthropic, openai, ollama)", () => {
     const registry = loadBundledPlugins();
     // anthropic + openai + ollama are real; gemini + llama-cpp are stubs without chatProviders
     expect(registry.chatProviders.size).toBeGreaterThanOrEqual(3);
@@ -155,11 +157,27 @@ describe("smoke: plugin registry", () => {
     expect(registry.chatProviders.has("ollama")).toBe(true);
   });
 
-  it("registers embedding providers (openai, ollama)", () => {
+  it("registers embedding providers (embed-local, openai, ollama)", () => {
     const registry = loadBundledPlugins();
-    expect(registry.embeddingProviders.size).toBeGreaterThanOrEqual(2);
+    expect(registry.embeddingProviders.size).toBeGreaterThanOrEqual(3);
+    expect(registry.embeddingProviders.has("embed-local")).toBe(true);
     expect(registry.embeddingProviders.has("openai")).toBe(true);
     expect(registry.embeddingProviders.has("ollama")).toBe(true);
+  });
+
+  it("default embedding provider is embed-local and matches Mnemos standard dim", () => {
+    expect(DEFAULT_EMBEDDING_PROVIDER_ID).toBe("embed-local");
+    expect(MNEMOS_EMBEDDING_DIM).toBe(384);
+    const registry = loadBundledPlugins();
+    const defaultEmbed = getEmbeddingProvider(registry, DEFAULT_EMBEDDING_PROVIDER_ID);
+    expect(defaultEmbed.dimensions).toBe(MNEMOS_EMBEDDING_DIM);
+  });
+
+  it("all embedding providers report the same standard dimension (384)", () => {
+    const registry = loadBundledPlugins();
+    for (const provider of registry.embeddingProviders.values()) {
+      expect(provider.dimensions).toBe(MNEMOS_EMBEDDING_DIM);
+    }
   });
 
   it("looks up chat provider by id", () => {
@@ -256,9 +274,16 @@ describe("smoke: provider structure (no live API calls)", () => {
     expect(models.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("openai embedding provider has dimensions 1536 by default", () => {
+  it("openai embedding provider reports standard dim (384) via Matryoshka truncation", () => {
     const registry = loadBundledPlugins();
     const provider = getEmbeddingProvider(registry, "openai");
-    expect(provider.dimensions).toBe(1536);
+    expect(provider.dimensions).toBe(MNEMOS_EMBEDDING_DIM);
+  });
+
+  it("embed-local provider reports standard dim (384) and bundled model", () => {
+    const registry = loadBundledPlugins();
+    const provider = getEmbeddingProvider(registry, "embed-local");
+    expect(provider.dimensions).toBe(384);
+    expect(provider.credentialSchema.type).toBe("embedLocal");
   });
 });

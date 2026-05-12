@@ -104,23 +104,25 @@ class OpenAIChatProvider implements ChatProvider {
   }
 }
 
-const EMBEDDING_MODELS = {
-  "text-embedding-3-small": 1536,
-  "text-embedding-3-large": 3072,
-} as const;
+// OpenAI text-embedding-3-* models support Matryoshka dimension truncation
+// via the `dimensions` parameter. We standardize on 384 across all Mnemos
+// bundled embedding providers so the SQLite schema stays uniform.
+const EMBEDDING_MODELS = new Set([
+  "text-embedding-3-small",
+  "text-embedding-3-large",
+]);
 
-type EmbeddingModelName = keyof typeof EMBEDDING_MODELS;
-
-const DEFAULT_EMBEDDING_MODEL: EmbeddingModelName = "text-embedding-3-small";
+const DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small";
+const MNEMOS_EMBEDDING_DIM = 384;
 
 class OpenAIEmbeddingProvider implements EmbeddingProvider {
   readonly id = "openai";
   readonly displayName = "OpenAI Embeddings";
-  readonly dimensions = EMBEDDING_MODELS[DEFAULT_EMBEDDING_MODEL];
+  readonly dimensions = MNEMOS_EMBEDDING_DIM;
   readonly credentialSchema = credentialSchema;
 
   private client: OpenAI | null = null;
-  private model: EmbeddingModelName = DEFAULT_EMBEDDING_MODEL;
+  private model = DEFAULT_EMBEDDING_MODEL;
 
   async initialize(credentials: Record<string, string>): Promise<void> {
     const apiKey = credentials.apiKey;
@@ -134,8 +136,8 @@ class OpenAIEmbeddingProvider implements EmbeddingProvider {
       ...(credentials.baseURL ? { baseURL: credentials.baseURL } : {}),
     });
     const requested = credentials.embeddingModel;
-    if (requested && requested in EMBEDDING_MODELS) {
-      this.model = requested as EmbeddingModelName;
+    if (requested && EMBEDDING_MODELS.has(requested)) {
+      this.model = requested;
     }
   }
 
@@ -149,6 +151,7 @@ class OpenAIEmbeddingProvider implements EmbeddingProvider {
     const response = await this.client.embeddings.create({
       model: this.model,
       input: texts,
+      dimensions: MNEMOS_EMBEDDING_DIM,
     });
     return response.data.map((d) => d.embedding);
   }

@@ -20,6 +20,8 @@ export {
   getEmbeddingProvider,
   getDocumentLoader,
   PluginValidationError,
+  DEFAULT_EMBEDDING_PROVIDER_ID,
+  MNEMOS_EMBEDDING_DIM,
   type PluginRegistry,
 } from "./registry.js";
 

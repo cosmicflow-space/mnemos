@@ -31,8 +31,9 @@ Requires Node 22+ and pnpm 9+.
 ## What Mnemos is
 
 - **Local-first**: SQLite + sqlite-vec, single file at `~/.mnemos/mnemos.db`. No separate vector database.
+- **Free by default**: Bundled local embedding model (BGE-small via ONNX) means RAG works out of the box with zero external services and zero API costs. Bring your own Anthropic / OpenAI / Gemini key for chat — or run fully local with Ollama or llama.cpp.
 - **Single user**: One person, one machine. Bearer-token auth bound to 127.0.0.1 by default.
-- **Pluggable providers**: Anthropic, OpenAI, Gemini, Ollama, node-llama-cpp. Add your own via plugin SDK.
+- **Pluggable providers**: Anthropic, OpenAI, Gemini, Ollama, node-llama-cpp for chat. Bundled local, OpenAI, and Ollama for embeddings. All visible from first run. Add your own via the plugin SDK.
 - **Read-only**: Mnemos never modifies your files. Folder access is opt-in via `mnemos pair add <folder>`.
 - **Auditable**: Every query records exactly which chunks were retrieved, what was sent to the LLM, and how many tokens it cost. Visible in the UI.
 - **Citations**: Every answer references the source files and line ranges.
@@ -61,10 +62,11 @@ mnemos/
 │   ├── plugin-sdk/        # Plugin SDK barrel
 │   └── cli/               # `mnemos` CLI
 └── plugins/
-    ├── anthropic/         # ChatProvider
+    ├── embed-local/       # EmbeddingProvider (bundled, default — BGE-small via ONNX)
+    ├── anthropic/         # ChatProvider (Claude)
     ├── openai/            # ChatProvider + EmbeddingProvider
     ├── gemini/            # ChatProvider
-    ├── ollama/            # ChatProvider + EmbeddingProvider
+    ├── ollama/            # ChatProvider + EmbeddingProvider (host-local)
     ├── llama-cpp/         # ChatProvider + EmbeddingProvider (bundled local)
     ├── loader-pdf/        # DocumentLoader
     ├── loader-markdown/   # DocumentLoader

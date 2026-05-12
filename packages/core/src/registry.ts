@@ -16,6 +16,7 @@ import type {
 } from "@mnemos/plugin-sdk";
 
 // Static imports of bundled plugins. Adding a new bundled plugin = add an import here.
+import embedLocalPlugin from "@mnemos/plugin-embed-local";
 import anthropicPlugin from "@mnemos/plugin-anthropic";
 import openaiPlugin from "@mnemos/plugin-openai";
 import geminiPlugin from "@mnemos/plugin-gemini";
@@ -27,7 +28,9 @@ import loaderPlaintextPlugin from "@mnemos/plugin-loader-plaintext";
 import loaderWebPlugin from "@mnemos/plugin-loader-web";
 import loaderCodePlugin from "@mnemos/plugin-loader-code";
 
+// Order matters for UI display: embed-local is the v0.1 default and appears first.
 const BUNDLED_PLUGINS: readonly Plugin[] = [
+  embedLocalPlugin,
   anthropicPlugin,
   openaiPlugin,
   geminiPlugin,
@@ -39,6 +42,14 @@ const BUNDLED_PLUGINS: readonly Plugin[] = [
   loaderWebPlugin,
   loaderCodePlugin,
 ];
+
+/** The default embedding provider id. Used by the onboarding wizard and the
+ * pipeline when the user hasn't explicitly chosen a provider. */
+export const DEFAULT_EMBEDDING_PROVIDER_ID = "embed-local";
+
+/** The standard embedding dimension across all bundled providers in v0.1.
+ * Must match the dimension declared in packages/db/src/schema.sql vec_chunk. */
+export const MNEMOS_EMBEDDING_DIM = 384;
 
 export type PluginRegistry = {
   readonly plugins: readonly Plugin[];

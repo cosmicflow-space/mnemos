@@ -25,8 +25,12 @@ const credentialSchema: CredentialSchema = {
 
 const DEFAULT_BASE_URL = "http://localhost:11434";
 const DEFAULT_CHAT_MODEL = "llama3.2";
-const DEFAULT_EMBED_MODEL = "nomic-embed-text";
-const DEFAULT_EMBED_DIM = 768; // nomic-embed-text dimension
+// Default to all-minilm (384 dim native) so it matches Mnemos's standard schema.
+// Users can override via credentials.embeddingModel; if they pick a model with
+// non-384 native dim, the schema still expects 384 so they'll need to handle
+// truncation themselves until v0.2 multi-dim support lands.
+const DEFAULT_EMBED_MODEL = "all-minilm";
+const MNEMOS_EMBEDDING_DIM = 384;
 
 type OllamaChatStreamLine = {
   model: string;
@@ -135,7 +139,7 @@ class OllamaChatProvider implements ChatProvider {
 class OllamaEmbeddingProvider implements EmbeddingProvider {
   readonly id = "ollama";
   readonly displayName = "Ollama Embeddings (local)";
-  readonly dimensions = DEFAULT_EMBED_DIM;
+  readonly dimensions = MNEMOS_EMBEDDING_DIM;
   readonly credentialSchema = credentialSchema;
 
   private baseURL = DEFAULT_BASE_URL;
