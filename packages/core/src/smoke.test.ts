@@ -18,10 +18,10 @@ import { tmpdir } from "node:os";
 import {
   openDb,
   type MnemosDb,
-  addFolder,
-  listFolders,
-  getFolderByPath,
-  removeFolder,
+  addSource,
+  listSources,
+  getSourceByPath,
+  removeSource,
   upsertCredential,
   getCredentialByName,
   createSession,
@@ -64,7 +64,7 @@ describe("smoke: db + registry + crypto", () => {
       .all() as Array<{ name: string }>;
     const names = tables.map((t) => t.name);
 
-    expect(names).toContain("folder");
+    expect(names).toContain("source");
     expect(names).toContain("file");
     expect(names).toContain("chunk");
     expect(names).toContain("credential");
@@ -78,23 +78,24 @@ describe("smoke: db + registry + crypto", () => {
     );
   });
 
-  it("round-trips folder add/list/get/remove", () => {
-    const added = addFolder(db, "/tmp/foo");
+  it("round-trips source add/list/get/remove", () => {
+    const added = addSource(db, "/tmp/foo");
     expect(added.path).toBe("/tmp/foo");
+    expect(added.kind).toBe("folder");
     expect(added.scope).toBe("read-only");
     expect(added.id).toBeGreaterThan(0);
 
-    const all = listFolders(db);
+    const all = listSources(db);
     expect(all).toHaveLength(1);
     expect(all[0]?.path).toBe("/tmp/foo");
 
-    const found = getFolderByPath(db, "/tmp/foo");
+    const found = getSourceByPath(db, "/tmp/foo");
     expect(found?.id).toBe(added.id);
 
-    const result = removeFolder(db, "/tmp/foo");
+    const result = removeSource(db, "/tmp/foo");
     expect(result.chunksPurged).toBe(0); // no chunks to purge in this test
 
-    expect(listFolders(db)).toHaveLength(0);
+    expect(listSources(db)).toHaveLength(0);
   });
 
   it("upserts credentials idempotently", () => {

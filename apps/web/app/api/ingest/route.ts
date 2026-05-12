@@ -4,10 +4,10 @@ export const runtime = "nodejs";
 
 /**
  * POST /api/ingest
- * Body: { folder: string }
+ * Body: { source: string }
  *
- * Triggers re-ingestion of a paired folder. Returns progress as JSON for now;
- * v0.2 upgrades to Server-Sent Events for live progress.
+ * Triggers re-ingestion of a registered source. Returns progress as JSON
+ * for now; v0.2 upgrades to Server-Sent Events for live progress.
  *
  * Stub for v0.1 — full implementation lands next pass.
  */

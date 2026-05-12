@@ -1,29 +1,32 @@
 -- Mnemos v0.1 database schema
--- One SQLite file holds: paired folders, ingested files, chunks (with vectors),
+-- One SQLite file holds: registered sources, ingested files, chunks (with vectors),
 -- encrypted credentials, chat sessions, messages, and audit events.
 
--- Paired folders (the scope authorization primitive)
-CREATE TABLE IF NOT EXISTS folder (
+-- Registered sources (the scope authorization primitive).
+-- A source is anything Mnemos has been granted permission to index:
+-- a local folder path, a URL prefix, an email mailbox (v0.2), etc.
+CREATE TABLE IF NOT EXISTS source (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   path        TEXT NOT NULL UNIQUE,
+  kind        TEXT NOT NULL DEFAULT 'folder',  -- 'folder' | 'url' | 'mailbox' (v0.2+)
   scope       TEXT NOT NULL DEFAULT 'read-only',
   created_at  INTEGER NOT NULL,
   updated_at  INTEGER NOT NULL
 );
 
--- Ingested files (one row per file across all paired folders)
+-- Ingested files (one row per file across all registered sources)
 CREATE TABLE IF NOT EXISTS file (
   id                INTEGER PRIMARY KEY AUTOINCREMENT,
-  folder_id         INTEGER NOT NULL REFERENCES folder(id) ON DELETE CASCADE,
+  source_id         INTEGER NOT NULL REFERENCES source(id) ON DELETE CASCADE,
   path              TEXT NOT NULL,
   content_hash      TEXT NOT NULL,
   size_bytes        INTEGER NOT NULL,
   mtime             INTEGER NOT NULL,
   loader            TEXT NOT NULL,
   last_ingested_at  INTEGER NOT NULL,
-  UNIQUE(folder_id, path)
+  UNIQUE(source_id, path)
 );
-CREATE INDEX IF NOT EXISTS idx_file_folder ON file(folder_id);
+CREATE INDEX IF NOT EXISTS idx_file_source ON file(source_id);
 
 -- Chunks (one row per text chunk; vector lives in vec_chunk)
 CREATE TABLE IF NOT EXISTS chunk (

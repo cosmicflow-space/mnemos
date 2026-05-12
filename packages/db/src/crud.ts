@@ -11,7 +11,8 @@
 import type { MnemosDb } from "./client.js";
 import { prepared } from "./client.js";
 import type {
-  Folder,
+  Source,
+  SourceKind,
   FileRow,
   Chunk,
   Credential,
@@ -21,20 +22,25 @@ import type {
 } from "./types.js";
 
 // ============================================================================
-// Folders
+// Sources (registered folders, URLs, etc.)
 // ============================================================================
 
-export function addFolder(db: MnemosDb, path: string): Folder {
+export function addSource(
+  db: MnemosDb,
+  path: string,
+  kind: SourceKind = "folder",
+): Source {
   const p = prepared(db);
   const now = Date.now();
   const result = p(
-    `INSERT INTO folder (path, scope, created_at, updated_at)
-     VALUES (?, 'read-only', ?, ?)
+    `INSERT INTO source (path, kind, scope, created_at, updated_at)
+     VALUES (?, ?, 'read-only', ?, ?)
      ON CONFLICT(path) DO UPDATE SET updated_at = excluded.updated_at
-     RETURNING id, path, scope, created_at, updated_at`,
-  ).get(path, now, now) as {
+     RETURNING id, path, kind, scope, created_at, updated_at`,
+  ).get(path, kind, now, now) as {
     id: number;
     path: string;
+    kind: SourceKind;
     scope: "read-only";
     created_at: number;
     updated_at: number;
@@ -42,18 +48,20 @@ export function addFolder(db: MnemosDb, path: string): Folder {
   return {
     id: result.id,
     path: result.path,
+    kind: result.kind,
     scope: result.scope,
     createdAt: result.created_at,
     updatedAt: result.updated_at,
   };
 }
 
-export function listFolders(db: MnemosDb): Folder[] {
+export function listSources(db: MnemosDb): Source[] {
   const rows = prepared(db)(
-    `SELECT id, path, scope, created_at, updated_at FROM folder ORDER BY path`,
+    `SELECT id, path, kind, scope, created_at, updated_at FROM source ORDER BY path`,
   ).all() as Array<{
     id: number;
     path: string;
+    kind: SourceKind;
     scope: "read-only";
     created_at: number;
     updated_at: number;
@@ -61,19 +69,21 @@ export function listFolders(db: MnemosDb): Folder[] {
   return rows.map((r) => ({
     id: r.id,
     path: r.path,
+    kind: r.kind,
     scope: r.scope,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   }));
 }
 
-export function getFolderByPath(db: MnemosDb, path: string): Folder | null {
+export function getSourceByPath(db: MnemosDb, path: string): Source | null {
   const row = prepared(db)(
-    `SELECT id, path, scope, created_at, updated_at FROM folder WHERE path = ?`,
+    `SELECT id, path, kind, scope, created_at, updated_at FROM source WHERE path = ?`,
   ).get(path) as
     | {
         id: number;
         path: string;
+        kind: SourceKind;
         scope: "read-only";
         created_at: number;
         updated_at: number;
@@ -83,6 +93,7 @@ export function getFolderByPath(db: MnemosDb, path: string): Folder | null {
   return {
     id: row.id,
     path: row.path,
+    kind: row.kind,
     scope: row.scope,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -90,25 +101,25 @@ export function getFolderByPath(db: MnemosDb, path: string): Folder | null {
 }
 
 /**
- * Remove a folder and cascade-delete its files + chunks + vectors.
+ * Remove a source and cascade-delete its files + chunks + vectors.
  * Returns the number of chunks purged from vec_chunk.
  */
-export function removeFolder(db: MnemosDb, path: string): { chunksPurged: number } {
+export function removeSource(db: MnemosDb, path: string): { chunksPurged: number } {
   return db.transaction(() => {
-    const folder = getFolderByPath(db, path);
-    if (!folder) return { chunksPurged: 0 };
+    const source = getSourceByPath(db, path);
+    if (!source) return { chunksPurged: 0 };
 
     // Purge vectors first (no foreign key on the virtual table)
     const purgeResult = prepared(db)(
       `DELETE FROM vec_chunk WHERE chunk_id IN (
          SELECT c.id FROM chunk c
          JOIN file f ON c.file_id = f.id
-         WHERE f.folder_id = ?
+         WHERE f.source_id = ?
        )`,
-    ).run(folder.id);
+    ).run(source.id);
 
     // Cascade-delete via foreign keys removes file + chunk rows
-    prepared(db)(`DELETE FROM folder WHERE id = ?`).run(folder.id);
+    prepared(db)(`DELETE FROM source WHERE id = ?`).run(source.id);
 
     return { chunksPurged: Number(purgeResult.changes) };
   })();
@@ -119,8 +130,8 @@ export function removeFolder(db: MnemosDb, path: string): { chunksPurged: number
 // ============================================================================
 
 export type UpsertFileInput = {
-  folderId: number;
-  path: string; // relative to folder.path
+  sourceId: number;
+  path: string; // relative to source.path
   contentHash: string;
   sizeBytes: number;
   mtime: number;
@@ -137,8 +148,8 @@ export function upsertFile(
 ): { fileId: number; changed: boolean } {
   const p = prepared(db);
   const existing = p(
-    `SELECT id, content_hash FROM file WHERE folder_id = ? AND path = ?`,
-  ).get(input.folderId, input.path) as
+    `SELECT id, content_hash FROM file WHERE source_id = ? AND path = ?`,
+  ).get(input.sourceId, input.path) as
     | { id: number; content_hash: string }
     | undefined;
 
@@ -167,10 +178,10 @@ export function upsertFile(
   }
 
   const result = p(
-    `INSERT INTO file (folder_id, path, content_hash, size_bytes, mtime, loader, last_ingested_at)
+    `INSERT INTO file (source_id, path, content_hash, size_bytes, mtime, loader, last_ingested_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
   ).run(
-    input.folderId,
+    input.sourceId,
     input.path,
     input.contentHash,
     input.sizeBytes,
@@ -183,12 +194,12 @@ export function upsertFile(
 
 export function getFile(db: MnemosDb, fileId: number): FileRow | null {
   const row = prepared(db)(
-    `SELECT id, folder_id, path, content_hash, size_bytes, mtime, loader, last_ingested_at
+    `SELECT id, source_id, path, content_hash, size_bytes, mtime, loader, last_ingested_at
      FROM file WHERE id = ?`,
   ).get(fileId) as
     | {
         id: number;
-        folder_id: number;
+        source_id: number;
         path: string;
         content_hash: string;
         size_bytes: number;
@@ -200,7 +211,7 @@ export function getFile(db: MnemosDb, fileId: number): FileRow | null {
   if (!row) return null;
   return {
     id: row.id,
-    folderId: row.folder_id,
+    sourceId: row.source_id,
     path: row.path,
     contentHash: row.content_hash,
     sizeBytes: row.size_bytes,
@@ -210,13 +221,13 @@ export function getFile(db: MnemosDb, fileId: number): FileRow | null {
   };
 }
 
-export function listFilesInFolder(db: MnemosDb, folderId: number): FileRow[] {
+export function listFilesInSource(db: MnemosDb, sourceId: number): FileRow[] {
   const rows = prepared(db)(
-    `SELECT id, folder_id, path, content_hash, size_bytes, mtime, loader, last_ingested_at
-     FROM file WHERE folder_id = ? ORDER BY path`,
-  ).all(folderId) as Array<{
+    `SELECT id, source_id, path, content_hash, size_bytes, mtime, loader, last_ingested_at
+     FROM file WHERE source_id = ? ORDER BY path`,
+  ).all(sourceId) as Array<{
     id: number;
-    folder_id: number;
+    source_id: number;
     path: string;
     content_hash: string;
     size_bytes: number;
@@ -226,7 +237,7 @@ export function listFilesInFolder(db: MnemosDb, folderId: number): FileRow[] {
   }>;
   return rows.map((r) => ({
     id: r.id,
-    folderId: r.folder_id,
+    sourceId: r.source_id,
     path: r.path,
     contentHash: r.content_hash,
     sizeBytes: r.size_bytes,
@@ -258,7 +269,7 @@ export type InsertChunkInput = {
   startOffset: number;
   endOffset: number;
   metadata?: Record<string, unknown>;
-  embedding: number[]; // dimension must match vec_chunk schema (default 1536)
+  embedding: number[]; // dimension must match vec_chunk schema (default 384)
 };
 
 /** Insert a chunk and its vector in one transaction. */
@@ -290,15 +301,15 @@ export type SearchHit = {
   chunkId: number;
   fileId: number;
   filePath: string;
-  folderId: number;
-  folderPath: string;
+  sourceId: number;
+  sourcePath: string;
   text: string;
   startOffset: number;
   endOffset: number;
   distance: number; // smaller = closer (cosine)
 };
 
-/** Vector search top-K with file + folder metadata joined in. */
+/** Vector search top-K with file + source metadata joined in. */
 export function vecSearch(
   db: MnemosDb,
   queryEmbedding: number[],
@@ -309,8 +320,8 @@ export function vecSearch(
        v.chunk_id     AS chunkId,
        c.file_id      AS fileId,
        f.path         AS filePath,
-       f.folder_id    AS folderId,
-       fo.path        AS folderPath,
+       f.source_id    AS sourceId,
+       s.path         AS sourcePath,
        c.text         AS text,
        c.start_offset AS startOffset,
        c.end_offset   AS endOffset,
@@ -318,22 +329,22 @@ export function vecSearch(
      FROM vec_chunk v
      JOIN chunk c    ON v.chunk_id = c.id
      JOIN file  f    ON c.file_id  = f.id
-     JOIN folder fo  ON f.folder_id = fo.id
+     JOIN source s   ON f.source_id = s.id
      WHERE v.embedding MATCH ? AND k = ?
      ORDER BY v.distance`,
   ).all(JSON.stringify(queryEmbedding), k) as SearchHit[];
   return rows;
 }
 
-/** Count chunks per folder (UI status indicator). */
-export function chunkCountByFolder(db: MnemosDb): Map<number, number> {
+/** Count chunks per source (UI status indicator). */
+export function chunkCountBySource(db: MnemosDb): Map<number, number> {
   const rows = prepared(db)(
-    `SELECT f.folder_id AS folderId, COUNT(c.id) AS count
+    `SELECT f.source_id AS sourceId, COUNT(c.id) AS count
      FROM chunk c JOIN file f ON c.file_id = f.id
-     GROUP BY f.folder_id`,
-  ).all() as Array<{ folderId: number; count: number }>;
+     GROUP BY f.source_id`,
+  ).all() as Array<{ sourceId: number; count: number }>;
   const map = new Map<number, number>();
-  for (const row of rows) map.set(row.folderId, row.count);
+  for (const row of rows) map.set(row.sourceId, row.count);
   return map;
 }
 

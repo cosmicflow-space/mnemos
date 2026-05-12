@@ -7,7 +7,7 @@
 
 Mnemos is a personal RAG (retrieval-augmented generation) system that runs entirely on your own machine. Drop a folder of documents, ask questions in plain English, and get answers with file citations. Your files never leave your computer; only the retrieved chunks are sent to whichever LLM you choose, and you can see exactly what was sent in the audit log.
 
-> Inspired by [Flowise](https://flowiseai.com)'s RAG architecture and [OpenClaw](https://openclaw.ai)'s install/trust model. Rewritten from scratch in TypeScript + Next.js. No drag-and-drop canvas — opinionated UI, one strong default per pipeline stage.
+> Mnemos is built from scratch in TypeScript + Next.js. No drag-and-drop canvas — opinionated UI, one strong default per pipeline stage. Architectural ideas were informed by studying mature OSS in the RAG and personal-assistant space.
 
 ## Quick start
 
@@ -17,7 +17,7 @@ cd mnemos
 docker compose up -d
 ```
 
-Open http://localhost:3030, paste your API key (or pick local Ollama), pair a folder, ask a question. End-to-end in under 90 seconds.
+Open http://localhost:3030, paste your API key (or pick local Ollama), register a source folder, ask a question. End-to-end in under 90 seconds.
 
 Or run from source:
 
@@ -34,7 +34,7 @@ Requires Node 22+ and pnpm 9+.
 - **Free by default**: Bundled local embedding model (BGE-small via ONNX) means RAG works out of the box with zero external services and zero API costs. Bring your own Anthropic / OpenAI / Gemini key for chat — or run fully local with Ollama or llama.cpp.
 - **Single user**: One person, one machine. Bearer-token auth bound to 127.0.0.1 by default.
 - **Pluggable providers**: Anthropic, OpenAI, Gemini, Ollama, node-llama-cpp for chat. Bundled local, OpenAI, and Ollama for embeddings. All visible from first run. Add your own via the plugin SDK.
-- **Read-only**: Mnemos never modifies your files. Folder access is opt-in via `mnemos pair add <folder>`.
+- **Read-only**: Mnemos never modifies your files. Source access is opt-in via `mnemos source add <path>`.
 - **Auditable**: Every query records exactly which chunks were retrieved, what was sent to the LLM, and how many tokens it cost. Visible in the UI.
 - **Citations**: Every answer references the source files and line ranges.
 
@@ -79,13 +79,13 @@ Plugins can only import from `mnemos/plugin-sdk`. They cannot reach into `packag
 
 ## Trust model
 
-Mnemos follows the [OpenClaw operator trust model](https://docs.openclaw.ai/gateway/security):
+Mnemos uses a **single-user trust model** — one person on one machine, not a multi-tenant service:
 
-- One trusted operator on one machine
-- Authenticated API callers are treated as that operator
-- Installed plugins are part of the trusted base
-- Folder access requires explicit pairing (`mnemos pair add`)
+- The user authenticates API callers via a bearer token bound to 127.0.0.1 by default
+- Installed plugins are part of the trusted base (documented)
+- Source access requires explicit registration (`mnemos source add <path>`)
 - Frontier LLMs only see retrieved chunks, never raw files
+- The audit log shows exactly what was sent to any external service, on every request
 
 ## Roadmap
 
@@ -103,9 +103,4 @@ MIT. See [LICENSE](LICENSE).
 
 ## Credits
 
-Mnemos draws architectural inspiration from:
-
-- [OpenClaw](https://openclaw.ai) — operator trust model, plugin SDK discipline, install/distribution patterns
-- [Flowise](https://flowiseai.com) — RAG pipeline anatomy, DocumentStore lifecycle, credentials model
-
-No source code was copied from either project. All implementations are original TypeScript.
+Mnemos is original work. The broader RAG and personal-assistant OSS ecosystem (including [Flowise](https://flowiseai.com), [OpenClaw](https://openclaw.ai), [AnythingLLM](https://anythingllm.com), [Khoj](https://khoj.dev), [PrivateGPT](https://privategpt.dev), [LangChain.js](https://js.langchain.com), and many others) informed our thinking about what shape a personal RAG product should take. All Mnemos code is written from scratch in TypeScript; no source was copied from any of those projects.

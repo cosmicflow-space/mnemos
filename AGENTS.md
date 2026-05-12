@@ -31,10 +31,10 @@ Telegraph style — root rules only. Read scoped `AGENTS.md` files before touchi
 
 ## Trust model
 
-- Single trusted operator. Not multi-tenant.
+- Single user, single machine. Not multi-tenant.
 - Bearer token required for all `/api/*` calls.
 - Default bind: `127.0.0.1`. LAN binding requires explicit `MNEMOS_BIND=lan` opt-in.
-- Folder access requires explicit pairing: `mnemos pair add <folder>`.
+- Source access requires explicit registration: `mnemos source add <path>`.
 - Installed plugins are trusted code (documented).
 
 ## Commands

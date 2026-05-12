@@ -1,6 +1,9 @@
-export type Folder = {
+export type SourceKind = "folder" | "url" | "mailbox";
+
+export type Source = {
   id: number;
   path: string;
+  kind: SourceKind;
   scope: "read-only";
   createdAt: number;
   updatedAt: number;
@@ -8,7 +11,7 @@ export type Folder = {
 
 export type FileRow = {
   id: number;
-  folderId: number;
+  sourceId: number;
   path: string;
   contentHash: string;
   sizeBytes: number;

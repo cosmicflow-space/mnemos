@@ -10,7 +10,8 @@
 export { openDb, prepared, type MnemosDb } from "./client.js";
 
 export type {
-  Folder,
+  Source,
+  SourceKind,
   FileRow,
   Chunk,
   Credential,
@@ -20,20 +21,20 @@ export type {
 } from "./types.js";
 
 export {
-  // Folders
-  addFolder,
-  listFolders,
-  getFolderByPath,
-  removeFolder,
+  // Sources
+  addSource,
+  listSources,
+  getSourceByPath,
+  removeSource,
   // Files
   upsertFile,
   getFile,
-  listFilesInFolder,
+  listFilesInSource,
   purgeFileChunks,
   // Chunks + vectors
   insertChunk,
   vecSearch,
-  chunkCountByFolder,
+  chunkCountBySource,
   getChunk,
   // Credentials
   upsertCredential,
