@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mnemos — Logo Variants</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 32px;
+      background: #0a0a14;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
+      line-height: 1.5;
+    }
+    h1 {
+      font-size: 28px;
+      margin: 0 0 8px;
+      font-weight: 600;
+      background: linear-gradient(90deg, #22d3ee, #a855f7, #ec4899);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .subtitle { color: #94a3b8; margin: 0 0 32px; font-size: 14px; }
+    .variant {
+      background: #111122;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .variant-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 16px;
+    }
+    .variant-name { font-size: 18px; font-weight: 600; color: #f1f5f9; }
+    .variant-desc { color: #94a3b8; font-size: 13px; }
+    .swatches {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .swatch {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .swatch-bg-dark, .swatch-bg-light {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .swatch-bg-dark { background: #0a0a14; border: 1px solid #1e293b; }
+    .swatch-bg-light { background: #ffffff; border: 1px solid #e2e8f0; }
+    .swatch-label {
+      font-size: 11px;
+      color: #64748b;
+      font-variant-numeric: tabular-nums;
+    }
+    .size-row {
+      display: flex;
+      gap: 32px;
+      align-items: flex-end;
+      margin-top: 16px;
+    }
+    .size-col { display: flex; flex-direction: column; gap: 8px; }
+    .size-col-label {
+      font-size: 12px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .wordmark-row {
+      display: flex;
+      gap: 32px;
+      align-items: center;
+      margin-top: 24px;
+      padding-top: 24px;
+      border-top: 1px solid #1e293b;
+    }
+    .wordmark {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 24px;
+      border-radius: 8px;
+    }
+    .wordmark-dark { background: #0a0a14; border: 1px solid #1e293b; }
+    .wordmark-light { background: #ffffff; border: 1px solid #e2e8f0; }
+    .wordmark-text {
+      font-size: 28px;
+      font-weight: 500;
+      letter-spacing: -0.02em;
+    }
+    .wordmark-dark .wordmark-text { color: #f1f5f9; }
+    .wordmark-light .wordmark-text { color: #0f172a; }
+    .pick-note {
+      margin: 32px 0 0;
+      padding: 16px 20px;
+      background: #1e293b;
+      border-radius: 8px;
+      color: #cbd5e1;
+      font-size: 14px;
+    }
+    .pick-note strong { color: #22d3ee; }
+    code {
+      background: #1e293b;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.9em;
+      font-family: "SF Mono", Menlo, monospace;
+    }
+  </style>
+</head>
+<body>
+  <h1>Mnemos — Logo Variants</h1>
+  <p class="subtitle">Path B1 (citation bracket + custom mu glyph) in five cosmic-palette variations. View each at favicon scale (16px) up to hero scale (256px), on both dark and light backgrounds. Pick one.</p>
+
+  <!-- Variant 1: Cyan + Amber -->
+  <section class="variant">
+    <div class="variant-header">
+      <div class="variant-name">v1 — Cyan + Amber</div>
+      <div class="variant-desc">cyan brackets <code>#06b6d4</code> + amber μ <code>#f59e0b</code> · my top pick</div>
+    </div>
+    <div class="size-row">
+      <div class="size-col">
+        <div class="size-col-label">on dark</div>
+        <div class="swatches">
+          <div class="swatch">
+            <div class="swatch-bg-dark"><img src="v1-cyan-amber.svg" width="16" height="16" alt="16px" /></div>
+            <div class="swatch-label">16 px · favicon</div>
+          </div>
+          <div class="swatch">
+            <div class="swatch-bg-dark"><img src="v1-cyan-amber.svg" width="32" height="32" alt="32px" /></div>
+            <div class="swatch-label">32 px · tab</div>
+          </div>
+          <div class="swatch">
+            <div class="swatch-bg-dark"><img src="v1-cyan-amber.svg" width="64" height="64" alt="64px" /></div>
+            <div class="swatch-label">64 px · card</div>
+          </div>
+          <div class="swatch">
+            <div class="swatch-bg-dark"><img src="v1-cyan-amber.svg" width="256" height="256" alt="256px" /></div>
+            <div class="swatch-label">256 px · hero</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="size-row">
+      <div class="size-col">
+        <div class="size-col-label">on light</div>
+        <div class="swatches">
+          <div class="swatch"><div class="swatch-bg-light"><img src="v1-cyan-amber.svg" width="16" height="16" /></div><div class="swatch-label">16 px</div></div>
+          <div class="swatch"><div class="swatch-bg-light"><img src="v1-cyan-amber.svg" width="32" height="32" /></div><div class="swatch-label">32 px</div></div>
+          <div class="swatch"><div class="swatch-bg-light"><img src="v1-cyan-amber.svg" width="64" height="64" /></div><div class="swatch-label">64 px</div></div>
+          <div class="swatch"><div class="swatch-bg-light"><img src="v1-cyan-amber.svg" width="256" height="256" /></div><div class="swatch-label">256 px</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="wordmark-row">
+      <div class="wordmark wordmark-dark">
+        <img src="v1-cyan-amber.svg" width="40" height="40" />
+        <span class="wordmark-text">mnemos</span>
+      </div>
+      <div class="wordmark wordmark-light">
+        <img src="v1-cyan-amber.svg" width="40" height="40" />
+        <span class="wordmark-text">mnemos</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Variant 2: Pure Cyan -->
+  <section class="variant">
+    <div class="variant-header">
+      <div class="variant-name">v2 — Pure Cyan</div>
+      <div class="variant-desc">monochrome cyan <code>#22d3ee</code> · simplest, most mono-friendly</div>
+    </div>
+    <div class="size-row">
+      <div class="size-col">
+        <div class="size-col-label">on dark</div>
+        <div class="swatches">
+          <div class="swatch"><div class="swatch-bg-dark"><img src="v2-pure-cyan.svg" width="16" height="16" /></div><div class="swatch-label">16 px</div></div>
+          <div class="swatch"><div class="swatch-bg-dark"><img src="v2-pure-cyan.svg" width="32" height="32" /></div><div class="swatch-label">32 px</div></div>
+          <div class="swatch"><div class="swatch-bg-dark"><img src="v2-pure-cyan.svg" width="64" height="64" /></div><div class="swatch-label">64 px</div></div>
+          <div class="swatch"><div class="swatch-bg-dark"><img src="v2-pure-cyan.svg" width="256" height="256" /></div><div class="swatch-label">256 px</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="size-row">
+      <div class="size-col">
+        <div class="size-col-label">on light</div>
+        <div class="swatches">
+          <div class="swatch"><div class="swatch-bg-light"><img src="v2-pure-cyan.svg" width="16" height="16" /></div><div class="swatch-label">16 px</div></div>
+          <div class="swatch"><div class="swatch-bg-light"><img src="v2-pure-cyan.svg" width="32" height="32" /></div><div class="swatch-label">32 px</div></div>
+          <div class="swatch"><div class="swatch-bg-light"><img src="v2-pure-cyan.svg" width="64" height="64" /></div><div class="swatch-label">64 px</div></div>
+          <div class="swatch"><div class="swatch-bg-light"><img src="v2-pure-cyan.svg" width="256" height="256" /></div><div class="swatch-label">256 px</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="wordmark-row">
+      <div class="wordmark wordmark-dark"><img src="v2-pure-cyan.svg" width="40" height="40" /><span class="wordmark-text">mnemos</span></div>
+      <div class="wordmark wordmark-light"><img src="v2-pure-cyan.svg" width="40" height="40" /><span class="wordmark-text">mnemos</span></div>
+    </div>
+  </section>
+
+  <!-- Variant 3: Magenta + Cyan -->
+  <section class="variant">
+    <div class="variant-header">
+      <div class="variant-name">v3 — Magenta + Cyan</div>
+      <div class="variant-desc">magenta brackets <code>#ec4899</code> + cyan μ <code>#22d3ee</code> · nebula palette</div>
+    </div>
+    <div class="size-row">
+      <div class="size-col">
+        <div class="size-col-label">on dark</div>
+        <div class="swatches">
+          <div class="swatch"><div class="swatch-bg-dark"><img src="v3-magenta-cyan.svg" width="16" height="16" /></div><div class="swatch-label">16 px</div></div>
+          <div class="swatch"><div class="swatch-bg-dark"><img src="v3-magenta-cyan.svg" width="32" height="32" /></div><div class="swatch-label">32 px</div></div>
+          <div class="swatch"><div class="swatch-bg-dark"><img src="v3-magenta-cyan.svg" width="64" height="64" /></div><div class="swatch-label">64 px</div></div>
+          <div class="swatch"><div class="swatch-bg-dark"><img src="v3-magenta-cyan.svg" width="256" height="256" /></div><div class="swatch-label">256 px</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="size-row">
+      <div class="size-col">
+        <div class="size-col-label">on light</div>
+        <div class="swatches">
+          <div class="swatch"><div class="swatch-bg-light"><img src="v3-magenta-cyan.svg" width="16" height="16" /></div><div class="swatch-label">16 px</div></div>
+          <div class="swatch"><div class="swatch-bg-light"><img src="v3-magenta-cyan.svg" width="32" height="32" /></div><div class="swatch-label">32 px</div></div>
+          <div class="swatch"><div class="swatch-bg-light"><img src="v3-magenta-cyan.svg" width="64" height="64" /></div><div class="swatch-label">64 px</div></div>
+          <div class="swatch"><div class="swatch-bg-light"><img src="v3-magenta-cyan.svg" width="256" height="256" /></div><div class="swatch-label">256 px</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="wordmark-row">
+      <div class="wordmark wordmark-dark"><img src="v3-magenta-cyan.svg" width="40" height="40" /><span class="wordmark-text">mnemos</span></div>
+      <div class="wordmark wordmark-light"><img src="v3-magenta-cyan.svg" width="40" height="40" /><span class="wordmark-text">mnemos</span></div>
+    </div>
+  </section>
+
+  <!-- Variant 4: Stellar White -->
+  <section class="variant">
+    <div class="variant-header">
+      <div class="variant-name">v4 — Stellar White</div>
+      <div class="variant-desc">pure white <code>#ffffff</code> · most minimal, mono on dark</div>
+    </div>
+    <div class="size-row">
+      <div class="size-col">
+        <div class="size-col-label">on dark</div>
+        <div class="swatches">
+          <div class="swatch"><div class="swatch-bg-dark"><img src="v4-stellar-white.svg" width="16" height="16" /></div><div class="swatch-label">16 px</div></div>
+          <div class="swatch"><div class="swatch-bg-dark"><img src="v4-stellar-white.svg" width="32" height="32" /></div><div class="swatch-label">32 px</div></div>
+          <div class="swatch"><div class="swatch-bg-dark"><img src="v4-stellar-white.svg" width="64" height="64" /></div><div class="swatch-label">64 px</div></div>
+          <div class="swatch"><div class="swatch-bg-dark"><img src="v4-stellar-white.svg" width="256" height="256" /></div><div class="swatch-label">256 px</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="size-row">
+      <div class="size-col">
+        <div class="size-col-label">on light (note: invisible)</div>
+        <div class="swatches">
+          <div class="swatch"><div class="swatch-bg-light"><img src="v4-stellar-white.svg" width="64" height="64" /></div><div class="swatch-label">64 px · needs dark variant</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="wordmark-row">
+      <div class="wordmark wordmark-dark"><img src="v4-stellar-white.svg" width="40" height="40" /><span class="wordmark-text">mnemos</span></div>
+    </div>
+  </section>
+
+  <!-- Variant 5: Indigo + Cyan -->
+  <section class="variant">
+    <div class="variant-header">
+      <div class="variant-name">v5 — Indigo + Cyan</div>
+      <div class="variant-desc">indigo brackets <code>#6366f1</code> + cyan μ <code>#22d3ee</code> · deep cosmic</div>
+    </div>
+    <div class="size-row">
+      <div class="size-col">
+        <div class="size-col-label">on dark</div>
+        <div class="swatches">
+          <div class="swatch"><div class="swatch-bg-dark"><img src="v5-indigo-cyan.svg" width="16" height="16" /></div><div class="swatch-label">16 px</div></div>
+          <div class="swatch"><div class="swatch-bg-dark"><img src="v5-indigo-cyan.svg" width="32" height="32" /></div><div class="swatch-label">32 px</div></div>
+          <div class="swatch"><div class="swatch-bg-dark"><img src="v5-indigo-cyan.svg" width="64" height="64" /></div><div class="swatch-label">64 px</div></div>
+          <div class="swatch"><div class="swatch-bg-dark"><img src="v5-indigo-cyan.svg" width="256" height="256" /></div><div class="swatch-label">256 px</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="size-row">
+      <div class="size-col">
+        <div class="size-col-label">on light</div>
+        <div class="swatches">
+          <div class="swatch"><div class="swatch-bg-light"><img src="v5-indigo-cyan.svg" width="16" height="16" /></div><div class="swatch-label">16 px</div></div>
+          <div class="swatch"><div class="swatch-bg-light"><img src="v5-indigo-cyan.svg" width="32" height="32" /></div><div class="swatch-label">32 px</div></div>
+          <div class="swatch"><div class="swatch-bg-light"><img src="v5-indigo-cyan.svg" width="64" height="64" /></div><div class="swatch-label">64 px</div></div>
+          <div class="swatch"><div class="swatch-bg-light"><img src="v5-indigo-cyan.svg" width="256" height="256" /></div><div class="swatch-label">256 px</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="wordmark-row">
+      <div class="wordmark wordmark-dark"><img src="v5-indigo-cyan.svg" width="40" height="40" /><span class="wordmark-text">mnemos</span></div>
+      <div class="wordmark wordmark-light"><img src="v5-indigo-cyan.svg" width="40" height="40" /><span class="wordmark-text">mnemos</span></div>
+    </div>
+  </section>
+
+  <p class="pick-note">
+    <strong>How to pick:</strong> the 16 px column is the legibility test (matches favicon/browser tab).
+    The 64 px column is the README / GitHub card test. The 256 px column is the hero / social-card test.
+    A winning logo holds up at all three sizes on both backgrounds without losing identity.
+    Tell Claude which variant you want and it'll be promoted to <code>public/logo.svg</code>
+    and <code>public/favicon.svg</code>.
+  </p>
+</body>
+</html>

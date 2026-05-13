@@ -35,6 +35,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Schema `vec_chunk` dimension: 1536 → 384
 - New constants: `DEFAULT_EMBEDDING_PROVIDER_ID` ("embed-local"), `MNEMOS_EMBEDDING_DIM` (384)
 - README + .env.example updated to surface "free local default + alternatives from getgo" UX
+- **IP-hygiene rename**: `folder` table → `source` (with `kind` column for folder/url/mailbox), `pair` CLI command → `source`, `doctor` → `check`. Avoids OpenClaw-distinctive terminology while keeping universal industry terms (chunk, embedding, session, credential).
+
+### Day 2.6 (2026-05-13)
+- **Logo locked**: v1 Cyan + Amber citation-bracket design (Path B1 after AI partner review with Gemini + Codex flagged the original hex concept as too generic in the Honeycomb.io visual bucket)
+  - Geometry: square citation brackets `[ ]` surrounding a custom geometric μ glyph
+  - Palette: cyan `#06b6d4` brackets (retrieval), amber `#f59e0b` μ (memory) — astrophysics-accurate two-star cosmic pairing
+  - Files: `apps/web/public/logo.svg` (canonical), `apps/web/public/favicon.svg`
+  - Wired into Next.js `metadata.icons` + OpenGraph + Twitter card
+  - 5 variant SVGs preserved at `apps/web/public/logos-preview/` for future reference
+  - Full AI partner review feedback at `.claude/reviews/{gemini_feedback,codex_feedback,synthesis}.md`
 
 ### Coming next (v0.1)
 - Document loaders (pdf, markdown, plaintext, web, code) — Day 3

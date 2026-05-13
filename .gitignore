@@ -48,3 +48,7 @@ pnpm-debug.log*
 # Caches
 .turbo/
 .cache/
+
+# Local dev-tooling artifacts (Claude Code, AI partner reviews, etc.)
+# The repo-root AGENTS.md / CLAUDE.md symlink is the tracked agent-collab surface.
+.claude/

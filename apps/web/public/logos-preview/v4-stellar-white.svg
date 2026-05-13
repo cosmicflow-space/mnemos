@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" role="img" aria-label="Mnemos logo v4 — stellar white monochrome">
+  <path d="M 88 44 L 40 44 L 40 212 L 88 212"
+        stroke="#ffffff" stroke-width="18"
+        stroke-linecap="square" stroke-linejoin="miter"/>
+  <path d="M 168 44 L 216 44 L 216 212 L 168 212"
+        stroke="#ffffff" stroke-width="18"
+        stroke-linecap="square" stroke-linejoin="miter"/>
+  <path d="M 104 84 L 104 200"
+        stroke="#ffffff" stroke-width="16"
+        stroke-linecap="square"/>
+  <path d="M 104 172 L 152 172"
+        stroke="#ffffff" stroke-width="16"
+        stroke-linecap="square"/>
+  <path d="M 152 84 L 152 172"
+        stroke="#ffffff" stroke-width="16"
+        stroke-linecap="square"/>
+</svg>
