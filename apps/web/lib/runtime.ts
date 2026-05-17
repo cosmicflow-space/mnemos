@@ -1,25 +1,30 @@
 /**
  * Shared runtime singleton.
  *
- * The plugin registry and DB connection are created once per process and cached
- * here. API routes import these getters; they pay the construction cost on the
- * first call and reuse on subsequent calls.
+ * The plugin registry, DB connection, and default embedder are created once
+ * per process and cached here. API routes import these getters; they pay the
+ * construction cost on the first call and reuse on subsequent calls.
  *
- * In Next.js dev mode the module is re-evaluated on hot reload, so the DB
- * handle is also re-opened. better-sqlite3 handles this fine.
+ * In Next.js dev mode the module is re-evaluated on hot reload, so handles
+ * may be re-opened. better-sqlite3 handles this fine.
  */
 
 import {
   loadBundledPlugins,
+  getEmbeddingProvider,
+  DEFAULT_EMBEDDING_PROVIDER_ID,
   type PluginRegistry,
 } from "@mnemos/core";
 import { openDb, type MnemosDb } from "@mnemos/db";
+import type { EmbeddingProvider } from "@mnemos/plugin-sdk";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { mkdirSync } from "node:fs";
 
 let cachedRegistry: PluginRegistry | null = null;
 let cachedDb: MnemosDb | null = null;
+let cachedEmbedder: EmbeddingProvider | null = null;
+let cachedEmbedderInit: Promise<EmbeddingProvider> | null = null;
 
 export function getRegistry(): PluginRegistry {
   if (!cachedRegistry) {
@@ -42,9 +47,46 @@ export function getDb(): MnemosDb {
   return cachedDb;
 }
 
+/**
+ * Returns an initialized default embedding provider. v0.1 default is
+ * embed-local (BGE-small via ONNX, no external services). The first call
+ * triggers model-weights download (~130MB, cached in HF transformers dir);
+ * subsequent calls return the same initialized instance.
+ *
+ * Override the default by setting MNEMOS_DEFAULT_EMBEDDING in env.
+ */
+export async function getDefaultEmbedder(): Promise<EmbeddingProvider> {
+  if (cachedEmbedder) return cachedEmbedder;
+  if (cachedEmbedderInit) return cachedEmbedderInit;
+
+  cachedEmbedderInit = (async () => {
+    const registry = getRegistry();
+    const id =
+      process.env.MNEMOS_DEFAULT_EMBEDDING ?? DEFAULT_EMBEDDING_PROVIDER_ID;
+    const provider = getEmbeddingProvider(registry, id);
+    // Bundled local provider takes no credentials; frontier providers need
+    // an API key. For v0.1 we initialize with empty creds and let the
+    // provider throw if it needs them.
+    const credentials: Record<string, string> = {};
+    if (id === "openai" && process.env.OPENAI_API_KEY) {
+      credentials.apiKey = process.env.OPENAI_API_KEY;
+    }
+    if (id === "ollama" && process.env.OLLAMA_BASE_URL) {
+      credentials.baseURL = process.env.OLLAMA_BASE_URL;
+    }
+    await provider.initialize(credentials);
+    cachedEmbedder = provider;
+    return provider;
+  })();
+
+  return cachedEmbedderInit;
+}
+
 /** For tests: reset all singletons. */
 export function __resetRuntimeForTests(): void {
   if (cachedDb) cachedDb.close();
   cachedDb = null;
   cachedRegistry = null;
+  cachedEmbedder = null;
+  cachedEmbedderInit = null;
 }

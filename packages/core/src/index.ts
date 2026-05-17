@@ -6,7 +6,7 @@
  * Public API:
  *   - Plugin registry: loadBundledPlugins, getChatProvider, getEmbeddingProvider, getDocumentLoader
  *   - Crypto: encrypt/decrypt (AES-GCM for credentials at rest)
- *   - Pipeline: ingest + query (coming in next pass)
+ *   - Ingest: scanFolder, ingestFolder, chunkText, hashFile, classifyFile
  *
  * Re-exports types from plugin-sdk and db for caller convenience.
  */
@@ -32,6 +32,30 @@ export {
   decryptString,
 } from "./crypto.js";
 
+// Ingestion
+export { hashFile, hashString } from "./ingest/hash.js";
+export { chunkText, type ChunkResult, type ChunkerOptions } from "./ingest/chunker.js";
+export {
+  classifyFile,
+  listSupportedExtensions,
+  type Classification,
+  type FileCategory,
+  type FileKind,
+} from "./ingest/classify.js";
+export {
+  scanFolder,
+  type ScanResult,
+  type ScanSummary,
+  type ScannedFile,
+  type ScanOptions,
+} from "./ingest/scan.js";
+export {
+  ingestFolder,
+  type IngestResult,
+  type IngestProgress,
+  type IngestFolderOptions,
+} from "./ingest/pipeline.js";
+
 // Re-export plugin SDK types
 export type {
   ChatProvider,
@@ -49,7 +73,8 @@ export type {
 
 // Re-export db types
 export type {
-  Folder,
+  Source,
+  SourceKind,
   FileRow,
   Chunk,
   Credential,
