@@ -9,6 +9,8 @@ export type Source = {
   updatedAt: number;
 };
 
+export type IngestStatus = "pending" | "partial" | "complete" | "failed";
+
 export type FileRow = {
   id: number;
   sourceId: number;
@@ -18,6 +20,7 @@ export type FileRow = {
   mtime: number;
   loader: string;
   lastIngestedAt: number;
+  ingestStatus: IngestStatus;
 };
 
 export type Chunk = {

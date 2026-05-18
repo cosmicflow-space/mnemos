@@ -1,42 +1,53 @@
+<div align="center">
+
 # 🧠 Mnemos
 
 **Personal RAG. Local-first. Drop a folder, ask a question.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Status: Pre-release](https://img.shields.io/badge/Status-Pre--release-orange.svg)]()
+[![Node: 22+](https://img.shields.io/badge/Node-22%2B-339933.svg)](https://nodejs.org/)
+[![Status: Pre-release](https://img.shields.io/badge/Status-v0.1--rc-orange.svg)](CHANGELOG.md)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-cyan.svg)](CONTRIBUTING.md)
 
-Mnemos is a personal RAG (retrieval-augmented generation) system that runs entirely on your own machine. Drop a folder of documents, ask questions in plain English, and get answers with file citations. Your files never leave your computer; only the retrieved chunks are sent to whichever LLM you choose, and you can see exactly what was sent in the audit log.
+</div>
 
-> Mnemos is built from scratch in TypeScript + Next.js. No drag-and-drop canvas — opinionated UI, one strong default per pipeline stage. Architectural ideas were informed by studying mature OSS in the RAG and personal-assistant space.
+Mnemos is a personal RAG (retrieval-augmented generation) system that runs entirely on your own machine. Drop a folder of documents, ask questions in plain English, get answers with file citations. Your files never leave your computer; only the retrieved chunks are sent to whichever LLM you choose, and the audit log shows exactly what was sent.
+
+Built from scratch in TypeScript + Next.js. Opinionated single-pane UI — no drag-and-drop canvas, one strong default per pipeline stage, plug your own providers via a versioned SDK.
 
 ## Quick start
 
+The only prerequisite is **Node 22+** ([nodejs.org](https://nodejs.org/) if you don't have it).
+
 ```bash
-git clone https://github.com/sammuthu/mnemos.git
+git clone https://github.com/cosmicflow-space/mnemos.git
 cd mnemos
-docker compose up -d
+node setup.mjs
 ```
 
-Open http://localhost:3030, paste your API key (or pick local Ollama), register a source folder, ask a question. End-to-end in under 90 seconds.
+That's it. The installer detects your OS (macOS, Linux, Windows), checks what's installed, asks before fixing anything, walks you through provider configuration, and starts the dev server. The install logic lives in [`INSTALL.md`](INSTALL.md) — readable as docs, executable by `setup.mjs`, no per-OS shell scripts to drift.
 
-Or run from source:
+Then open <http://127.0.0.1:3030>:
 
-```bash
-pnpm install
-pnpm dev
-```
+1. **Configure an agent** — pick Claude, GPT, or Ollama (we auto-detect existing keys on disk).
+2. **Add a source** — drop a folder path. Mnemos scans + classifies + ingests with local BGE-small embeddings (no API key for ingest).
+3. **Chat** — ask a question, see streamed answers with inline citations to the exact source chunks.
 
-Requires Node 22+ and pnpm 9+.
+End-to-end in under 90 seconds on a typical laptop.
+
+Prefer Docker? `docker compose up -d`. Prefer manual? `pnpm install && pnpm dev`.
 
 ## What Mnemos is
 
 - **Local-first**: SQLite + sqlite-vec, single file at `~/.mnemos/mnemos.db`. No separate vector database.
-- **Free by default**: Bundled local embedding model (BGE-small via ONNX) means RAG works out of the box with zero external services and zero API costs. Bring your own Anthropic / OpenAI / Gemini key for chat — or run fully local with Ollama or llama.cpp.
-- **Single user**: One person, one machine. Bearer-token auth bound to 127.0.0.1 by default.
-- **Pluggable providers**: Anthropic, OpenAI, Gemini, Ollama, node-llama-cpp for chat. Bundled local, OpenAI, and Ollama for embeddings. All visible from first run. Add your own via the plugin SDK.
-- **Read-only**: Mnemos never modifies your files. Source access is opt-in via `mnemos source add <path>`.
+- **Free by default**: Bundled local embedding model (BGE-small via ONNX) means RAG works out of the box with zero external services and zero API costs. Bring your own Anthropic / OpenAI key for chat — or run fully local via Ollama.
+- **Single user**: One person, one machine. Loopback bind by default; LAN binding requires explicit opt-in and bearer-token auth.
+- **Pluggable providers** (v0.1 wired): Anthropic, OpenAI, Ollama for chat. Local BGE-small + OpenAI + Ollama for embeddings. Add your own via the plugin SDK. Gemini and bundled llama.cpp providers are stubs scheduled for v0.2.
+- **Read-only**: Mnemos never modifies your files. Source access is opt-in per folder.
 - **Auditable**: Every query records exactly which chunks were retrieved, what was sent to the LLM, and how many tokens it cost. Visible in the UI.
-- **Citations**: Every answer references the source files and line ranges.
+- **Safe defaults**: Auto-excludes credentials (`.env`, `*.pem`, `id_rsa*`) and noise (logs, lockfiles, minified bundles). Security excludes are hard-locked even against explicit user opt-in.
+- **Citations**: Every answer references the source files, last-modified date, file type, and exact byte range.
+- **Incremental**: Re-ingest skips unchanged files via content-hash comparison; partial-state ingests recover automatically via the `ingest_status` invariant.
 
 ## What Mnemos is not
 
@@ -81,7 +92,7 @@ Plugins can only import from `mnemos/plugin-sdk`. They cannot reach into `packag
 
 Mnemos uses a **single-user trust model** — one person on one machine, not a multi-tenant service:
 
-- The user authenticates API callers via a bearer token bound to 127.0.0.1 by default
+- The API is bound to 127.0.0.1 by default and trusts loopback callers (anyone reaching the loopback interface is already on the user's own machine). Binding to LAN (`MNEMOS_BIND=lan`) switches enforcement on and requires `Authorization: Bearer <token>` on every `/api/*` request, matching the auto-generated token at `~/.mnemos/auth.key`.
 - Installed plugins are part of the trusted base (documented)
 - Source access requires explicit registration (`mnemos source add <path>`)
 - Frontier LLMs only see retrieved chunks, never raw files
@@ -95,12 +106,22 @@ Mnemos uses a **single-user trust model** — one person on one machine, not a m
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). AI-assisted contributions are welcome; see [AGENTS.md](AGENTS.md) for collaboration patterns.
+See [CONTRIBUTING.md](CONTRIBUTING.md). First-time contributors will be asked to sign the [CLA](CLA.md) via the cla-assistant.io bot on their first PR — one click, then you're covered for all future PRs. AI-assisted contributions welcome; see [AGENTS.md](AGENTS.md) for collaboration patterns.
+
+## Code of Conduct
+
+All project-related interaction follows our [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Security
+
+Report vulnerabilities privately via [GitHub Security Advisory](https://github.com/cosmicflow-space/mnemos/security/advisories/new). See [SECURITY.md](SECURITY.md).
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). Copyright © Zen Algorithms LLC
+
+The CLA on contributions preserves the option to release additional terms (e.g. an Enterprise edition) in the future without re-permissioning prior contributors. The MIT-licensed code stays MIT-licensed.
 
 ## Credits
 
-Mnemos is original work. The broader RAG and personal-assistant OSS ecosystem (including [Flowise](https://flowiseai.com), [OpenClaw](https://openclaw.ai), [AnythingLLM](https://anythingllm.com), [Khoj](https://khoj.dev), [PrivateGPT](https://privategpt.dev), [LangChain.js](https://js.langchain.com), and many others) informed our thinking about what shape a personal RAG product should take. All Mnemos code is written from scratch in TypeScript; no source was copied from any of those projects.
+Mnemos is original work, written from scratch in TypeScript. Architectural choices were informed by surveying the broader RAG and personal-knowledge-base ecosystem.

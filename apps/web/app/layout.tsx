@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { AgentBanner } from "@/components/AgentBanner";
 
 export const metadata: Metadata = {
   title: "Mnemos — Personal RAG",
@@ -31,6 +32,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="min-h-screen bg-[#0a0a14] text-white antialiased">
+        <AgentBanner />
         {children}
       </body>
     </html>

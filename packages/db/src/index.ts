@@ -13,6 +13,7 @@ export type {
   Source,
   SourceKind,
   FileRow,
+  IngestStatus,
   Chunk,
   Credential,
   Session,
@@ -28,6 +29,7 @@ export {
   removeSource,
   // Files
   upsertFile,
+  setFileIngestStatus,
   getFile,
   listFilesInSource,
   purgeFileChunks,
@@ -35,6 +37,9 @@ export {
   insertChunk,
   vecSearch,
   chunkCountBySource,
+  countChunksForFile,
+  ingestStatsBySource,
+  type SourceIngestStats,
   getChunk,
   // Credentials
   upsertCredential,
@@ -44,6 +49,7 @@ export {
   // Sessions + messages
   createSession,
   getSession,
+  setSessionTitle,
   listSessions,
   appendMessage,
   getRecentMessages,

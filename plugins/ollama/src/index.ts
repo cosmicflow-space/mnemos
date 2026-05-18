@@ -24,7 +24,17 @@ const credentialSchema: CredentialSchema = {
 };
 
 const DEFAULT_BASE_URL = "http://localhost:11434";
-const DEFAULT_CHAT_MODEL = "llama3.2";
+// Ordered preference list — tried in order against the actually-installed models
+// when the caller doesn't specify a model. Small fast first, larger fallback.
+const PREFERRED_CHAT_MODELS = [
+  "llama3.2:3b",
+  "llama3.2",
+  "qwen2.5:7b",
+  "qwen2.5-coder:7b",
+  "llama3.1:8b",
+  "qwen2.5-coder:14b",
+];
+const HARD_FALLBACK_CHAT_MODEL = "llama3.2";
 // Default to all-minilm (384 dim native) so it matches Mnemos's standard schema.
 // Users can override via credentials.embeddingModel; if they pick a model with
 // non-384 native dim, the schema still expects 384 so they'll need to handle
@@ -74,20 +84,46 @@ class OllamaChatProvider implements ChatProvider {
   readonly credentialSchema = credentialSchema;
 
   private baseURL = DEFAULT_BASE_URL;
+  private configuredModel: string | null = null;
 
   async initialize(credentials: Record<string, string>): Promise<void> {
     if (credentials.baseURL) this.baseURL = credentials.baseURL;
+    // Caller may pin a model via env (MNEMOS_OLLAMA_MODEL). Empty string = unset.
+    if (credentials.model && credentials.model.trim()) {
+      this.configuredModel = credentials.model.trim();
+    }
+  }
+
+  /** Resolve which model to actually use given opts, configured, and installed list. */
+  private async resolveModel(requested?: string): Promise<string> {
+    if (requested) return requested;
+    if (this.configuredModel) return this.configuredModel;
+    // Fall back to whatever is actually installed. Avoids the "llama3.2 not
+    // found because you only have llama3.2:3b" footgun.
+    try {
+      const installed = await this.listModels();
+      const names = new Set(installed.map((m) => m.id));
+      for (const pref of PREFERRED_CHAT_MODELS) {
+        if (names.has(pref)) return pref;
+      }
+      if (installed[0]) return installed[0].id;
+    } catch {
+      // Ollama unreachable — fall through to hard default; the chat call will
+      // throw a clearer error than we can construct here.
+    }
+    return HARD_FALLBACK_CHAT_MODEL;
   }
 
   async *chat(
     messages: ChatMessage[],
     opts?: ChatOptions,
   ): AsyncIterable<ChatChunk> {
+    const model = await this.resolveModel(opts?.model);
     const response = await fetch(`${this.baseURL}/api/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        model: opts?.model ?? DEFAULT_CHAT_MODEL,
+        model,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
         stream: true,
         options: {
@@ -100,6 +136,14 @@ class OllamaChatProvider implements ChatProvider {
 
     if (!response.ok) {
       const text = await response.text();
+      // Helpful error for the most common 404 — model not pulled.
+      if (response.status === 404) {
+        const installed = await this.listModels().catch(() => []);
+        const names = installed.map((m) => m.id).join(", ") || "(none — Ollama has no models pulled)";
+        throw new Error(
+          `Ollama model "${model}" not installed. Pull it with: ollama pull ${model}\nAvailable: ${names}`,
+        );
+      }
       throw new Error(`Ollama chat failed (${response.status}): ${text}`);
     }
 

@@ -27,19 +27,25 @@ export default function HomePage() {
         </div>
         <div className="flex flex-col sm:flex-row gap-3 justify-center pt-4">
           <a
-            href="/chat"
+            href="/agent"
             className="rounded-md bg-amber-500 px-5 py-2.5 text-sm font-semibold text-gray-900 hover:bg-amber-400 transition"
           >
-            Start Chat →
+            Configure Agent →
+          </a>
+          <a
+            href="/chat"
+            className="rounded-md border border-cyan-700 bg-cyan-500/10 px-5 py-2.5 text-sm font-semibold text-cyan-200 hover:bg-cyan-500/20 transition"
+          >
+            Start Chat
           </a>
           <a
             href="/sources"
-            className="rounded-md bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-gray-900 hover:bg-cyan-400 transition"
+            className="rounded-md border border-cyan-700 bg-cyan-500/10 px-5 py-2.5 text-sm font-semibold text-cyan-200 hover:bg-cyan-500/20 transition"
           >
             Manage Sources
           </a>
           <a
-            href="https://github.com/sammuthu/mnemos"
+            href="https://github.com/cosmicflow-space/mnemos"
             className="rounded-md border border-gray-700 px-4 py-2 text-sm font-medium hover:border-gray-600 transition"
           >
             GitHub

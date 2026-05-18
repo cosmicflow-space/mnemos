@@ -25,9 +25,28 @@ const SYSTEM_PROMPT = `You are Mnemos, a personal RAG assistant with access to t
 
 Use ONLY the retrieved context below to answer the user's question. The retrieved chunks are numbered [1], [2], etc. When you draw on a chunk, cite it inline as [N]. If the retrieved context doesn't contain the answer, say so explicitly — do not fabricate facts.
 
+Each chunk header lists the source file path, when it was last modified, and the file type. **Use this metadata when answering "when", "where", or "what kind" questions** — e.g. if the user asks when something happened, the file's modified-date is your strongest signal even if the body text doesn't contain a date. If the user asks for a list (companies, items, etc.), enumerate from the chunks rather than answering with a single citation.
+
 You can quote short passages from the context verbatim. Prefer direct quotes over paraphrase when the original wording is precise (file paths, code, numbers, names).
 
 If multiple chunks contradict each other, surface the contradiction rather than picking one silently.`;
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)}GB`;
+}
+
+function formatDate(epochMs: number): string {
+  if (!epochMs) return "unknown";
+  const d = new Date(epochMs);
+  // YYYY-MM-DD — terse, ISO-compatible, language-neutral. Models parse this reliably.
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
 
 export function assemblePrompt(
   userQuery: string,
@@ -41,8 +60,12 @@ export function assemblePrompt(
     const ref = idx + 1;
     citationMap.set(ref, hit);
     const truncatedText = hit.text.length > 1200 ? `${hit.text.slice(0, 1200)}…` : hit.text;
+    // Header surfaces: file path, last-modified date, loader (file kind), and
+    // size. The chars-offset range stays for citation context but is labeled
+    // "chars" not "lines" — the offsets are byte positions in the source text,
+    // not line numbers (chunker.ts:14-15, 39-73 confirm this).
     contextLines.push(
-      `[${ref}] ${hit.filePath} (lines ~${hit.startOffset}-${hit.endOffset})`,
+      `[${ref}] ${hit.filePath} · modified ${formatDate(hit.fileMtime)} · ${hit.loader} · ${formatFileSize(hit.fileSizeBytes)} · chars ${hit.startOffset}-${hit.endOffset}`,
       truncatedText,
       "",
     );

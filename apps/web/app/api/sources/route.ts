@@ -7,6 +7,7 @@ import {
   listSources,
   removeSource,
   chunkCountBySource,
+  ingestStatsBySource,
 } from "@mnemos/db";
 import { getDb } from "@/lib/runtime";
 
@@ -37,16 +38,22 @@ export async function GET() {
     const db = getDb();
     const sources = listSources(db);
     const counts = chunkCountBySource(db);
+    const stats = ingestStatsBySource(db);
     return NextResponse.json({
-      sources: sources.map((s) => ({
-        id: s.id,
-        path: s.path,
-        kind: s.kind,
-        scope: s.scope,
-        createdAt: s.createdAt,
-        updatedAt: s.updatedAt,
-        chunkCount: counts.get(s.id) ?? 0,
-      })),
+      sources: sources.map((s) => {
+        const stat = stats.get(s.id);
+        return {
+          id: s.id,
+          path: s.path,
+          kind: s.kind,
+          scope: s.scope,
+          createdAt: s.createdAt,
+          updatedAt: s.updatedAt,
+          chunkCount: counts.get(s.id) ?? 0,
+          fileCount: stat?.fileCount ?? 0,
+          lastIngestedAt: stat?.lastIngestedAt ?? null,
+        };
+      }),
     });
   } catch (err) {
     return NextResponse.json(

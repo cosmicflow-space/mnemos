@@ -48,7 +48,18 @@ export {
   type ScanSummary,
   type ScannedFile,
   type ScanOptions,
+  type ExcludedFile,
+  type ExclusionSummary,
+  type LargeFileSummary,
 } from "./ingest/scan";
+export {
+  checkExclusion,
+  shouldExclude,
+  LARGE_FILE_BYTES,
+  type ExclusionReason,
+  type ExclusionVerdict,
+  type IncludeOverrides,
+} from "./ingest/exclude";
 export {
   ingestFolder,
   type IngestResult,

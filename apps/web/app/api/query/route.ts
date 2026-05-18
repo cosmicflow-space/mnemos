@@ -3,6 +3,7 @@ import { runQuery, getChatProvider } from "@mnemos/core";
 import {
   createSession,
   getSession,
+  setSessionTitle,
   type MnemosDb,
 } from "@mnemos/db";
 import { randomUUID } from "node:crypto";
@@ -33,17 +34,33 @@ const PROVIDER_CREDENTIAL_ENV: Record<string, (creds: Record<string, string>) =>
   },
   ollama: (c) => {
     if (process.env.OLLAMA_BASE_URL) c.baseURL = process.env.OLLAMA_BASE_URL;
+    if (process.env.MNEMOS_OLLAMA_MODEL) c.model = process.env.MNEMOS_OLLAMA_MODEL;
   },
 };
 
-function ensureSession(db: MnemosDb, sessionIdInput?: string): string {
+function ensureSession(
+  db: MnemosDb,
+  sessionIdInput?: string,
+): { id: string; isNew: boolean } {
   if (sessionIdInput) {
     const existing = getSession(db, sessionIdInput);
-    if (existing) return existing.id;
+    if (existing) return { id: existing.id, isNew: false };
   }
   const id = randomUUID();
   createSession(db, id);
-  return id;
+  return { id, isNew: true };
+}
+
+/** Truncate a user query into a sidebar-friendly title. Cuts on a word
+ * boundary near 50 chars and strips trailing punctuation. Falls back to a
+ * hard slice if no whitespace nearby. */
+function titleFromQuery(q: string): string {
+  const cleaned = q.replace(/\s+/g, " ").trim();
+  if (cleaned.length <= 50) return cleaned;
+  const truncated = cleaned.slice(0, 50);
+  const lastSpace = truncated.lastIndexOf(" ");
+  const cut = lastSpace > 30 ? truncated.slice(0, lastSpace) : truncated;
+  return cut.replace(/[.,;:!?\-]+$/, "") + "…";
 }
 
 /**
@@ -77,7 +94,10 @@ export async function POST(req: Request) {
   }
 
   const db = getDb();
-  const sessionId = ensureSession(db, parsed.data.sessionId);
+  const { id: sessionId, isNew: isNewSession } = ensureSession(db, parsed.data.sessionId);
+  if (isNewSession) {
+    setSessionTitle(db, sessionId, titleFromQuery(parsed.data.q));
+  }
 
   const registry = getRegistry();
 

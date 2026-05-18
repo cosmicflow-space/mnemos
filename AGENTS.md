@@ -3,6 +3,8 @@
 Operating manual for AI agents (and humans) working in the Mnemos codebase.
 Telegraph style — root rules only. Read scoped `AGENTS.md` files before touching subtree.
 
+> `CLAUDE.md` is a symlink to this file. Edit `AGENTS.md`; both assistants read the same source.
+
 ## Project north star
 
 - **One trusted operator. One machine. One SQLite file. No multi-tenant complexity.**
@@ -40,13 +42,15 @@ Telegraph style — root rules only. Read scoped `AGENTS.md` files before touchi
 ## Commands
 
 - Runtime: Node 22+. Package manager: pnpm 9+.
+- First-time bootstrap (cross-OS, Node-only prereq): `node setup.mjs` — parses `INSTALL.md`, detects OS, prompts before fixing anything.
 - Install: `pnpm install`
-- Dev: `pnpm dev` (Next.js + watch)
-- Build: `pnpm build`
-- Test: `pnpm test` (vitest)
+- Dev: `pnpm dev` (Next.js + watch). Binds `127.0.0.1:3030`. Override with `MNEMOS_BIND=lan` (or `0.0.0.0`) and `MNEMOS_PORT`.
+- Build: `pnpm build` — order matters: every workspace package compiles first, then `apps/web`. Don't reorder.
+- Test: `pnpm test` (vitest). Single test: `pnpm vitest run <file-or-pattern>` or `pnpm test -- -t "<name>"`.
 - Lint: `pnpm lint` (oxlint)
 - Typecheck: `pnpm typecheck` (delegates to per-package tsc --noEmit)
 - Docker: `docker compose up -d`
+- Env precedence (highest → lowest): process env → `./.env` → `~/.mnemos/.env` → `~/.mnemos/config.json`.
 
 ## Code
 
@@ -82,7 +86,8 @@ Telegraph style — root rules only. Read scoped `AGENTS.md` files before touchi
 ## Security / Release
 
 - Never commit real API keys, tokens, or live config.
-- Adopt 48-hour minimum release age for new npm deps (matches OpenClaw discipline).
+- Adopt 48-hour minimum release age for new npm deps (defense against compromised-release supply-chain attacks).
+- Adding a native-compilation dep? Add it to `allowBuilds` in `pnpm-workspace.yaml` or `pnpm install` silently skips its build script.
 - All releases require explicit approval. Version bumps via `pnpm version`.
 - CHANGELOG.md updated on every PR.
 

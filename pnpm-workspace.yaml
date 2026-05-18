@@ -4,7 +4,7 @@ packages:
   - plugins/*
 
 # Defense against compromised-release attacks: refuse to install packages
-# published less than 48 hours ago. Adopted from OpenClaw's discipline.
+# published less than 48 hours ago (industry-standard supply-chain hardening).
 minimumReleaseAge: 2880
 
 # Packages allowed to run install scripts. pnpm v10+ requires explicit

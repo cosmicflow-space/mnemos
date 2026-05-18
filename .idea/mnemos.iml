@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="WEB_MODULE" version="4">
+  <component name="NewModuleRootManager">
+    <content url="file://$MODULE_DIR$">
+      <excludeFolder url="file://$MODULE_DIR$/node_modules" />
+      <excludeFolder url="file://$MODULE_DIR$/.pnpm-store" />
+      <excludeFolder url="file://$MODULE_DIR$/apps/web/.next" />
+      <excludeFolder url="file://$MODULE_DIR$/apps/web/node_modules" />
+      <excludeFolder url="file://$MODULE_DIR$/packages/cli/node_modules" />
+      <excludeFolder url="file://$MODULE_DIR$/packages/core/node_modules" />
+      <excludeFolder url="file://$MODULE_DIR$/packages/db/node_modules" />
+      <excludeFolder url="file://$MODULE_DIR$/packages/plugin-sdk/node_modules" />
+      <excludeFolder url="file://$MODULE_DIR$/plugins/anthropic/node_modules" />
+      <excludeFolder url="file://$MODULE_DIR$/plugins/embed-local/node_modules" />
+      <excludeFolder url="file://$MODULE_DIR$/plugins/gemini/node_modules" />
+      <excludeFolder url="file://$MODULE_DIR$/plugins/llama-cpp/node_modules" />
+      <excludeFolder url="file://$MODULE_DIR$/plugins/loader-code/node_modules" />
+      <excludeFolder url="file://$MODULE_DIR$/plugins/loader-markdown/node_modules" />
+      <excludeFolder url="file://$MODULE_DIR$/plugins/loader-pdf/node_modules" />
+      <excludeFolder url="file://$MODULE_DIR$/plugins/loader-plaintext/node_modules" />
+      <excludeFolder url="file://$MODULE_DIR$/plugins/loader-web/node_modules" />
+      <excludeFolder url="file://$MODULE_DIR$/plugins/ollama/node_modules" />
+      <excludeFolder url="file://$MODULE_DIR$/plugins/openai/node_modules" />
+      <excludeFolder url="file://$MODULE_DIR$/dist" />
+      <excludeFolder url="file://$MODULE_DIR$/coverage" />
+    </content>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+</module>

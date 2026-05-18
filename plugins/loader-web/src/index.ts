@@ -18,7 +18,7 @@ const loader: DocumentLoader = {
     const url = urlOrPath.startsWith("http") ? urlOrPath : `https://${urlOrPath}`;
     const response = await fetch(url, {
       headers: {
-        "user-agent": "mnemos/0.1 (+https://github.com/sammuthu/mnemos)",
+        "user-agent": "mnemos/0.1 (+https://github.com/cosmicflow-space/mnemos)",
         accept: "text/html,application/xhtml+xml,text/plain,*/*",
       },
     });

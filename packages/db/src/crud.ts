@@ -14,6 +14,7 @@ import type {
   Source,
   SourceKind,
   FileRow,
+  IngestStatus,
   Chunk,
   Credential,
   Session,
@@ -139,18 +140,24 @@ export type UpsertFileInput = {
 };
 
 /**
- * Upsert a file row. Returns {fileId, changed} where `changed` is true if the
- * content hash is new or different from what was last ingested.
+ * Upsert a file row. Returns {fileId, changed, ingestStatus} where `changed`
+ * is true if the content hash is new or different from what was last
+ * ingested, and `ingestStatus` is the row's current status (used by the
+ * pipeline to decide whether to skip).
+ *
+ * Note: when content has changed, status is reset to 'pending' so a
+ * subsequent crash mid-ingest is correctly recoverable. A new file row is
+ * inserted with status 'pending' by default (per schema DEFAULT).
  */
 export function upsertFile(
   db: MnemosDb,
   input: UpsertFileInput,
-): { fileId: number; changed: boolean } {
+): { fileId: number; changed: boolean; ingestStatus: IngestStatus } {
   const p = prepared(db);
   const existing = p(
-    `SELECT id, content_hash FROM file WHERE source_id = ? AND path = ?`,
+    `SELECT id, content_hash, ingest_status FROM file WHERE source_id = ? AND path = ?`,
   ).get(input.sourceId, input.path) as
-    | { id: number; content_hash: string }
+    | { id: number; content_hash: string; ingest_status: IngestStatus }
     | undefined;
 
   const now = Date.now();
@@ -158,9 +165,12 @@ export function upsertFile(
   if (existing) {
     const changed = existing.content_hash !== input.contentHash;
     if (changed) {
+      // Content changed → reset to pending; previous chunks will be purged
+      // by the pipeline before re-chunking.
       p(
         `UPDATE file
-         SET content_hash = ?, size_bytes = ?, mtime = ?, loader = ?, last_ingested_at = ?
+         SET content_hash = ?, size_bytes = ?, mtime = ?, loader = ?,
+             last_ingested_at = ?, ingest_status = 'pending'
          WHERE id = ?`,
       ).run(
         input.contentHash,
@@ -170,16 +180,17 @@ export function upsertFile(
         now,
         existing.id,
       );
+      return { fileId: existing.id, changed: true, ingestStatus: "pending" };
     } else {
       // Touch last_ingested_at even if unchanged so we know we checked
       p(`UPDATE file SET last_ingested_at = ? WHERE id = ?`).run(now, existing.id);
+      return { fileId: existing.id, changed: false, ingestStatus: existing.ingest_status };
     }
-    return { fileId: existing.id, changed };
   }
 
   const result = p(
-    `INSERT INTO file (source_id, path, content_hash, size_bytes, mtime, loader, last_ingested_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO file (source_id, path, content_hash, size_bytes, mtime, loader, last_ingested_at, ingest_status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
   ).run(
     input.sourceId,
     input.path,
@@ -189,53 +200,32 @@ export function upsertFile(
     input.loader,
     now,
   );
-  return { fileId: Number(result.lastInsertRowid), changed: true };
+  return { fileId: Number(result.lastInsertRowid), changed: true, ingestStatus: "pending" };
 }
 
-export function getFile(db: MnemosDb, fileId: number): FileRow | null {
-  const row = prepared(db)(
-    `SELECT id, source_id, path, content_hash, size_bytes, mtime, loader, last_ingested_at
-     FROM file WHERE id = ?`,
-  ).get(fileId) as
-    | {
-        id: number;
-        source_id: number;
-        path: string;
-        content_hash: string;
-        size_bytes: number;
-        mtime: number;
-        loader: string;
-        last_ingested_at: number;
-      }
-    | undefined;
-  if (!row) return null;
+/** Update a file's ingest_status. Called by the pipeline at status transitions. */
+export function setFileIngestStatus(
+  db: MnemosDb,
+  fileId: number,
+  status: IngestStatus,
+): void {
+  prepared(db)(`UPDATE file SET ingest_status = ? WHERE id = ?`).run(status, fileId);
+}
+
+type RawFileRow = {
+  id: number;
+  source_id: number;
+  path: string;
+  content_hash: string;
+  size_bytes: number;
+  mtime: number;
+  loader: string;
+  last_ingested_at: number;
+  ingest_status: IngestStatus;
+};
+
+function mapFileRow(r: RawFileRow): FileRow {
   return {
-    id: row.id,
-    sourceId: row.source_id,
-    path: row.path,
-    contentHash: row.content_hash,
-    sizeBytes: row.size_bytes,
-    mtime: row.mtime,
-    loader: row.loader,
-    lastIngestedAt: row.last_ingested_at,
-  };
-}
-
-export function listFilesInSource(db: MnemosDb, sourceId: number): FileRow[] {
-  const rows = prepared(db)(
-    `SELECT id, source_id, path, content_hash, size_bytes, mtime, loader, last_ingested_at
-     FROM file WHERE source_id = ? ORDER BY path`,
-  ).all(sourceId) as Array<{
-    id: number;
-    source_id: number;
-    path: string;
-    content_hash: string;
-    size_bytes: number;
-    mtime: number;
-    loader: string;
-    last_ingested_at: number;
-  }>;
-  return rows.map((r) => ({
     id: r.id,
     sourceId: r.source_id,
     path: r.path,
@@ -244,7 +234,34 @@ export function listFilesInSource(db: MnemosDb, sourceId: number): FileRow[] {
     mtime: r.mtime,
     loader: r.loader,
     lastIngestedAt: r.last_ingested_at,
-  }));
+    ingestStatus: r.ingest_status,
+  };
+}
+
+export function getFile(db: MnemosDb, fileId: number): FileRow | null {
+  const row = prepared(db)(
+    `SELECT id, source_id, path, content_hash, size_bytes, mtime, loader, last_ingested_at, ingest_status
+     FROM file WHERE id = ?`,
+  ).get(fileId) as RawFileRow | undefined;
+  return row ? mapFileRow(row) : null;
+}
+
+export function listFilesInSource(db: MnemosDb, sourceId: number): FileRow[] {
+  const rows = prepared(db)(
+    `SELECT id, source_id, path, content_hash, size_bytes, mtime, loader, last_ingested_at, ingest_status
+     FROM file WHERE source_id = ? ORDER BY path`,
+  ).all(sourceId) as RawFileRow[];
+  return rows.map(mapFileRow);
+}
+
+/** How many chunks exist for a file. Used by the pipeline to detect partial
+ * ingestions (file row written but chunking crashed) so they re-process on
+ * the next run instead of being silently treated as "unchanged". */
+export function countChunksForFile(db: MnemosDb, fileId: number): number {
+  const row = prepared(db)(
+    `SELECT COUNT(*) AS n FROM chunk WHERE file_id = ?`,
+  ).get(fileId) as { n: number } | undefined;
+  return row?.n ?? 0;
 }
 
 /** Delete chunks belonging to a file before re-ingesting changed content. */
@@ -289,10 +306,13 @@ export function insertChunk(db: MnemosDb, input: InsertChunkInput): number {
       now,
     );
     const chunkId = Number(result.lastInsertRowid);
-    // sqlite-vec expects the embedding as a JSON array literal
+    // sqlite-vec's vec0 virtual table strictly requires BigInt for the primary
+    // key binding — plain JS number fails with "Only integers are allows for
+    // primary key values" even when the value IS an integer. The embedding
+    // goes in as a JSON array literal.
     prepared(db)(
       `INSERT INTO vec_chunk (chunk_id, embedding) VALUES (?, ?)`,
-    ).run(chunkId, JSON.stringify(input.embedding));
+    ).run(BigInt(chunkId), JSON.stringify(input.embedding));
     return chunkId;
   })();
 }
@@ -306,6 +326,14 @@ export type SearchHit = {
   text: string;
   startOffset: number;
   endOffset: number;
+  /** File modification time (epoch ms). Surfaced in the RAG prompt so the
+   * model can answer "when" questions about indexed content. */
+  fileMtime: number;
+  /** Document loader used at ingest time (e.g. "pdf", "markdown"). Surfaced
+   * in the prompt so the model knows the file kind without inferring from
+   * the extension. */
+  loader: string;
+  fileSizeBytes: number;
   distance: number; // smaller = closer (cosine)
 };
 
@@ -325,6 +353,9 @@ export function vecSearch(
        c.text         AS text,
        c.start_offset AS startOffset,
        c.end_offset   AS endOffset,
+       f.mtime        AS fileMtime,
+       f.loader       AS loader,
+       f.size_bytes   AS fileSizeBytes,
        v.distance     AS distance
      FROM vec_chunk v
      JOIN chunk c    ON v.chunk_id = c.id
@@ -345,6 +376,28 @@ export function chunkCountBySource(db: MnemosDb): Map<number, number> {
   ).all() as Array<{ sourceId: number; count: number }>;
   const map = new Map<number, number>();
   for (const row of rows) map.set(row.sourceId, row.count);
+  return map;
+}
+
+/** Per-source ingestion stats — used by the UI to surface "last ingested 5
+ * min ago" and "123 files indexed" without separately querying per row. */
+export type SourceIngestStats = { fileCount: number; lastIngestedAt: number | null };
+
+export function ingestStatsBySource(db: MnemosDb): Map<number, SourceIngestStats> {
+  const rows = prepared(db)(
+    `SELECT source_id AS sourceId,
+            COUNT(*) AS fileCount,
+            MAX(last_ingested_at) AS lastIngestedAt
+     FROM file
+     GROUP BY source_id`,
+  ).all() as Array<{ sourceId: number; fileCount: number; lastIngestedAt: number | null }>;
+  const map = new Map<number, SourceIngestStats>();
+  for (const row of rows) {
+    map.set(row.sourceId, {
+      fileCount: row.fileCount,
+      lastIngestedAt: row.lastIngestedAt,
+    });
+  }
   return map;
 }
 
@@ -492,6 +545,13 @@ export function getSession(db: MnemosDb, id: string): Session | null {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+/** Set a session's title. Called by /api/query after the first user message
+ * lands so the sidebar shows "Stripe job description" instead of a raw
+ * timestamp. */
+export function setSessionTitle(db: MnemosDb, id: string, title: string): void {
+  prepared(db)(`UPDATE session SET title = ? WHERE id = ?`).run(title, id);
 }
 
 export function listSessions(db: MnemosDb, limit = 50): Session[] {

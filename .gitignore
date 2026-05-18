@@ -22,9 +22,18 @@ coverage/
 # Editor / OS
 .DS_Store
 .vscode/
-.idea/
 *.swp
 *.swo
+
+# IntelliJ / WebStorm: track project skeleton, drop per-user state.
+.idea/*
+!.idea/modules.xml
+!.idea/*.iml
+!.idea/vcs.xml
+!.idea/misc.xml
+!.idea/codeStyles/
+!.idea/inspectionProfiles/
+!.idea/runConfigurations/
 
 # Mnemos runtime state (should never be in repo)
 .mnemos/

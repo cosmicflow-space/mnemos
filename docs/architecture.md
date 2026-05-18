@@ -6,8 +6,7 @@ This is a short pointer document. The **full architecture specification** with m
 
 Supporting documents in the same directory:
 - `PLAN.md` — strategic plan and decision log
-- `COMPETITIVE-OPENCLAW.md` — patterns adopted/adapted/avoided from OpenClaw
-- `COMPETITIVE-FLOWISE.md` — patterns adopted/adapted/avoided from Flowise
+- Competitive-landscape notes (patterns adopted / adapted / avoided from the broader RAG and personal-knowledge-base ecosystem)
 
 When the v0.1 launches, the architecture writeup also publishes to:
 - https://sammuthu.com/ai-ml/mnemos

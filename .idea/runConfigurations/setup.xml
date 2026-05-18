@@ -1,0 +1,9 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="setup (first run)" type="NodeJSConfigurationType" application-parameters="setup.mjs" path-to-js-file="">
+    <node-interpreter>project</node-interpreter>
+    <envs />
+    <method v="2" />
+    <option name="path-to-js-file" value="$PROJECT_DIR$/setup.mjs" />
+    <option name="working-dir" value="$PROJECT_DIR$" />
+  </configuration>
+</component>

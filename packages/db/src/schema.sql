@@ -14,7 +14,13 @@ CREATE TABLE IF NOT EXISTS source (
   updated_at  INTEGER NOT NULL
 );
 
--- Ingested files (one row per file across all registered sources)
+-- Ingested files (one row per file across all registered sources).
+-- ingest_status tracks atomic ingestion: 'pending' before any chunks land,
+-- 'partial' if an embed/loader error broke the chunk loop mid-file,
+-- 'complete' only after every chunk for this file is inserted, and 'failed'
+-- if hashing or loading failed outright. The skip-as-unchanged check
+-- (pipeline.ts) requires status='complete' AND matching hash — this prevents
+-- partial chunk sets from being treated as healthy on the next ingest.
 CREATE TABLE IF NOT EXISTS file (
   id                INTEGER PRIMARY KEY AUTOINCREMENT,
   source_id         INTEGER NOT NULL REFERENCES source(id) ON DELETE CASCADE,
@@ -24,9 +30,15 @@ CREATE TABLE IF NOT EXISTS file (
   mtime             INTEGER NOT NULL,
   loader            TEXT NOT NULL,
   last_ingested_at  INTEGER NOT NULL,
+  ingest_status     TEXT NOT NULL DEFAULT 'pending',
   UNIQUE(source_id, path)
 );
 CREATE INDEX IF NOT EXISTS idx_file_source ON file(source_id);
+-- NOTE: idx_file_status is created in client.ts:migrate() after the
+-- ingest_status column is ensured to exist via ALTER TABLE. Don't add it
+-- here — CREATE INDEX would fail on a pre-existing file table that hasn't
+-- had the column added yet, and db.exec() of the schema would throw before
+-- migrate() ever runs.
 
 -- Chunks (one row per text chunk; vector lives in vec_chunk)
 CREATE TABLE IF NOT EXISTS chunk (

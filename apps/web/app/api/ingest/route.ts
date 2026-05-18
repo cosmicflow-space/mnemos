@@ -10,6 +10,21 @@ export const dynamic = "force-dynamic";
 
 const IngestRequest = z.object({
   path: z.string().min(1),
+  filters: z
+    .object({
+      excludeLabels: z.array(z.string()).optional(),
+      includeOverrides: z
+        .object({
+          log: z.boolean().optional(),
+          lockfile: z.boolean().optional(),
+          minified: z.boolean().optional(),
+          transient: z.boolean().optional(),
+          hidden: z.boolean().optional(),
+        })
+        .optional(),
+      includeLargeFiles: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 function expandHome(p: string): string {
@@ -85,6 +100,7 @@ export async function POST(req: Request) {
       try {
         await ingestFolder(db, registry, embedder, source, {
           onProgress: (progress) => send(progress),
+          filters: parsed.data.filters,
         });
       } catch (err) {
         send({

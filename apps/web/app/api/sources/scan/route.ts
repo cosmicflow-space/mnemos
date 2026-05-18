@@ -61,6 +61,9 @@ export async function POST(req: Request) {
         label: f.classification.label,
       })),
       hasMoreFiles: result.files.length > 200,
+      defaultExcluded: result.defaultExcluded,
+      securityExcluded: result.securityExcluded,
+      largeFiles: result.largeFiles,
     });
   } catch (err) {
     return NextResponse.json(

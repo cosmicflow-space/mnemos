@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript base config (strict mode, ES2022, ESM)
 - .gitignore + .env.example
 - Architecture spec at `agentic-framework/oss-rag-planning/ARCHITECTURE.md`
-- Competitive analyses (OpenClaw, Flowise) capturing patterns to adopt
+- Competitive landscape notes capturing patterns to adopt from the broader RAG / personal-knowledge-base ecosystem
 
 ### Day 2 (2026-05-12)
 - DB CRUD layer (`packages/db/src/crud.ts`): folders, files, chunks/vec_search, credentials, sessions, messages, audit
@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Schema `vec_chunk` dimension: 1536 → 384
 - New constants: `DEFAULT_EMBEDDING_PROVIDER_ID` ("embed-local"), `MNEMOS_EMBEDDING_DIM` (384)
 - README + .env.example updated to surface "free local default + alternatives from getgo" UX
-- **IP-hygiene rename**: `folder` table → `source` (with `kind` column for folder/url/mailbox), `pair` CLI command → `source`, `doctor` → `check`. Avoids OpenClaw-distinctive terminology while keeping universal industry terms (chunk, embedding, session, credential).
+- **IP-hygiene rename**: `folder` table → `source` (with `kind` column for folder/url/mailbox), `pair` CLI command → `source`, `doctor` → `check`. Uses universal industry terms (chunk, embedding, session, credential) and avoids any terminology distinctive to other named products.
 
 ### Day 2.6 (2026-05-13)
 - **Logo locked**: v1 Cyan + Amber citation-bracket design (Path B1 after AI partner review with Gemini + Codex flagged the original hex concept as too generic in the Honeycomb.io visual bucket)

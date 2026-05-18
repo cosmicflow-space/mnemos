@@ -3,15 +3,23 @@
   "version": "0.1.0",
   "private": true,
   "description": "Personal RAG. Local-first. Drop a folder, ask a question.",
-  "homepage": "https://github.com/sammuthu/mnemos",
+  "homepage": "https://github.com/cosmicflow-space/mnemos",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cosmicflow-space/mnemos.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cosmicflow-space/mnemos/issues"
+  },
   "license": "MIT",
-  "author": "Sam Muthu",
+  "author": "Zen Algorithms LLC",
   "type": "module",
   "engines": {
     "node": ">=22.0.0",
     "pnpm": ">=9.0.0"
   },
   "scripts": {
+    "setup": "node setup.mjs",
     "dev": "pnpm --filter @mnemos/web dev",
     "build": "pnpm -r --filter=!@mnemos/web build && pnpm --filter @mnemos/web build",
     "start": "pnpm --filter @mnemos/web start",

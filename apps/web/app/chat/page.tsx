@@ -51,6 +51,13 @@ type LiveMessage = {
   hits?: Hit[];
   /** Provider id used for the response (assistant messages only). */
   provider?: string;
+  /** Actual model that produced the response — populated from the 'done' event. */
+  model?: string | null;
+  /** End-to-end duration in milliseconds, from query to last token. */
+  durationMs?: number;
+  /** Token usage if the provider reports it (Ollama doesn't; frontier providers do). */
+  tokensIn?: number | null;
+  tokensOut?: number | null;
   /** True while the response is still streaming. */
   streaming?: boolean;
 };
@@ -69,9 +76,23 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
 
-  // ---- Load providers + last session on mount ----
+  // ---- Load providers + configured agent + last session on mount ----
   useEffect(() => {
     void (async () => {
+      // Source-of-truth precedence: configured agent > explicit last-chosen
+      // (localStorage) > hard default. Reading /api/config first means picking
+      // a provider in /agent immediately becomes the chat default — no
+      // surprise where the dropdown ignores your config.
+      let configuredProvider: string | null = null;
+      try {
+        const configRes = await fetch("/api/config", { cache: "no-store" });
+        if (configRes.ok) {
+          const cfg = (await configRes.json()) as { provider: string | null; ready: boolean };
+          if (cfg.ready && cfg.provider) configuredProvider = cfg.provider;
+        }
+      } catch {
+        // silent
+      }
       try {
         const res = await fetch("/api/providers");
         if (res.ok) {
@@ -85,7 +106,8 @@ export default function ChatPage() {
         typeof window !== "undefined"
           ? window.localStorage.getItem(STORAGE_PROVIDER_KEY)
           : null;
-      if (lastProvider) setProviderId(lastProvider);
+      if (configuredProvider) setProviderId(configuredProvider);
+      else if (lastProvider) setProviderId(lastProvider);
 
       const lastSession =
         typeof window !== "undefined"
@@ -149,6 +171,19 @@ export default function ChatPage() {
     setMessages([]);
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(STORAGE_SESSION_KEY);
+    }
+  }
+
+  async function deleteSession(id: string, title: string) {
+    if (!confirm(`Delete this session?\n\n${title}\n\nThis can't be undone.`)) return;
+    try {
+      const r = await fetch(`/api/sessions/${id}`, { method: "DELETE" });
+      if (!r.ok) throw new Error(await r.text());
+      // If we just deleted the active session, reset state.
+      if (sessionId === id) newChat();
+      await refreshSessions();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -245,6 +280,29 @@ export default function ChatPage() {
               }
               return next;
             });
+          } else if (ev.phase === "done") {
+            // Capture model + duration + token counts from the runQuery
+            // 'done' event so the message footer can show "ollama · llama3.2:3b · 1.2s".
+            const done = event as {
+              phase: "done";
+              model?: string | null;
+              durationMs?: number;
+              tokenCounts?: { in?: number | null; out?: number | null };
+            };
+            setMessages((prev) => {
+              const next = [...prev];
+              const last = next[next.length - 1];
+              if (last && last.role === "assistant") {
+                next[next.length - 1] = {
+                  ...last,
+                  model: done.model ?? null,
+                  durationMs: done.durationMs,
+                  tokensIn: done.tokenCounts?.in ?? null,
+                  tokensOut: done.tokenCounts?.out ?? null,
+                };
+              }
+              return next;
+            });
           } else if (ev.phase === "error") {
             throw new Error(ev.message ?? "stream error");
           }
@@ -283,7 +341,11 @@ export default function ChatPage() {
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    // Standard chat affordance: Enter sends, Shift+Enter newlines.
+    // Cmd/Ctrl+Enter also send for power users who learn it elsewhere.
+    if (e.key === "Enter" && !e.shiftKey) {
+      // IME composition: don't send while user is mid-composition (e.g. CJK input)
+      if (e.nativeEvent.isComposing) return;
       e.preventDefault();
       void send(e as unknown as FormEvent);
     }
@@ -307,26 +369,46 @@ export default function ChatPage() {
         <div className="px-4 py-2 text-xs uppercase tracking-wider text-gray-500">
           History
         </div>
-        <ul className="flex-1 overflow-y-auto px-2 pb-4 space-y-1">
+        <div className="flex-1 overflow-y-auto px-2 pb-4">
           {sessions.length === 0 && (
-            <li className="px-2 py-1.5 text-xs text-gray-600">No sessions yet</li>
+            <p className="px-2 py-1.5 text-xs text-gray-600">No sessions yet</p>
           )}
-          {sessions.map((s) => (
-            <li key={s.id}>
-              <button
-                onClick={() => setSessionId(s.id)}
-                className={`w-full text-left px-2 py-1.5 rounded text-xs truncate transition ${
-                  s.id === sessionId
-                    ? "bg-cyan-900/30 text-cyan-200"
-                    : "text-gray-300 hover:bg-gray-800/60"
-                }`}
-                title={s.id}
-              >
-                {s.title ?? formatSessionPreview(s)}
-              </button>
-            </li>
+          {groupSessionsByDate(sessions).map((group) => (
+            <div key={group.label} className="mb-3">
+              <div className="px-2 pt-2 pb-1 text-[10px] uppercase tracking-wider text-gray-500">
+                {group.label}
+              </div>
+              <ul className="space-y-0.5">
+                {group.items.map((s) => {
+                  const label = s.title ?? formatSessionPreview(s);
+                  return (
+                    <li key={s.id} className="group/session relative">
+                      <button
+                        onClick={() => setSessionId(s.id)}
+                        className={`w-full text-left pl-2 pr-7 py-1.5 rounded text-xs truncate transition ${
+                          s.id === sessionId
+                            ? "bg-cyan-900/30 text-cyan-200"
+                            : "text-gray-300 hover:bg-gray-800/60"
+                        }`}
+                        title={label}
+                      >
+                        {label}
+                      </button>
+                      <button
+                        onClick={() => void deleteSession(s.id, label)}
+                        className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/session:opacity-100 transition rounded text-gray-500 hover:text-red-400 hover:bg-red-500/10 w-5 h-5 flex items-center justify-center text-xs"
+                        title="Delete session"
+                        aria-label="Delete session"
+                      >
+                        ×
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           ))}
-        </ul>
+        </div>
         <div className="px-4 py-3 border-t border-gray-800 text-xs text-gray-500">
           <Link href="/sources" className="hover:text-cyan-300 transition">
             ↗ Manage sources
@@ -393,7 +475,7 @@ export default function ChatPage() {
               placeholder={
                 streaming
                   ? "Streaming…"
-                  : "Ask anything about your sources. (⌘↵ to send)"
+                  : "Ask anything about your sources.  ⏎ send · ⇧⏎ newline"
               }
               disabled={streaming}
               rows={2}
@@ -415,10 +497,20 @@ export default function ChatPage() {
 
 function MessageBubble({ message }: { message: LiveMessage }) {
   const isUser = message.role === "user";
+  const [copied, setCopied] = useState(false);
+
+  function copyToClipboard() {
+    if (!message.content) return;
+    void navigator.clipboard.writeText(message.content).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+    <div className={`flex ${isUser ? "justify-end" : "justify-start"} group`}>
       <div
-        className={`max-w-3xl rounded-lg px-4 py-3 ${
+        className={`max-w-3xl rounded-lg px-4 py-3 relative ${
           isUser
             ? "bg-cyan-900/30 border border-cyan-900/50"
             : "bg-gray-900/60 border border-gray-800"
@@ -435,8 +527,17 @@ function MessageBubble({ message }: { message: LiveMessage }) {
             <span className="inline-block w-2 h-4 ml-1 bg-amber-400 animate-pulse" />
           )}
         </div>
-        {!isUser && message.provider && !message.streaming && (
-          <div className="text-xs text-gray-500 mt-2">via {message.provider}</div>
+        {!isUser && !message.streaming && message.content && (
+          <div className="flex items-center justify-between mt-2 text-xs text-gray-500 gap-3">
+            <span className="truncate">{formatMessageMetrics(message)}</span>
+            <button
+              onClick={copyToClipboard}
+              className="opacity-0 group-hover:opacity-100 transition rounded border border-gray-700 hover:border-gray-600 bg-gray-900/40 hover:bg-gray-900/80 px-2 py-0.5 text-[11px] text-gray-400 hover:text-gray-200 shrink-0"
+              title="Copy response"
+            >
+              {copied ? "✓ copied" : "copy"}
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -445,10 +546,20 @@ function MessageBubble({ message }: { message: LiveMessage }) {
 
 function Citations({ hits }: { hits: Hit[] }) {
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  // Show first 3 pills inline; the rest hide behind "+N more" until expanded.
+  // Top-of-response is now scannable — citations are present but not a wall.
+  const INLINE = 3;
+  const visibleHits = showAll ? hits : hits.slice(0, INLINE);
+  const hidden = Math.max(0, hits.length - INLINE);
+
   return (
     <div className="mb-3">
-      <div className="flex flex-wrap gap-1 mb-1">
-        {hits.map((h) => (
+      <div className="flex flex-wrap items-center gap-1 mb-1">
+        <span className="text-[10px] uppercase tracking-wider text-gray-500 mr-1">
+          Sources ({hits.length})
+        </span>
+        {visibleHits.map((h) => (
           <button
             key={h.ref}
             onClick={() => setExpanded(expanded === h.ref ? null : h.ref)}
@@ -462,6 +573,14 @@ function Citations({ hits }: { hits: Hit[] }) {
             [{h.ref}] {shortPath(h.filePath)}
           </button>
         ))}
+        {hidden > 0 && (
+          <button
+            onClick={() => setShowAll((v) => !v)}
+            className="text-[10px] px-1.5 py-0.5 rounded transition border border-gray-700 bg-gray-800/40 text-gray-400 hover:bg-gray-800/70"
+          >
+            {showAll ? "show less" : `+${hidden} more`}
+          </button>
+        )}
       </div>
       {expanded !== null && (
         <div className="text-xs font-mono bg-gray-950/60 border border-gray-800 rounded p-2 mb-2 text-gray-300 max-h-40 overflow-y-auto">
@@ -478,6 +597,22 @@ function shortPath(p: string): string {
   return `…/${parts.slice(-2).join("/")}`;
 }
 
+/** Compose the message footer line: provider · model · duration · tokens.
+ * Each segment is omitted gracefully if not available so the same component
+ * renders correctly for Ollama (no token counts) and frontier providers (full). */
+function formatMessageMetrics(m: LiveMessage): string {
+  const parts: string[] = [];
+  if (m.provider) parts.push(m.provider);
+  if (m.model) parts.push(m.model);
+  if (typeof m.durationMs === "number") {
+    parts.push(m.durationMs < 1000 ? `${m.durationMs}ms` : `${(m.durationMs / 1000).toFixed(1)}s`);
+  }
+  if (typeof m.tokensOut === "number" && m.tokensOut > 0) {
+    parts.push(`${m.tokensOut} tok`);
+  }
+  return parts.join(" · ");
+}
+
 function formatSessionPreview(s: SessionRow): string {
   const d = new Date(s.updatedAt);
   return d.toLocaleString(undefined, {
@@ -486,4 +621,32 @@ function formatSessionPreview(s: SessionRow): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/** Group sessions by a friendly date bucket for the sidebar.
+ * Buckets: Today, Yesterday, Earlier this week, Earlier. Within each bucket,
+ * sessions stay in their incoming order (already newest-first from the API). */
+type SessionGroup = { label: string; items: SessionRow[] };
+function groupSessionsByDate(rows: SessionRow[]): SessionGroup[] {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
+  // "This week" = within the past 7 days but earlier than yesterday.
+  const weekStart = todayStart - 7 * 24 * 60 * 60 * 1000;
+  const groups: Record<string, SessionRow[]> = {
+    Today: [],
+    Yesterday: [],
+    "Earlier this week": [],
+    Earlier: [],
+  };
+  for (const s of rows) {
+    const t = s.updatedAt;
+    if (t >= todayStart) groups.Today!.push(s);
+    else if (t >= yesterdayStart) groups.Yesterday!.push(s);
+    else if (t >= weekStart) groups["Earlier this week"]!.push(s);
+    else groups.Earlier!.push(s);
+  }
+  return (Object.entries(groups) as Array<[string, SessionRow[]]>)
+    .filter(([, items]) => items.length > 0)
+    .map(([label, items]) => ({ label, items }));
 }

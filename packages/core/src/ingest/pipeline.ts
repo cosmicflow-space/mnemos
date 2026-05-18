@@ -15,6 +15,7 @@ import { stat } from "node:fs/promises";
 import {
   type MnemosDb,
   upsertFile,
+  setFileIngestStatus,
   insertChunk,
   purgeFileChunks,
   appendAudit,
@@ -23,6 +24,7 @@ import type { EmbeddingProvider } from "@mnemos/plugin-sdk";
 import { hashFile } from "./hash";
 import { chunkText } from "./chunker";
 import { scanFolder } from "./scan";
+import { shouldExclude, LARGE_FILE_BYTES, type IncludeOverrides } from "./exclude";
 import { getDocumentLoader, type PluginRegistry } from "../registry";
 
 export type IngestProgress =
@@ -43,6 +45,15 @@ export type IngestResult = {
   errors: Array<{ filePath: string; message: string }>;
 };
 
+export type IngestFilters = {
+  /** Labels (from Classification.label) to skip for this ingest. */
+  excludeLabels?: string[];
+  /** Default-noise tiers to opt INTO (logs, lockfiles, minified, transient). */
+  includeOverrides?: IncludeOverrides;
+  /** If false, files > 10 MB are skipped. Default true (include everything). */
+  includeLargeFiles?: boolean;
+};
+
 export type IngestFolderOptions = {
   /** Batch size for embedding API calls. Default 32. */
   embedBatchSize?: number;
@@ -50,6 +61,8 @@ export type IngestFolderOptions = {
   onProgress?: (progress: IngestProgress) => void;
   /** Abort signal for cancellation. */
   signal?: AbortSignal;
+  /** User-chosen filters from the scan-result UI. */
+  filters?: IngestFilters;
 };
 
 export async function ingestFolder(
@@ -63,11 +76,28 @@ export async function ingestFolder(
   const batchSize = opts.embedBatchSize ?? 32;
   const onProgress = opts.onProgress ?? (() => {});
 
+  const filters = opts.filters ?? {};
+  const includeLargeFiles = filters.includeLargeFiles ?? true;
+  const excludeLabels = new Set(filters.excludeLabels ?? []);
+
   onProgress({ phase: "scan-start", rootPath: source.path });
   const scan = await scanFolder(source.path);
-  const supported = scan.files.filter(
-    (f) => f.classification.category === "supported",
-  );
+
+  // Apply user filters on top of the scan's default exclusions.
+  // scan.files now includes soft-excluded files (tagged with f.exclusion);
+  // shouldExclude(relativePath, overrides) re-evaluates whether to keep them
+  // given the user's per-tier opt-ins. Hard-locked security files were never
+  // in scan.files in the first place.
+  const supported = scan.files.filter((f) => {
+    if (f.classification.category !== "supported") return false;
+    if (excludeLabels.has(f.classification.label)) return false;
+    if (!includeLargeFiles && f.sizeBytes > LARGE_FILE_BYTES) return false;
+    // Honors per-tier user overrides: if the file was soft-excluded but the
+    // user opted that tier in, this returns null (include); otherwise the
+    // file is filtered out here.
+    return shouldExclude(f.relativePath, filters.includeOverrides) === null;
+  });
+
   onProgress({
     phase: "scan-complete",
     totalFiles: scan.files.length,
@@ -118,7 +148,11 @@ export async function ingestFolder(
       loader: loaderId,
     });
 
-    if (!upsertResult.changed) {
+    // Skip only when the file is genuinely unchanged AND was previously
+    // ingested to completion. Pending/partial/failed states force a re-process
+    // even when the hash hasn't moved — this is the atomic-ingest guarantee
+    // that prevents mid-file crashes from leaving permanently corrupt indexes.
+    if (!upsertResult.changed && upsertResult.ingestStatus === "complete") {
       filesSkipped += 1;
       onProgress({ phase: "file-skipped", filePath: file.relativePath, reason: "unchanged", current, total });
       continue;
@@ -153,6 +187,7 @@ export async function ingestFolder(
 
     // Embed in batches to amortize API round-trips for frontier providers.
     let embeddedSoFar = 0;
+    let embedFailed = false;
     for (let b = 0; b < chunks.length; b += batchSize) {
       if (opts.signal?.aborted) break;
       const batch = chunks.slice(b, b + batchSize);
@@ -160,10 +195,12 @@ export async function ingestFolder(
       try {
         vectors = await embedder.embed(batch.map((c) => c.text));
       } catch (err) {
+        const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
         errors.push({
           filePath: file.relativePath,
-          message: `embed failed at chunk ${b}: ${err instanceof Error ? err.message : String(err)}`,
+          message: `embed failed at chunk ${b}: ${msg}`,
         });
+        embedFailed = true;
         break;
       }
       for (let k = 0; k < batch.length; k += 1) {
@@ -190,14 +227,26 @@ export async function ingestFolder(
       });
     }
 
-    filesProcessed += 1;
-    onProgress({
-      phase: "file-complete",
-      filePath: file.relativePath,
-      chunkCount: embeddedSoFar,
-      current,
-      total,
-    });
+    if (embedFailed) {
+      // Mid-file failure: some chunks may have landed in the DB. Mark the
+      // file 'partial' so the next ingest re-processes it instead of treating
+      // its hash as healthy.
+      setFileIngestStatus(db, upsertResult.fileId, "partial");
+      onProgress({ phase: "file-skipped", filePath: file.relativePath, reason: "load-error", current, total });
+    } else {
+      // All chunks for this file landed successfully — flip to 'complete'
+      // atomically as the last step. Crash before this line → status stays
+      // 'pending'/'partial', next run reprocesses.
+      setFileIngestStatus(db, upsertResult.fileId, "complete");
+      filesProcessed += 1;
+      onProgress({
+        phase: "file-complete",
+        filePath: file.relativePath,
+        chunkCount: embeddedSoFar,
+        current,
+        total,
+      });
+    }
   }
 
   const durationMs = Date.now() - start;
