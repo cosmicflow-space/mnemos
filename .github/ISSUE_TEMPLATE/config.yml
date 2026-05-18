@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Discussion / general question
+    url: https://github.com/cosmicflow-space/mnemos/discussions
+    about: For open-ended questions, design ideas, or "is this in scope?" conversations.
+  - name: 🔒 Security vulnerability
+    url: https://github.com/cosmicflow-space/mnemos/security/advisories/new
+    about: Report security issues privately via GitHub Security Advisory (NOT a public issue).
