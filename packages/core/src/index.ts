@@ -23,42 +23,42 @@ export {
   DEFAULT_EMBEDDING_PROVIDER_ID,
   MNEMOS_EMBEDDING_DIM,
   type PluginRegistry,
-} from "./registry.js";
+} from "./registry";
 
 // Crypto
 export {
   generateEncryptionKey,
   encryptString,
   decryptString,
-} from "./crypto.js";
+} from "./crypto";
 
 // Ingestion
-export { hashFile, hashString } from "./ingest/hash.js";
-export { chunkText, type ChunkResult, type ChunkerOptions } from "./ingest/chunker.js";
+export { hashFile, hashString } from "./ingest/hash";
+export { chunkText, type ChunkResult, type ChunkerOptions } from "./ingest/chunker";
 export {
   classifyFile,
   listSupportedExtensions,
   type Classification,
   type FileCategory,
   type FileKind,
-} from "./ingest/classify.js";
+} from "./ingest/classify";
 export {
   scanFolder,
   type ScanResult,
   type ScanSummary,
   type ScannedFile,
   type ScanOptions,
-} from "./ingest/scan.js";
+} from "./ingest/scan";
 export {
   ingestFolder,
   type IngestResult,
   type IngestProgress,
   type IngestFolderOptions,
-} from "./ingest/pipeline.js";
+} from "./ingest/pipeline";
 
 // Query
-export { runQuery, type QueryEvent, type RunQueryOptions } from "./query/runQuery.js";
-export { assemblePrompt, type AssembledPrompt } from "./query/prompt.js";
+export { runQuery, type QueryEvent, type RunQueryOptions } from "./query/runQuery";
+export { assemblePrompt, type AssembledPrompt } from "./query/prompt";
 
 // Re-export plugin SDK types
 export type {

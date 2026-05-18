@@ -20,10 +20,10 @@ import {
   appendAudit,
 } from "@mnemos/db";
 import type { EmbeddingProvider } from "@mnemos/plugin-sdk";
-import { hashFile } from "./hash.js";
-import { chunkText } from "./chunker.js";
-import { scanFolder } from "./scan.js";
-import { getDocumentLoader, type PluginRegistry } from "../registry.js";
+import { hashFile } from "./hash";
+import { chunkText } from "./chunker";
+import { scanFolder } from "./scan";
+import { getDocumentLoader, type PluginRegistry } from "../registry";
 
 export type IngestProgress =
   | { phase: "scan-start"; rootPath: string }

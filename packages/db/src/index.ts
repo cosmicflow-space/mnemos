@@ -7,7 +7,7 @@
  * Schema lives in schema.sql and is applied via openDb() on first open.
  */
 
-export { openDb, prepared, type MnemosDb } from "./client.js";
+export { openDb, prepared, type MnemosDb } from "./client";
 
 export type {
   Source,
@@ -18,7 +18,7 @@ export type {
   Session,
   ChatMessage,
   AuditEvent,
-} from "./types.js";
+} from "./types";
 
 export {
   // Sources
@@ -56,4 +56,4 @@ export {
   type UpsertCredentialInput,
   type AppendMessageInput,
   type SearchHit,
-} from "./crud.js";
+} from "./crud";

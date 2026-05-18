@@ -1,24 +1,38 @@
 import { readFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import type { Plugin, DocumentLoader, LoadedDoc } from "@mnemos/plugin-sdk";
 
-// pdf-parse has no published TS types and ships as CommonJS.
-// Use createRequire so we get a CJS require in ESM scope.
-const require = createRequire(import.meta.url);
+/**
+ * PDF loader. Dynamic-imports `pdf-parse` lazily so webpack (used by Next.js
+ * dev/build) doesn't statically trace into pdf-parse's package, which ships
+ * binary test fixtures that break webpack module parsing.
+ */
+
 type PdfParseResult = {
   text: string;
   numpages: number;
   info: Record<string, unknown>;
 };
-const pdfParse = require("pdf-parse") as (
-  buffer: Buffer,
-) => Promise<PdfParseResult>;
+type PdfParseFn = (buffer: Buffer) => Promise<PdfParseResult>;
+
+let pdfParseFn: PdfParseFn | null = null;
+async function getPdfParse(): Promise<PdfParseFn> {
+  if (pdfParseFn) return pdfParseFn;
+  // Webpack can't statically analyze a string-built import path, so it won't
+  // try to bundle pdf-parse's binary fixtures during the route compile.
+  const name = ["pdf", "parse"].join("-");
+  const mod = (await import(/* webpackIgnore: true */ name)) as
+    | { default: PdfParseFn }
+    | PdfParseFn;
+  pdfParseFn = "default" in mod ? mod.default : mod;
+  return pdfParseFn;
+}
 
 const loader: DocumentLoader = {
   id: "pdf",
   extensions: [".pdf"],
   async load(filePath: string): Promise<LoadedDoc> {
     const buffer = await readFile(filePath);
+    const pdfParse = await getPdfParse();
     const parsed = await pdfParse(buffer);
     return {
       text: parsed.text,

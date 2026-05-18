@@ -176,7 +176,6 @@ export default function ChatPage() {
 
     let assistantHits: Hit[] | undefined;
     let assistantText = "";
-    let newSessionId: string | null = sessionId;
 
     try {
       const res = await fetch("/api/query", {
@@ -196,7 +195,6 @@ export default function ChatPage() {
 
       const headerSession = res.headers.get("x-mnemos-session-id");
       if (headerSession) {
-        newSessionId = headerSession;
         setSessionId(headerSession);
         if (typeof window !== "undefined") {
           window.localStorage.setItem(STORAGE_SESSION_KEY, headerSession);

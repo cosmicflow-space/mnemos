@@ -18,7 +18,7 @@ import {
   classifyFile,
   type Classification,
   type FileCategory,
-} from "./classify.js";
+} from "./classify";
 
 export type ScannedFile = {
   absolutePath: string;

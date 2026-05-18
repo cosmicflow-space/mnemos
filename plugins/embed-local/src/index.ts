@@ -75,10 +75,19 @@ class EmbedLocalProvider implements EmbeddingProvider {
     if (this.extractor) return this.extractor;
     if (!this.extractorPromise) {
       this.extractorPromise = (async () => {
-        // Dynamic import keeps @xenova/transformers from being eagerly loaded
-        // (it pulls in onnxruntime-node which is heavy).
-        const { pipeline } = await import("@xenova/transformers");
-        const ex = (await pipeline(
+        // webpackIgnore prevents Next.js's webpack from tracing into
+        // @xenova/transformers at build time. Without this, webpack tries
+        // to bundle onnxruntime-node's native .node binary and fails.
+        // serverExternalPackages alone doesn't help because the import
+        // happens inside a transpilePackages workspace package.
+        const xenovaSpec = "@xenova/transformers";
+        const mod = (await import(/* webpackIgnore: true */ xenovaSpec)) as {
+          pipeline: (
+            task: string,
+            model: string,
+          ) => Promise<unknown>;
+        };
+        const ex = (await mod.pipeline(
           "feature-extraction",
           this.model,
         )) as unknown as FeatureExtractor;

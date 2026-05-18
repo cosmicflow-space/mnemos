@@ -3,10 +3,18 @@ packages:
   - packages/*
   - plugins/*
 
+# Defense against compromised-release attacks: refuse to install packages
+# published less than 48 hours ago. Adopted from OpenClaw's discipline.
 minimumReleaseAge: 2880
 
+# Packages allowed to run install scripts. pnpm v10+ requires explicit
+# per-package boolean approval for security. Includes our direct deps with
+# native compilation (better-sqlite3, sqlite-vec, sharp, node-llama-cpp)
+# plus transitive deps that pnpm flagged (esbuild, protobufjs).
 allowBuilds:
-  - better-sqlite3
-  - sqlite-vec
-  - node-llama-cpp
-  - sharp
+  better-sqlite3: true
+  sqlite-vec: true
+  node-llama-cpp: true
+  sharp: true
+  esbuild: true
+  protobufjs: true

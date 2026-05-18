@@ -40,7 +40,7 @@ import {
   decryptString,
   DEFAULT_EMBEDDING_PROVIDER_ID,
   MNEMOS_EMBEDDING_DIM,
-} from "./index.js";
+} from "./index";
 
 describe("smoke: db + registry + crypto", () => {
   let tempDir: string;

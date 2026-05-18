@@ -26,7 +26,7 @@ import type {
   ChatProvider,
   EmbeddingProvider,
 } from "@mnemos/plugin-sdk";
-import { assemblePrompt } from "./prompt.js";
+import { assemblePrompt } from "./prompt";
 
 export type QueryEvent =
   | { phase: "embed"; query: string }
@@ -170,7 +170,7 @@ export async function* runQuery(
     content: assistantText,
     citations: citationChunkIds,
     provider: chat.id,
-    model: opts.model ?? null,
+    ...(opts.model ? { model: opts.model } : {}),
     latencyMs: durationMs,
   });
 

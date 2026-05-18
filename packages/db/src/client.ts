@@ -9,7 +9,6 @@
  */
 
 import Database, { type Database as BetterSqliteDb, type Statement } from "better-sqlite3";
-// @ts-expect-error - sqlite-vec ships without types; runtime-only
 import * as sqliteVec from "sqlite-vec";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

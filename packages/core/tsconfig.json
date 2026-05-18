@@ -3,12 +3,7 @@
   "compilerOptions": {
     "rootDir": "./src",
     "outDir": "./dist",
-    "composite": true,
     "types": ["node"]
   },
-  "include": ["src/**/*"],
-  "references": [
-    { "path": "../plugin-sdk" },
-    { "path": "../db" }
-  ]
+  "include": ["src/**/*"]
 }

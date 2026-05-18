@@ -8,8 +8,8 @@
  * callers can hold a single handle and reuse it across operations.
  */
 
-import type { MnemosDb } from "./client.js";
-import { prepared } from "./client.js";
+import type { MnemosDb } from "./client";
+import { prepared } from "./client";
 import type {
   Source,
   SourceKind,
@@ -19,7 +19,7 @@ import type {
   Session,
   ChatMessage,
   AuditEvent,
-} from "./types.js";
+} from "./types";
 
 // ============================================================================
 // Sources (registered folders, URLs, etc.)

@@ -45,8 +45,7 @@ Telegraph style — root rules only. Read scoped `AGENTS.md` files before touchi
 - Build: `pnpm build`
 - Test: `pnpm test` (vitest)
 - Lint: `pnpm lint` (oxlint)
-- Format: `pnpm format` (oxfmt)
-- Typecheck: `pnpm typecheck` (tsgo)
+- Typecheck: `pnpm typecheck` (delegates to per-package tsc --noEmit)
 - Docker: `docker compose up -d`
 
 ## Code
