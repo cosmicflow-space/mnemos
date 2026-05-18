@@ -15,6 +15,12 @@ Mnemos is a personal RAG (retrieval-augmented generation) system that runs entir
 
 Built from scratch in TypeScript + Next.js. Opinionated single-pane UI — no drag-and-drop canvas, one strong default per pipeline stage, plug your own providers via a versioned SDK.
 
+<p align="center">
+  <img src="docs/screenshots/04-chat.png" alt="Mnemos chat with citations" width="900"/>
+  <br/>
+  <em>Asking "when did I apply" against an ingested job-applications folder — answer is grounded in the retrieved chunks with inline citations.</em>
+</p>
+
 ## Quick start
 
 The only prerequisite is **Node 22+** ([nodejs.org](https://nodejs.org/) if you don't have it).
@@ -36,6 +42,31 @@ Then open <http://127.0.0.1:3030>:
 End-to-end in under 90 seconds on a typical laptop.
 
 Prefer Docker? `docker compose up -d`. Prefer manual? `pnpm install && pnpm dev`.
+
+## What it looks like
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/01-home.png" alt="Mnemos home page" />
+      <p align="center"><sub><strong>1. Home</strong> — three actions, no chrome. Configure an agent first; chat + sources unlock from there.</sub></p>
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/02-agent.png" alt="Mnemos agent settings — detected credentials" />
+      <p align="center"><sub><strong>2. Configure agent</strong> — auto-detects credentials already on disk (shell env, provider auth files, gcloud ADC). Click <em>Use this</em> to import without copying tokens. Locations only — values are never returned by the scan API.</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/03-sources.png" alt="Mnemos sources — scan result with filter tiers" />
+      <p align="center"><sub><strong>3. Add a source</strong> — scan shows what will ingest, what's deferred (images/audio for v0.2+), and what's auto-excluded. Security-blocked files (.env, *.pem, id_rsa*) are hard-locked. Logs, lockfiles, hidden dotfiles are opt-in. Large files (>10 MB) get a confirmation toggle.</sub></p>
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/04-chat.png" alt="Mnemos chat — RAG answer with citations" />
+      <p align="center"><sub><strong>4. Chat</strong> — sidebar groups sessions by date with titles derived from the first question. Each answer shows collapsed citations (top 3 + "more"), a metrics footer (provider · model · duration · tokens), and a hover-to-copy affordance.</sub></p>
+    </td>
+  </tr>
+</table>
 
 ## What Mnemos is
 
@@ -98,11 +129,29 @@ Mnemos uses a **single-user trust model** — one person on one machine, not a m
 - Frontier LLMs only see retrieved chunks, never raw files
 - The audit log shows exactly what was sent to any external service, on every request
 
+## Your first 90 seconds
+
+After `node setup.mjs` finishes and the dev server starts:
+
+1. **Open `http://127.0.0.1:3030/agent`**. Mnemos auto-scans your machine for credentials in standard locations (`~/.zshrc`, `~/.bashrc`, `~/.anthropic/auth.json`, `~/.openai/auth.json`, `~/.config/gcloud/...`, and the Ollama daemon on `:11434`). Click **Use this** on any detected credential to import it — values stay on your machine, only locations are exchanged with the UI. Or pick a provider from the radio list and paste a key.
+
+2. **Open `http://127.0.0.1:3030/sources`**. Type a folder path (e.g. `~/Documents/notes`) and click **Scan**. The scan summary tells you:
+   - How many files will be ingested (by type — uncheck a type to skip it for this run)
+   - What's auto-excluded (logs, lockfiles, hidden dotfiles — opt-in toggles to override)
+   - What's security-blocked (`.env`, `*.pem`, `id_rsa*` — never indexed even with override)
+   - How many files are over 10 MB (confirmation toggle, default include)
+
+   Click **Add to Mnemos**. The streaming progress bar shows per-file embedding in real time. Ingestion runs entirely locally via BGE-small (no API key needed).
+
+3. **Open `http://127.0.0.1:3030/chat`**. Ask anything about the folder you just ingested. Each answer streams in with citations linking to the exact source files. The metrics footer shows which provider/model answered, how long it took, and tokens used.
+
+That's it. End-to-end on a fresh laptop: usually under 90 seconds for the install + 30 seconds for the first ingestion of a small folder.
+
 ## Roadmap
 
-- **v0.1** (in progress): Docker install, single-folder RAG, BYO API key, audit log
-- **v0.2**: npm global install, daemon installer, Telegram bot, email ingestion (Gmail OAuth)
-- **v0.3**: macOS/Linux native installers, cross-encoder reranking, plugin marketplace
+- **v0.1** (current): single-folder RAG, BYO API key, audit log, atomic ingestion, smart-default file exclusions, credential auto-detection, bearer-token auth (loopback bypass), cross-OS install via `setup.mjs`
+- **v0.2**: Gemini + bundled `llama.cpp` providers, per-source persistent filters, response-quality cross-encoder reranking, npm global install
+- **v0.3**: macOS/Linux native installers, plugin marketplace, email ingestion (Gmail OAuth), Telegram bot
 
 ## Contributing
 
