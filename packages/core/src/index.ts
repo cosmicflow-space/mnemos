@@ -56,6 +56,10 @@ export {
   type IngestFolderOptions,
 } from "./ingest/pipeline.js";
 
+// Query
+export { runQuery, type QueryEvent, type RunQueryOptions } from "./query/runQuery.js";
+export { assemblePrompt, type AssembledPrompt } from "./query/prompt.js";
+
 // Re-export plugin SDK types
 export type {
   ChatProvider,

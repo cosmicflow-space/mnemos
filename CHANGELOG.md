@@ -70,8 +70,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Done state shows files processed, chunks created, duration
 - **Default embedder** wired in `apps/web/lib/runtime.ts` — uses `embed-local` (BGE-small) out of the box; can be overridden via `MNEMOS_DEFAULT_EMBEDDING` env var
 
+### Day 4 (2026-05-18)
+- **Query pipeline complete** — `runQuery()` at `packages/core/src/query/runQuery.ts` orchestrates the full read path: embed query → vec_search top-K → load conversation memory → assemble RAG prompt → stream chat → persist messages → audit
+- **RAG prompt template** at `packages/core/src/query/prompt.ts` with numbered chunk references, anti-hallucination guard ("use ONLY the retrieved context"), and contradiction surfacing
+- **`POST /api/query`** — SSE-streamed with five event phases: `embed`, `retrieved` (UI shows citation pills early), `delta` (per-token text), `done`, `error`. Auto-creates a session if `sessionId` omitted, returns the id via `x-mnemos-session-id` response header
+- **`GET /api/audit`** — query the audit log with `?since=`, `?limit=`, `?type=` filters
+- **`GET /api/sessions`** — list recent sessions (50 newest); `?id=` returns full message history for one session
+- **Chat UI** at `/chat`:
+  - Left sidebar: session history (newest first), "New chat" button, link to Sources
+  - Top header: provider selector dropdown (pulls from `/api/providers`)
+  - Center thread: message bubbles with cyan accent for user, gray for assistant
+  - Inline citation pills (numbered, click to expand chunk snippet inline)
+  - Streaming cursor (amber pulse) while assistant is generating
+  - Bottom: textarea input with ⌘↵ shortcut to send
+  - Provider + last-session preferences persisted to localStorage
+- **Home page**: now leads with "Start Chat →" (amber) + "Manage Sources" (cyan), aligning with the brand color story (amber for memory/retrieval, cyan for indexing/control)
+
 ### Coming next (v0.1)
-- Query pipeline with retrieval + citations — Day 4
-- Chat UI with provider/model selector + history sidebar — Day 5
+- First end-to-end `pnpm install` + `pnpm dev` verification — Day 5
 - Docker build verification + 90-second demo recording — Day 6
 - Publish to GitHub — Day 7

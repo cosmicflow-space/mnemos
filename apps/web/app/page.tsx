@@ -27,16 +27,16 @@ export default function HomePage() {
         </div>
         <div className="flex flex-col sm:flex-row gap-3 justify-center pt-4">
           <a
+            href="/chat"
+            className="rounded-md bg-amber-500 px-5 py-2.5 text-sm font-semibold text-gray-900 hover:bg-amber-400 transition"
+          >
+            Start Chat →
+          </a>
+          <a
             href="/sources"
             className="rounded-md bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-gray-900 hover:bg-cyan-400 transition"
           >
-            Open Sources →
-          </a>
-          <a
-            href="/api/providers"
-            className="rounded-md border border-gray-700 px-4 py-2 text-sm font-medium hover:border-gray-600 transition"
-          >
-            Registered providers
+            Manage Sources
           </a>
           <a
             href="https://github.com/sammuthu/mnemos"
