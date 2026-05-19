@@ -18,9 +18,9 @@ If you choose to add a frontier LLM (Anthropic Claude, OpenAI, Gemini), mnemos s
 Built from scratch in TypeScript + Next.js. Opinionated single-pane UI — no drag-and-drop canvas, one strong default per pipeline stage, plug your own providers via a versioned SDK.
 
 <p align="center">
-  <img src="docs/screenshots/04-chat.png" alt="Mnemos chat with citations" width="900"/>
+  <img src="docs/demo/install-demo.gif" alt="Mnemos install demo — clone, run setup, drop a folder, ask a question" width="900"/>
   <br/>
-  <em>Asking "when did I apply" against an ingested job-applications folder — answer is grounded in the retrieved chunks with inline citations.</em>
+  <em>30-second walkthrough: clone, run setup (default = fully local), drop a folder, ask a question with cited answers from your own files.</em>
 </p>
 
 ## Quick start

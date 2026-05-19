@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mnemos browser slideshow</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: #0a0e1a;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  body {
+    width: 1200px;
+    height: 750px;
+    position: relative;
+    background:
+      radial-gradient(circle at 25% 30%, rgba(6, 182, 212, 0.10), transparent 50%),
+      radial-gradient(circle at 75% 70%, rgba(245, 158, 11, 0.08), transparent 50%),
+      linear-gradient(180deg, #0a0e1a 0%, #050811 100%);
+  }
+  .grid-tex {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 30px;
+  }
+  .slide.active { display: flex; }
+  .slide img {
+    max-width: 1000px;
+    max-height: 560px;
+    width: auto;
+    height: auto;
+    border-radius: 8px;
+    box-shadow:
+      0 0 0 1px rgba(6, 182, 212, 0.3),
+      0 30px 80px rgba(0, 0, 0, 0.7);
+  }
+  .caption {
+    margin-top: 26px;
+    text-align: center;
+  }
+  .step-num {
+    display: inline-block;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 3.5px;
+    color: #06b6d4;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .step-title {
+    font-size: 36px;
+    font-weight: 800;
+    color: #ffffff;
+    letter-spacing: -0.5px;
+    line-height: 1.1;
+  }
+  .step-title .accent { color: #f59e0b; }
+
+  /* Outro card */
+  .outro {
+    text-align: center;
+    color: #e7eaf0;
+  }
+  .outro .brand {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 86px;
+    font-weight: 900;
+    letter-spacing: -2px;
+    color: #ffffff;
+    margin-bottom: 12px;
+  }
+  .outro .brand .br { color: #06b6d4; }
+  .outro .brand .mu { color: #f59e0b; }
+  .outro .tagline {
+    font-size: 22px;
+    color: #9aa3b3;
+    margin-bottom: 32px;
+    line-height: 1.4;
+  }
+  .outro .pills {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 28px;
+  }
+  .outro .pill {
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-size: 14px;
+    border: 1px solid rgba(6, 182, 212, 0.4);
+    color: #67e8f9;
+    background: rgba(6, 182, 212, 0.1);
+  }
+  .outro .pill.amber {
+    border-color: rgba(245, 158, 11, 0.4);
+    color: #fcd34d;
+    background: rgba(245, 158, 11, 0.1);
+  }
+  .outro .repo {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    color: #67e8f9;
+  }
+</style>
+</head>
+<body>
+  <div class="grid-tex"></div>
+
+  <!-- Slide 1: Home -->
+  <div class="slide" data-id="1">
+    <img src="../screenshots/01-home.png" alt="Mnemos home" />
+    <div class="caption">
+      <div class="step-num">Step 1</div>
+      <div class="step-title">Open <span class="accent">localhost:3030</span></div>
+    </div>
+  </div>
+
+  <!-- Slide 2: Sources -->
+  <div class="slide" data-id="2">
+    <img src="../screenshots/03-sources.png" alt="Mnemos sources" />
+    <div class="caption">
+      <div class="step-num">Step 2</div>
+      <div class="step-title">Drop a folder.</div>
+    </div>
+  </div>
+
+  <!-- Slide 3: Chat with answer -->
+  <div class="slide" data-id="3">
+    <img src="../screenshots/04-chat.png" alt="Mnemos chat with citations" />
+    <div class="caption">
+      <div class="step-num">Step 3</div>
+      <div class="step-title">Ask anything. Cited <span class="accent">from your files.</span></div>
+    </div>
+  </div>
+
+  <!-- Slide 4: Outro -->
+  <div class="slide" data-id="4">
+    <div class="outro">
+      <div class="brand"><span class="br">[</span><span class="mu">μ</span><span class="br">]</span> mnemos</div>
+      <div class="tagline">Personal RAG. Local-first. Drop a folder, ask a question.</div>
+      <div class="pills">
+        <span class="pill">100% local default</span>
+        <span class="pill">single SQLite file</span>
+        <span class="pill amber">MIT open source</span>
+      </div>
+      <div class="repo">github.com/cosmicflow-space/mnemos</div>
+    </div>
+  </div>
+
+  <script>
+    // URL ?slide=N picks which slide is shown. Default: 1.
+    const params = new URLSearchParams(location.search);
+    const slideId = params.get('slide') || '1';
+    const slide = document.querySelector(`[data-id="${slideId}"]`);
+    if (slide) slide.classList.add('active');
+  </script>
+</body>
+</html>
