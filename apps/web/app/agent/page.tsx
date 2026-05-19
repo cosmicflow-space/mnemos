@@ -15,7 +15,7 @@ type ConfigStatus = {
 };
 
 type DetectedCredential = {
-  provider: ProviderId | "anthropic-oauth";
+  provider: ProviderId | "anthropic-oauth" | "codex-oauth";
   envVar?: string;
   source: "env" | "rc-file" | "json-file" | "reachable";
   location: string;
@@ -91,8 +91,9 @@ const PROVIDERS: ProviderMeta[] = [
   },
 ];
 
-function providerLabel(p: ProviderId | "anthropic-oauth"): string {
+function providerLabel(p: ProviderId | "anthropic-oauth" | "codex-oauth"): string {
   if (p === "anthropic-oauth") return "Anthropic (OAuth)";
+  if (p === "codex-oauth") return "OpenAI Codex (OAuth)";
   return PROVIDERS.find((x) => x.id === p)?.name ?? p;
 }
 

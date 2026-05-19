@@ -11,7 +11,9 @@
 
 </div>
 
-Mnemos is a personal RAG (retrieval-augmented generation) system that runs entirely on your own machine. Drop a folder of documents, ask questions in plain English, get answers with file citations. Your files never leave your computer; only the retrieved chunks are sent to whichever LLM you choose, and the audit log shows exactly what was sent.
+Mnemos is a personal RAG (retrieval-augmented generation) system that defaults to **100% local** — embeddings on your machine, chat on your machine, zero external inference calls. Drop a folder of documents, ask questions in plain English, get answers with citations to your own files. The audit log captures every query for transparency; in the default install, **query audit events record the local chat provider (`ollama`)** and **ingest events stay local but don't carry a provider field** — no external-provider call is ever recorded.
+
+If you choose to add a frontier LLM (Anthropic Claude, OpenAI, Gemini), mnemos sends only the retrieved chunks — never raw files — and the audit log records the provider, model, retrieved chunk IDs, prompt-token estimate, and latency for each external request. Plugins are opt-in, not required. **Personal RAG means personal RAG. Privacy is the default.**
 
 Built from scratch in TypeScript + Next.js. Opinionated single-pane UI — no drag-and-drop canvas, one strong default per pipeline stage, plug your own providers via a versioned SDK.
 
@@ -68,14 +70,53 @@ Prefer Docker? `docker compose up -d`. Prefer manual? `pnpm install && pnpm dev`
   </tr>
 </table>
 
+## How private do you want it? Three tiers
+
+**Personal RAG means personal RAG. Privacy is the key — and the default.** Mnemos gives you three privacy tiers, in order of increasing data egress. *You choose.* Most users stay in Tier 1.
+
+### Tier 1 — Fully local (default)
+- **Embeddings**: BGE-small via ONNX, on your machine (first use downloads ~120 MB of model weights from Hugging Face once; cached thereafter — see [Offline note](#offline-note) below)
+- **Chat**: Ollama (v0.1) or bundled `llama.cpp` (v0.2) — on your machine
+- **Network (after first-run model fetch)**: zero external inference calls. No chunks of your data leave the machine.
+- **Auth**: none — no API keys, no OAuth
+- **Best for**: sensitive data, offline use, full sovereignty
+
+The default install IS this tier. `node setup.mjs` defaults to Ollama (the recommended option, no API key); the `/api/query` route defaults to `providerId: "ollama"` if callers omit it.
+
+<a id="offline-note"></a>**Offline note**: BGE-small (the bundled embedding model) is fetched from Hugging Face on first ingestion, then cached locally. After that one-time fetch the install is fully offline-capable for ingest+local-chat. v0.2 will explore vendoring the model with the install for true zero-network first-run.
+
+### Tier 2 — Hybrid (opt-in, per-question or per-session)
+- **Embeddings**: local default (or external if you switch)
+- **Chat**: Claude / GPT / Gemini — you pick, you provide auth
+- **Network**: only retrieved chunks (~500–2k tokens) cross the boundary. Never raw files. Never your full corpus.
+- **Audit**: provider, model, retrieved chunk IDs, prompt-size estimate, latency. Exact payload + provider-reported token counts is a v0.2 goal.
+- **Best for**: frontier-model quality, when you've consciously chosen to share retrieved chunks
+
+The chat UI lets you switch the model per question.
+
+### Tier 3 — Fine-tuned local (v0.3 sketch)
+Train a small open model on your own corpus. Stays on your machine. Becomes specifically yours over time. Roadmap consideration — community input welcome.
+
+### Vendor authentication — what mnemos accepts
+
+**API key is the safe, sanctioned method for every external provider.** Mnemos's credential-detection feature scans for first-party CLI OAuth files (`~/.claude/.credentials.json` for Claude Code, `~/.codex/auth.json` for the OpenAI codex CLI), surfaces them in the UI as detected, but marks them **non-importable** with a TOS-explanation note. Reusing those tokens in third-party software is either prohibited (Anthropic) or undocumented (OpenAI).
+
+| Vendor | Sanctioned method | Notes |
+|---|---|---|
+| **Anthropic Claude** | API key only | Anthropic [explicitly prohibits](https://code.claude.com/docs/en/legal-and-compliance) third-party reuse of OAuth tokens from Claude apps. Mnemos detects `~/.claude/.credentials.json` but refuses to import it. |
+| **OpenAI / Codex** | API key only | The first-party `codex` CLI supports OAuth, but OpenAI does not document third-party reuse. Mnemos detects `~/.codex/auth.json` but refuses to import it. |
+| **Google Gemini** | API key only (in v0.1) | Mnemos v0.1 accepts Gemini API keys only. Google's platform supports both OAuth (via user-created OAuth client + `gcloud auth application-default login --client-id-file=client_secret.json`) and ADC via Vertex AI — both are tracked for v0.2+ but not yet wired in mnemos. |
+| **Ollama** | No auth needed | Local daemon, fully sovereign. |
+| **llama.cpp** (v0.2) | No auth needed | Bundled, no daemon, no network. |
+
 ## What Mnemos is
 
 - **Local-first**: SQLite + sqlite-vec, single file at `~/.mnemos/mnemos.db`. No separate vector database.
-- **Free by default**: Bundled local embedding model (BGE-small via ONNX) means RAG works out of the box with zero external services and zero API costs. Bring your own Anthropic / OpenAI key for chat — or run fully local via Ollama.
+- **Private by default**: Bundled local embeddings (BGE-small ONNX) + local chat (Ollama) means RAG runs without any external inference service. Zero API keys, zero external inference calls, zero data egress after the BGE-small weights are cached on first ingestion ([Offline note](#offline-note) above). External LLM plugins are opt-in if you want frontier-model quality.
 - **Single user**: One person, one machine. Loopback bind by default; LAN binding requires explicit opt-in and bearer-token auth.
-- **Pluggable providers** (v0.1 wired): Anthropic, OpenAI, Ollama for chat. Local BGE-small + OpenAI + Ollama for embeddings. Add your own via the plugin SDK. Gemini and bundled llama.cpp providers are stubs scheduled for v0.2.
+- **Pluggable providers** (v0.1 wired): Anthropic, OpenAI, Ollama for chat. Local BGE-small + OpenAI + Ollama for embeddings. Add your own via the plugin SDK. Gemini and bundled `llama.cpp` providers are stubs scheduled for v0.2.
 - **Read-only**: Mnemos never modifies your files. Source access is opt-in per folder.
-- **Auditable**: Every query records exactly which chunks were retrieved, what was sent to the LLM, and how many tokens it cost. Visible in the UI.
+- **Auditable**: Every `query` event is recorded with chat-provider, model, retrieved chunk IDs, prompt-size estimate, and latency. Every `ingest` event is recorded without a `provider` field (ingest is locked to the local embedder in v0.1). In Tier 1 (local default), `query` events show `provider: "ollama"` (or another local provider) — no external-provider call is ever recorded. Visible in the UI. (v0.2 goal: capture exact request payloads + provider-reported token counts for external calls; add explicit `external: boolean` flag.)
 - **Safe defaults**: Auto-excludes credentials (`.env`, `*.pem`, `id_rsa*`) and noise (logs, lockfiles, minified bundles). Security excludes are hard-locked even against explicit user opt-in.
 - **Citations**: Every answer references the source files, last-modified date, file type, and exact byte range.
 - **Incremental**: Re-ingest skips unchanged files via content-hash comparison; partial-state ingests recover automatically via the `ingest_status` invariant.
@@ -123,11 +164,13 @@ Plugins can only import from `mnemos/plugin-sdk`. They cannot reach into `packag
 
 Mnemos uses a **single-user trust model** — one person on one machine, not a multi-tenant service:
 
+- **Default = zero external inference calls.** Local embeddings + Ollama for chat = no chunks of your data leave your machine. The audit log proves it by inspection: in Tier 1, `query` events record `provider: "ollama"` (or another local provider), and `ingest` events stay local without recording any provider field — no external-provider call is ever recorded. (One-time exception: BGE-small embedding weights are fetched from Hugging Face on first ingestion, then cached — see [Offline note](#offline-note).)
 - The API is bound to 127.0.0.1 by default and trusts loopback callers (anyone reaching the loopback interface is already on the user's own machine). Binding to LAN (`MNEMOS_BIND=lan`) switches enforcement on and requires `Authorization: Bearer <token>` on every `/api/*` request, matching the auto-generated token at `~/.mnemos/auth.key`.
 - Installed plugins are part of the trusted base (documented)
 - Source access requires explicit registration (`mnemos source add <path>`)
-- Frontier LLMs only see retrieved chunks, never raw files
-- The audit log shows exactly what was sent to any external service, on every request
+- Frontier LLMs (Tier 2 only) see only retrieved chunks, never raw files
+- The audit log captures provider, model, retrieved chunk IDs, prompt-size estimate, and latency for every query — local and external. Exact payload + provider-reported token counts for external calls are a v0.2 goal.
+- Audit data lives in the `audit_event` table inside `~/.mnemos/mnemos.db`. Inspect via `/api/audit` or by querying the SQLite table directly. There is **no** separate `audit.log` file.
 
 ## Your first 90 seconds
 

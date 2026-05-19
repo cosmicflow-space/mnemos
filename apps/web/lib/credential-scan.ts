@@ -10,10 +10,11 @@
  *   *exist*, never their values, until the user clicks "Use this one".
  * - Honors the project's read-only-by-default architecture invariant —
  *   no file path outside this fixed allowlist is ever read.
- * - Anthropic OAuth tokens (Claude Code's credential store) are detected but
- *   flagged as non-importable because Anthropic's API rejects OAuth tokens
- *   issued for first-party apps; the spirit is to be honest, not silently
- *   broken.
+ * - First-party CLI OAuth tokens (Claude Code, OpenAI codex CLI) are detected
+ *   but flagged as non-importable because the vendors restrict third-party
+ *   reuse of those credentials — Anthropic explicitly prohibits it per their
+ *   Feb 2026 docs, and OpenAI does not document third-party reuse. The spirit
+ *   is to be honest about TOS, not silently broken.
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -26,7 +27,8 @@ export type ProviderId =
   | "gemini"
   | "ollama"
   | "local"
-  | "anthropic-oauth";
+  | "anthropic-oauth"
+  | "codex-oauth";
 
 export type DetectedCredential = {
   /** Which provider this credential is for. */
@@ -74,7 +76,14 @@ const FILE_SPECS: FileSpec[] = [
     provider: "anthropic-oauth",
     path: join(HOME, ".claude", ".credentials.json"),
     importable: false,
-    note: "Claude Code OAuth token detected. Anthropic restricts these to first-party apps; generate a separate API key at console.anthropic.com to use Claude in Mnemos.",
+    note: "Claude Code OAuth token detected. Anthropic explicitly prohibits third-party reuse of these tokens (per Feb 2026 docs at code.claude.com/docs/en/legal-and-compliance). Generate a separate API key at console.anthropic.com to use Claude in Mnemos.",
+  },
+  // OpenAI codex CLI OAuth — cannot be reused by third-party harnesses
+  {
+    provider: "codex-oauth",
+    path: join(HOME, ".codex", "auth.json"),
+    importable: false,
+    note: "OpenAI codex CLI OAuth token detected. The codex CLI's OAuth flow is a first-party CLI auth path — Mnemos does not import or reuse it. Generate a separate API key at platform.openai.com to use GPT in Mnemos.",
   },
   // OpenAI API key — community CLI tools commonly use these locations
   {
@@ -89,12 +98,15 @@ const FILE_SPECS: FileSpec[] = [
     path: join(HOME, ".config", "openai", "auth.json"),
     importable: true,
   },
-  // Google Cloud ADC — the legitimate reuse path for Gemini via Vertex AI
+  // Google Cloud ADC — detected for transparency, but not importable in v0.1
+  // because the proper Vertex AI auth path isn't wired yet. The generic JSON
+  // importer would otherwise treat the OAuth access_token in the ADC file as
+  // a Gemini API key, which is incorrect. Vertex AI wiring lands in v0.2.
   {
     provider: "gemini",
     path: join(HOME, ".config", "gcloud", "application_default_credentials.json"),
-    importable: true,
-    note: "Google Cloud Application Default Credentials. Mnemos can use these via Vertex AI without an API key (wiring lands in v0.2 — for now, paste a Gemini API key from aistudio.google.com).",
+    importable: false,
+    note: "Google Cloud Application Default Credentials detected. Mnemos v0.1 does not yet wire Vertex AI auth (the proper consumer for ADC). Paste a Gemini API key from aistudio.google.com instead; Vertex AI / ADC support is planned for v0.2.",
   },
 ];
 
@@ -109,11 +121,16 @@ const RC_FILES = [
 ];
 
 // Env var names we recognize across providers
+// Note: GOOGLE_API_KEY is intentionally NOT mapped here even though Google
+// docs accept either GEMINI_API_KEY or GOOGLE_API_KEY. The import path
+// reconstructs the env var from provider ID via ENV_VAR_MAP_INVERSE (which is
+// 1:1), so detecting GOOGLE_API_KEY would produce a "Use this" button that
+// then looks up the wrong env var name. v0.2 will propagate envVar through
+// ImportRequest so we can re-add GOOGLE_API_KEY detection cleanly.
 const ENV_VAR_MAP: Record<string, ProviderId> = {
   ANTHROPIC_API_KEY: "anthropic",
   OPENAI_API_KEY: "openai",
   GEMINI_API_KEY: "gemini",
-  GOOGLE_API_KEY: "gemini",
   OLLAMA_HOST: "ollama",
   OLLAMA_BASE_URL: "ollama",
 };
@@ -125,12 +142,22 @@ function scanEnvVars(): DetectedCredential[] {
   for (const [envVar, provider] of Object.entries(ENV_VAR_MAP)) {
     const v = process.env[envVar];
     if (v && v.trim().length > 0) {
+      // Ollama env/rc hits report the env-var location string rather than the
+      // actual URL value — the UI's import path writes `hit.location` directly
+      // into ollamaBaseUrl, which would produce broken config. The reachable
+      // detection (live probe at :11434) is the working import path. Surface
+      // env/rc hits for transparency but mark them non-importable in v0.1.
+      const importable = provider !== "ollama";
+      const note = provider === "ollama"
+        ? "Detected, but env/rc import isn't wired in v0.1. Start the Ollama daemon and re-scan — the live detection at the daemon URL is the working import path. Or paste the URL into the Ollama base-URL field manually."
+        : undefined;
       out.push({
         provider,
         envVar,
         source: "env",
         location: `process.env.${envVar}`,
-        importable: true,
+        importable,
+        ...(note ? { note } : {}),
       });
     }
   }
@@ -159,12 +186,20 @@ function scanRcFiles(): DetectedCredential[] {
       const dedupe = `${file}:${key}`;
       if (seen.has(dedupe)) continue;
       seen.add(dedupe);
+      // Same reason as scanEnvVars: Ollama rc-file hits report the file path
+      // rather than the URL value, so the UI import path produces broken
+      // config. Mark non-importable and direct users to the live probe.
+      const importable = provider !== "ollama";
+      const note = provider === "ollama"
+        ? "Detected, but env/rc import isn't wired in v0.1. Start the Ollama daemon and re-scan — the live detection at the daemon URL is the working import path. Or paste the URL into the Ollama base-URL field manually."
+        : undefined;
       out.push({
         provider,
         envVar: key,
         source: "rc-file",
         location: rel(file),
-        importable: true,
+        importable,
+        ...(note ? { note } : {}),
       });
     }
   }
@@ -291,8 +326,23 @@ export function isAllowedLocation(req: ImportRequest): boolean {
 }
 
 export function readCredentialValue(req: ImportRequest): string | null {
-  if (req.provider === "anthropic-oauth") return null; // never importable
   if (!isAllowedLocation(req)) return null;
+
+  // Structural enforcement of the FILE_SPECS `importable` flag. The UI marks
+  // some files as non-importable (Anthropic OAuth, OpenAI codex OAuth, Google
+  // ADC), but the API route is a separate trust boundary. Without this
+  // check, a caller could POST to /api/credentials/import with a registered
+  // location whose `importable` is false and have it succeed. Enforcing the
+  // flag here catches any future non-importable entry without needing a
+  // matching hardcoded refusal.
+  if (req.source === "json-file") {
+    const absolute = unrel(req.location);
+    const spec = FILE_SPECS.find(
+      (s) => s.path === absolute && s.provider === req.provider,
+    );
+    if (spec && !spec.importable) return null;
+  }
+
   if (req.source === "env") {
     const envVar = req.location.replace(/^process\.env\./, "");
     return process.env[envVar] ?? null;

@@ -144,19 +144,20 @@ async function configureProvider(rl) {
   }
   console.log('');
   console.log('  Pick your chat provider:');
-  // Aligned with packages/core/src/registry.ts — only providers actually
-  // wired today. gemini and local plugins are stubs (17-line manifests);
-  // offering them here would let users finish setup in a non-working state.
-  // When those plugins land, add them back to this list.
-  console.log(`    ${bold('1')}) anthropic   Claude (Sonnet 4.6, Opus 4.7)   needs ANTHROPIC_API_KEY`);
-  console.log(`    ${bold('2')}) openai      GPT-4o / o-series                needs OPENAI_API_KEY`);
-  console.log(`    ${bold('3')}) ollama      local daemon on :11434           no key`);
+  // Tier 1 (fully local) is the project default — Ollama listed first to
+  // match. Aligned with packages/core/src/registry.ts; gemini and local
+  // (llama.cpp) plugins are stubs (17-line manifests) and would let users
+  // finish setup in a non-working state, so they're omitted. When those
+  // plugins land, add them back to this list.
+  console.log(`    ${bold('1')}) ollama      local daemon on :11434          ${green('no key · fully local · recommended')}`);
+  console.log(`    ${bold('2')}) anthropic   Claude (Sonnet 4.6, Opus 4.7)   needs ANTHROPIC_API_KEY`);
+  console.log(`    ${bold('3')}) openai      GPT-4o / o-series                needs OPENAI_API_KEY`);
   console.log(dim(`    (gemini + bundled local llama.cpp are stubs in v0.1 — landing in v0.2)`));
-  const choices = { 1: 'anthropic', 2: 'openai', 3: 'ollama' };
+  const choices = { 1: 'ollama', 2: 'anthropic', 3: 'openai' };
   let provider = '';
   while (!provider) {
-    const raw = (await rl.question('  Choice [1-3]: ')).trim();
-    provider = choices[raw] ?? '';
+    const raw = (await rl.question('  Choice [1-3, default 1]: ')).trim();
+    provider = choices[raw || '1'] ?? '';
   }
   let apiKey = '';
   if (['anthropic', 'openai'].includes(provider)) {

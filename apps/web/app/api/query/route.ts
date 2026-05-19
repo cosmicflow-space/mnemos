@@ -15,7 +15,10 @@ export const dynamic = "force-dynamic";
 const QueryRequest = z.object({
   q: z.string().min(1).max(8000),
   sessionId: z.string().optional(),
-  providerId: z.string().optional().default("anthropic"),
+  // Tier 1 (fully local) is the default privacy posture. If the caller omits
+  // providerId, route the request to Ollama so the request stays on-machine.
+  // Callers wanting an external provider must opt in explicitly via providerId.
+  providerId: z.string().optional().default("ollama"),
   model: z.string().optional(),
   temperature: z.number().min(0).max(2).optional(),
   topK: z.number().int().min(1).max(50).optional(),

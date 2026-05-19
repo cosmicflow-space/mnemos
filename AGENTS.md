@@ -29,7 +29,7 @@ Telegraph style — root rules only. Read scoped `AGENTS.md` files before touchi
 - **No drag-and-drop UI.** Opinionated single-pane chat with folders + inspector. If you're tempted to add a flow builder, reject and document.
 - **Single SQLite file holds everything.** Chunks, vectors (via sqlite-vec), credentials (encrypted), chat history, audit. No separate stores.
 - **Read-only by default.** Mnemos never writes to user folders. Period.
-- **Frontier LLMs only see retrieved chunks.** Never raw documents. Audit log shows exactly what was sent.
+- **Frontier LLMs only see retrieved chunks.** Never raw documents. Audit log records provider, model, retrieved chunk IDs, prompt-size estimate, and latency per query. Exact payload + provider-reported token counts is a v0.2 goal.
 
 ## Trust model
 
@@ -76,11 +76,12 @@ Telegraph style — root rules only. Read scoped `AGENTS.md` files before touchi
 ├── config.json
 ├── auth.key             # chmod 600, bearer token
 ├── encryption.key       # chmod 600, AES-GCM key
-├── mnemos.db            # SQLite + sqlite-vec
-├── audit.log            # JSON-lines
+├── mnemos.db            # SQLite + sqlite-vec — includes audit_event table
 ├── credentials/         # Reserved
 ├── plugins/             # Reserved (v0.2+)
 └── workspace/           # Reserved
+
+Audit log lives in the `audit_event` table inside `mnemos.db` (not a separate `audit.log` file). Inspect via the `/api/audit` route or by querying the table directly.
 ```
 
 ## Security / Release
