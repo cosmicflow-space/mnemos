@@ -12,12 +12,12 @@ Output "docs/demo/install-terminal.gif"
 
 Set Shell "bash"
 Set FontFamily "JetBrains Mono"
-Set FontSize 22
-Set Width 1200
-Set Height 600
+Set FontSize 44
+Set Width 2400
+Set Height 1200
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 50ms
-Set Padding 20
+Set Padding 40
 
 # Hidden setup: source the stub shim + cd to a fresh workspace dir.
 Hide

@@ -12,8 +12,8 @@
     overflow: hidden;
   }
   body {
-    width: 1200px;
-    height: 750px;
+    width: 2400px;
+    height: 1500px;
     position: relative;
     background:
       radial-gradient(circle at 25% 30%, rgba(6, 182, 212, 0.10), transparent 50%),
@@ -26,7 +26,7 @@
     background-image:
       linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
       linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
-    background-size: 40px 40px;
+    background-size: 80px 80px;
     pointer-events: none;
   }
   .slide {
@@ -36,37 +36,37 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 30px;
+    padding: 60px;
   }
   .slide.active { display: flex; }
   .slide img {
-    max-width: 1000px;
-    max-height: 560px;
+    max-width: 2000px;
+    max-height: 1100px;
     width: auto;
     height: auto;
-    border-radius: 8px;
+    border-radius: 16px;
     box-shadow:
-      0 0 0 1px rgba(6, 182, 212, 0.3),
-      0 30px 80px rgba(0, 0, 0, 0.7);
+      0 0 0 2px rgba(6, 182, 212, 0.3),
+      0 60px 160px rgba(0, 0, 0, 0.7);
   }
   .caption {
-    margin-top: 26px;
+    margin-top: 52px;
     text-align: center;
   }
   .step-num {
     display: inline-block;
-    font-size: 14px;
+    font-size: 26px;
     font-weight: 700;
-    letter-spacing: 3.5px;
+    letter-spacing: 7px;
     color: #06b6d4;
     text-transform: uppercase;
-    margin-bottom: 8px;
+    margin-bottom: 14px;
   }
   .step-title {
-    font-size: 36px;
+    font-size: 68px;
     font-weight: 800;
     color: #ffffff;
-    letter-spacing: -0.5px;
+    letter-spacing: -1.2px;
     line-height: 1.1;
   }
   .step-title .accent { color: #f59e0b; }
@@ -78,32 +78,32 @@
   }
   .outro .brand {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 86px;
+    font-size: 168px;
     font-weight: 900;
-    letter-spacing: -2px;
+    letter-spacing: -4px;
     color: #ffffff;
-    margin-bottom: 12px;
+    margin-bottom: 24px;
   }
   .outro .brand .br { color: #06b6d4; }
   .outro .brand .mu { color: #f59e0b; }
   .outro .tagline {
-    font-size: 22px;
+    font-size: 42px;
     color: #9aa3b3;
-    margin-bottom: 32px;
+    margin-bottom: 56px;
     line-height: 1.4;
   }
   .outro .pills {
     display: flex;
-    gap: 16px;
+    gap: 24px;
     justify-content: center;
     flex-wrap: wrap;
-    margin-bottom: 28px;
+    margin-bottom: 48px;
   }
   .outro .pill {
-    padding: 8px 16px;
+    padding: 14px 28px;
     border-radius: 999px;
-    font-size: 14px;
-    border: 1px solid rgba(6, 182, 212, 0.4);
+    font-size: 28px;
+    border: 2px solid rgba(6, 182, 212, 0.4);
     color: #67e8f9;
     background: rgba(6, 182, 212, 0.1);
   }
@@ -114,7 +114,7 @@
   }
   .outro .repo {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 16px;
+    font-size: 30px;
     color: #67e8f9;
   }
 </style>
@@ -122,7 +122,6 @@
 <body>
   <div class="grid-tex"></div>
 
-  <!-- Slide 1: Home -->
   <div class="slide" data-id="1">
     <img src="../screenshots/01-home.png" alt="Mnemos home" />
     <div class="caption">
@@ -131,7 +130,6 @@
     </div>
   </div>
 
-  <!-- Slide 2: Sources -->
   <div class="slide" data-id="2">
     <img src="../screenshots/03-sources.png" alt="Mnemos sources" />
     <div class="caption">
@@ -140,7 +138,6 @@
     </div>
   </div>
 
-  <!-- Slide 3: Chat with answer -->
   <div class="slide" data-id="3">
     <img src="../screenshots/04-chat.png" alt="Mnemos chat with citations" />
     <div class="caption">
@@ -149,7 +146,6 @@
     </div>
   </div>
 
-  <!-- Slide 4: Outro -->
   <div class="slide" data-id="4">
     <div class="outro">
       <div class="brand"><span class="br">[</span><span class="mu">μ</span><span class="br">]</span> mnemos</div>
@@ -164,7 +160,6 @@
   </div>
 
   <script>
-    // URL ?slide=N picks which slide is shown. Default: 1.
     const params = new URLSearchParams(location.search);
     const slideId = params.get('slide') || '1';
     const slide = document.querySelector(`[data-id="${slideId}"]`);
