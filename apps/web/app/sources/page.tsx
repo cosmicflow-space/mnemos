@@ -91,7 +91,16 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-const COMMON_PATHS = ["~/Documents", "~/Downloads", "~/Desktop", "~/Notes"];
+// Platform-aware common paths come from /api/system/paths at runtime so the
+// UI shows the right format for the user's OS (macOS/Linux: `/Users/...`
+// or `/home/...`; Windows: `C:\Users\...`). Falls back to plain labels if
+// the API fetch fails before render — see `commonPathSuggestions` below.
+type SystemPaths = {
+  platform: string;
+  homedir: string;
+  placeholder: string;
+  common: Array<{ label: string; path: string }>;
+};
 
 type AgentStatus = {
   provider: string | null;
@@ -112,6 +121,7 @@ export default function SourcesPage() {
   const [currentProgress, setCurrentProgress] = useState<ProgressEvent | null>(null);
   const [doneEvent, setDoneEvent] = useState<ProgressEvent | null>(null);
   const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
+  const [systemPaths, setSystemPaths] = useState<SystemPaths | null>(null);
   // Per-ingest filters (ephemeral, not persisted to source yet).
   const [excludedLabels, setExcludedLabels] = useState<Set<string>>(new Set());
   const [includeOverrides, setIncludeOverrides] = useState<Record<IncludeReason, boolean>>({
@@ -137,6 +147,27 @@ export default function SourcesPage() {
   useEffect(() => {
     void refreshSources();
   }, [refreshSources]);
+
+  // Resolve platform-appropriate paths once on mount. Server-side `node:os`
+  // calls determine real homedir + path separator so the UI shows the OS's
+  // native format (Windows users see `C:\Users\...`, not `~/`).
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const r = await fetch("/api/system/paths", { cache: "no-store" });
+        if (!r.ok) return;
+        const data = (await r.json()) as SystemPaths;
+        if (!cancelled) setSystemPaths(data);
+      } catch {
+        // Network/parse failure: leave systemPaths null. The UI will fall
+        // back to generic labels — no broken state.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -387,7 +418,7 @@ export default function SourcesPage() {
               type="text"
               value={path}
               onChange={(e) => setPath(e.target.value)}
-              placeholder="~/Documents/notes"
+              placeholder={systemPaths?.placeholder ?? "Documents/notes"}
               disabled={scanning || ingesting}
               className="flex-1 rounded-md bg-gray-900 border border-gray-700 px-4 py-2.5 text-gray-100 font-mono text-sm focus:outline-none focus:border-cyan-500 transition disabled:opacity-50"
             />
@@ -401,15 +432,21 @@ export default function SourcesPage() {
           </div>
           <div className="flex gap-2 flex-wrap">
             <span className="text-xs text-gray-500 self-center mr-1">Suggestions:</span>
-            {COMMON_PATHS.map((p) => (
+            {(systemPaths?.common ?? [
+              { label: "Documents", path: "" },
+              { label: "Downloads", path: "" },
+              { label: "Desktop", path: "" },
+              { label: "Notes", path: "" },
+            ]).map((suggestion) => (
               <button
-                key={p}
+                key={suggestion.label}
                 type="button"
-                onClick={() => setPath(p)}
-                disabled={scanning || ingesting}
+                onClick={() => setPath(suggestion.path || suggestion.label)}
+                disabled={scanning || ingesting || !suggestion.path}
+                title={suggestion.path}
                 className="text-xs font-mono text-gray-400 hover:text-cyan-300 transition disabled:opacity-50"
               >
-                {p}
+                {suggestion.label}
               </button>
             ))}
           </div>

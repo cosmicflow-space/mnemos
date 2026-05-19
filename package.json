@@ -27,10 +27,13 @@
     "test:watch": "vitest",
     "typecheck": "pnpm -r typecheck",
     "lint": "oxlint .",
-    "clean": "pnpm -r clean && rm -rf node_modules"
+    "validate": "pnpm lint && pnpm typecheck && pnpm test",
+    "clean": "pnpm -r clean && rm -rf node_modules",
+    "prepare": "husky || true"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "husky": "^9.1.7",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0",
     "oxlint": "^0.13.0"

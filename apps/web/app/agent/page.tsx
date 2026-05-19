@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 type ProviderId = "anthropic" | "openai" | "gemini" | "ollama" | "local";
 
@@ -105,6 +106,7 @@ type OllamaModelsResponse = {
 
 export default function AgentPage() {
   const [status, setStatus] = useState<ConfigStatus | null>(null);
+  const router = useRouter();
   const [scan, setScan] = useState<CredentialScan | null>(null);
   const [choice, setChoice] = useState<ProviderId>("anthropic");
   const [apiKey, setApiKey] = useState("");
@@ -185,6 +187,15 @@ export default function AgentPage() {
       setStatus(s);
       setApiKey("");
       setSavedAt(Date.now());
+      // Frictionless flow: if the config is complete, route the user back
+      // home automatically after a brief confirmation window. The 1500ms
+      // delay lets the "✓ Saved" badge register visually before the
+      // navigation, so the user knows the save succeeded before the screen
+      // changes. If the config is incomplete (e.g. missing API key), stay
+      // on the page so they can fix it.
+      if (s.ready) {
+        setTimeout(() => router.push("/"), 1500);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -210,6 +221,9 @@ export default function AgentPage() {
         setStatus(s);
         setChoice("ollama");
         setSavedAt(Date.now());
+        if (s.ready) {
+          setTimeout(() => router.push("/"), 1500);
+        }
         return;
       }
       const r = await fetch("/api/credentials/import", {
@@ -228,6 +242,9 @@ export default function AgentPage() {
         setChoice(j.status.provider ?? choice);
       }
       setSavedAt(Date.now());
+      if (j.status?.ready) {
+        setTimeout(() => router.push("/"), 1500);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -463,7 +480,11 @@ export default function AgentPage() {
           >
             {saving ? "Saving…" : "Save"}
           </button>
-          {savedAt && !error && <span className="text-sm text-cyan-300">✓ Saved</span>}
+          {savedAt && !error && (
+            <span className="text-sm text-cyan-300">
+              ✓ Saved{status?.ready ? " — returning home…" : ""}
+            </span>
+          )}
         </div>
       </form>
     </main>

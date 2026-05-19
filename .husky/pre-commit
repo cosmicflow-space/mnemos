@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+# Pre-commit gate for mnemos. Runs oxlint over the whole repo.
+# oxlint is Rust-based and very fast (~100ms for the entire repo),
+# so we don't need lint-staged-style optimization.
+#
+# If this fails: read the lint output, fix the issues, re-stage, retry.
+# Do NOT use `--no-verify` to bypass — that's the same as turning off
+# the seatbelt. The CI workflow will catch it on push anyway.
+echo "[mnemos pre-commit] Running pnpm lint…"
+pnpm lint
