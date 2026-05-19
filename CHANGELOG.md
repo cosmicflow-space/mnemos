@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-rc.1] - 2026-05-18
+
+First release candidate of Mnemos — a local-first personal RAG system. Drop a folder, ask a question, get answers with file citations. Your files stay on your machine.
+
+### Highlights
+- **Provider-agnostic RAG pipeline**: embed → retrieve → assemble → generate → cite
+- **Bundled local embeddings** via BGE-small (ONNX, 384 dim) — zero API keys required for ingest
+- **Pluggable chat providers** wired: Anthropic Claude, OpenAI, Ollama
+- **Single SQLite file** at `~/.mnemos/mnemos.db` (sqlite-vec for vectors, no separate DB)
+- **Bearer-token auth** with loopback bypass on `127.0.0.1`; LAN binding requires explicit `MNEMOS_BIND=lan`
+- **Hard-locked credential excludes** (`.env`, `*.pem`, `id_rsa*`, etc.) — security defaults cannot be overridden
+- **Soft-default excludes** (logs, lockfiles, minified, transient, hidden) with per-tier opt-in toggles
+- **Credential auto-detection**: scans standard locations, click-to-import with server-side allowlist
+- **Atomic per-file ingestion** via `ingest_status` invariant (no silent partial-state corruption)
+- **Content-hash incremental re-ingestion** — skips unchanged files
+- **Chat UI**: Enter-to-send, auto-derived session titles, date-grouped sidebar, citation pills with collapse, copy-to-clipboard, metrics footer (provider · model · duration · tokens), session delete
+- **Cross-OS install**: `node setup.mjs` reads the playbook in `INSTALL.md` (macOS, Linux, Windows)
+- **Audit log** records exactly what was sent to any external service
+
+### Coming in v0.2
+- Gemini and bundled `llama.cpp` chat providers (currently stubs)
+- Per-source persistent filters
+- Cross-encoder reranking
+- npm global install
+- Plugin marketplace surface
+
+### Plugin SDK
+- apiVersion `0.1` (additive-only changes within 0.1.x; breaking changes will bump apiVersion)
+- Plugins implement `ChatProvider | EmbeddingProvider | DocumentLoader`
+- Plugins may only import from `mnemos/plugin-sdk` — no deep imports into core or other plugins
+
+### Install
+
+```bash
+git clone https://github.com/cosmicflow-space/mnemos.git
+cd mnemos && node setup.mjs
+```
+
+Roughly 90 seconds from clone to first answer on a typical laptop.
+
+---
+
+## Detailed development history
+
 ### Added
 - Initial repo scaffold: monorepo structure (apps/web, packages/, plugins/)
 - MIT LICENSE, README, AGENTS.md, CONTRIBUTING.md
