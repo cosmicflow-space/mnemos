@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-29
+
 ### Added
 - **In-chat onboarding + Settings**: bottom-left "Settings & Sources" launcher with a slide-up popover; AI Model and Sources open as centered modals so you never leave chat. First run gates on configuring a model, then nudges adding sources.
 - **Model selection with inline pricing**: per-provider model dropdown labelled with `$in/$out per 1M`; defaults to the cheapest capable model (Haiku / GPT-4o mini) for doc Q&A.
