@@ -8,6 +8,7 @@ import {
 } from "@mnemos/db";
 import { randomUUID } from "node:crypto";
 import { getDb, getRegistry, getDefaultEmbedder } from "@/lib/runtime";
+import { envKeyForProvider } from "@/lib/config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -121,6 +122,35 @@ export async function POST(req: Request) {
   const creds: Record<string, string> = {};
   const credHydrator = PROVIDER_CREDENTIAL_ENV[parsed.data.providerId];
   if (credHydrator) credHydrator(creds);
+
+  // Schema-driven credential pre-check. Rather than let the provider throw a
+  // raw "requires 'apiKey'" Error (which leaked to the UI as red JSON), we ask
+  // the provider's own credentialSchema which required fields are missing and
+  // return a structured, actionable error the UI can render nicely. Generic:
+  // works for any provider without hardcoding provider IDs here.
+  const missingFields = chatProvider.credentialSchema.fields.filter(
+    (f) => f.required && !creds[f.key],
+  );
+  if (missingFields.length > 0) {
+    return Response.json(
+      {
+        error: "missing_credentials",
+        provider: chatProvider.id,
+        providerName: chatProvider.displayName,
+        // The env var to set in ~/.mnemos/.env (or via the /agent page).
+        envVar: envKeyForProvider(parsed.data.providerId),
+        // Each field carries its own human label + docs hint (e.g. the
+        // "Get one at https://…/keys" URL lives in the field description).
+        fields: missingFields.map((f) => ({
+          key: f.key,
+          label: f.label,
+          description: f.description ?? null,
+        })),
+      },
+      { status: 400 },
+    );
+  }
+
   try {
     await chatProvider.initialize(creds);
   } catch (err) {

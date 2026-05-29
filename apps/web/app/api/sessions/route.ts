@@ -27,6 +27,8 @@ export async function GET(req: Request) {
           citations: m.citations,
           provider: m.provider,
           model: m.model,
+          tokensIn: m.tokensIn,
+          tokensOut: m.tokensOut,
           createdAt: m.createdAt,
         })),
       });

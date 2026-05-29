@@ -620,7 +620,7 @@ export function getRecentMessages(
     `SELECT id, session_id, role, content, citations, tokens_in, tokens_out, provider, model, latency_ms, created_at
      FROM chat_message
      WHERE session_id = ?
-     ORDER BY created_at DESC
+     ORDER BY created_at DESC, id DESC
      LIMIT ?`,
   ).all(sessionId, n) as Array<{
     id: number;
@@ -650,6 +650,42 @@ export function getRecentMessages(
       createdAt: r.created_at,
     }))
     .reverse(); // oldest first for prompt-assembly convenience
+}
+
+export type UsageTotal = {
+  provider: string | null;
+  model: string | null;
+  tokensIn: number;
+  tokensOut: number;
+  messages: number;
+};
+
+/** All-time token totals grouped by (provider, model), summed across every
+ * session. The caller multiplies by per-model pricing to show cumulative cost
+ * — kept as raw tokens here so pricing stays in the provider plugins. */
+export function getUsageTotals(db: MnemosDb): UsageTotal[] {
+  const rows = prepared(db)(
+    `SELECT provider, model,
+            COALESCE(SUM(tokens_in), 0)  AS tin,
+            COALESCE(SUM(tokens_out), 0) AS tout,
+            COUNT(*)                     AS n
+       FROM chat_message
+      WHERE role = 'assistant'
+      GROUP BY provider, model`,
+  ).all() as Array<{
+    provider: string | null;
+    model: string | null;
+    tin: number;
+    tout: number;
+    n: number;
+  }>;
+  return rows.map((r) => ({
+    provider: r.provider,
+    model: r.model,
+    tokensIn: r.tin,
+    tokensOut: r.tout,
+    messages: r.n,
+  }));
 }
 
 // ============================================================================
