@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **In-chat onboarding + Settings**: bottom-left "Settings & Sources" launcher with a slide-up popover; AI Model and Sources open as centered modals so you never leave chat. First run gates on configuring a model, then nudges adding sources.
+- **Model selection with inline pricing**: per-provider model dropdown labelled with `$in/$out per 1M`; defaults to the cheapest capable model (Haiku / GPT-4o mini) for doc Q&A.
+- **Token cost tracking**: provider-reported usage captured through the pipeline and persisted; header shows live **session** and **all-time** cost. New `GET /api/usage` aggregation; `getUsageTotals` in the DB layer.
+- **Rich Markdown output**: assistant responses render tables, lists, code, and emphasis via `react-markdown` + `remark-gfm` (safe React, no raw HTML).
+- **Light / dark theme** with a semantic-token system and a subtle cosmic accent; toggle in the settings popover.
+- **Installer credential auto-scan**: `setup.mjs` offers a local-only scan of well-known key locations (consent-gated, fingerprints only, OAuth/ADC tokens detected but never imported).
+
+### Changed
+- Header is now a compact status bar (model + cost chips with hover detail) instead of inline dropdowns; provider/model live in the model modal.
+- Native system font stack; non-credential errors stay structured.
+
+### Fixed
+- Missing API key now shows an actionable card (get key → add it → git-safety warning) instead of raw JSON.
+- `getRecentMessages` chronological ordering is now deterministic for same-millisecond inserts (added an `id` tiebreaker).
+- Card, table, and pill borders are clearly visible in both light and dark mode.
+
 ## [0.1.0-rc.1] - 2026-05-18
 
 First release candidate of Mnemos — a local-first personal RAG system. Drop a folder, ask a question, get answers with file citations. Your files stay on your machine.

@@ -1,8 +1,84 @@
 @import "tailwindcss";
 
+/* The class that enables Tailwind's `dark:` variant. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Semantic color tokens. Utilities like `bg-app`, `text-fg`, `border-line`
+   resolve to CSS vars re-pointed per theme — one class set, both themes.
+   A faint indigo/cyan cosmic accent runs through borders + glows (a hint of
+   the trademark cosmic theme, kept subtle for readability). */
 @theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  --color-app: var(--app);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
   --color-mnemos-bg: #0a0a14;
   --color-mnemos-accent-cyan: #06b6d4;
   --color-mnemos-accent-purple: #a855f7;
   --color-mnemos-accent-pink: #ec4899;
+}
+
+/* Dark is the default. Borders carry a slight indigo tint and enough contrast
+   to read against near-black; muted text bumped for legibility. */
+:root,
+.dark {
+  --app: #0a0a14;
+  --surface: #13151f;
+  --elevated: #181b26;
+  --line: #3c4566;
+  --line-strong: #525f86;
+  --fg: #e7e9ee;
+  --muted: #9aa3b4;
+}
+
+/* Light: white cards on a faintly tinted app bg so surfaces separate; borders
+   dark enough to read (the old value looked disabled); muted text darker. */
+.light {
+  --app: #eef1f6;
+  --surface: #ffffff;
+  --elevated: #ffffff;
+  --line: #c2c9d6;
+  --line-strong: #9ba4b6;
+  --fg: #161922;
+  --muted: #586072;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  /* Aurora wash — the cosmic hint. Soft corner glows behind everything;
+     stronger in dark, whisper-faint in light. */
+  body {
+    background:
+      radial-gradient(55rem 55rem at 108% -8%, rgba(99, 102, 241, 0.12), transparent 60%),
+      radial-gradient(48rem 48rem at -8% 108%, rgba(6, 182, 212, 0.08), transparent 60%),
+      var(--app);
+    background-attachment: fixed;
+  }
+  .light body {
+    background:
+      radial-gradient(55rem 55rem at 108% -8%, rgba(99, 102, 241, 0.06), transparent 60%),
+      radial-gradient(48rem 48rem at -8% 108%, rgba(6, 182, 212, 0.05), transparent 60%),
+      var(--app);
+    background-attachment: fixed;
+  }
+}
+
+/* "Light escaping" card edge — a faint indigo glow + inner highlight so cards
+   and bubbles read clearly in dark without a harsh border. */
+.aurora-card {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+.dark .aurora-card {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 0 28px -18px rgba(99, 102, 241, 0.65);
 }

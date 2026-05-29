@@ -140,6 +140,9 @@ export async function* runQuery(
 
   // 5. Stream chat
   let assistantText = "";
+  // Provider-reported token usage arrives on the final chunk (see ChatChunk.usage).
+  let tokensIn: number | null = null;
+  let tokensOut: number | null = null;
   try {
     for await (const chunk of chat.chat(messages, {
       model: opts.model,
@@ -150,6 +153,10 @@ export async function* runQuery(
       if (chunk.delta) {
         assistantText += chunk.delta;
         yield { phase: "delta", delta: chunk.delta };
+      }
+      if (chunk.usage) {
+        if (typeof chunk.usage.inputTokens === "number") tokensIn = chunk.usage.inputTokens;
+        if (typeof chunk.usage.outputTokens === "number") tokensOut = chunk.usage.outputTokens;
       }
     }
   } catch (err) {
@@ -171,6 +178,8 @@ export async function* runQuery(
     citations: citationChunkIds,
     provider: chat.id,
     ...(opts.model ? { model: opts.model } : {}),
+    ...(tokensIn !== null ? { tokensIn } : {}),
+    ...(tokensOut !== null ? { tokensOut } : {}),
     latencyMs: durationMs,
   });
 
@@ -189,7 +198,7 @@ export async function* runQuery(
     phase: "done",
     sessionId: opts.sessionId,
     assistantMessageId,
-    tokenCounts: { in: null, out: null },
+    tokenCounts: { in: tokensIn, out: tokensOut },
     provider: chat.id,
     model: opts.model ?? null,
     durationMs,

@@ -47,7 +47,10 @@ const KNOWN_MODELS: readonly ModelInfo[] = [
   },
 ];
 
-const DEFAULT_MODEL = "claude-sonnet-4-6";
+// Cheapest capable model is the default — Mnemos queries are RAG over the
+// user's own docs, which Haiku handles well at a fraction of Sonnet/Opus cost.
+// The UI's model dropdown lets users pick a stronger model per query.
+const DEFAULT_MODEL = "claude-haiku-4-5";
 const DEFAULT_MAX_TOKENS = 2048;
 
 class AnthropicProvider implements ChatProvider {
@@ -108,6 +111,10 @@ class AnthropicProvider implements ChatProvider {
       yield {
         delta: "",
         finishReason: final.stop_reason === "end_turn" ? "stop" : "length",
+        usage: {
+          inputTokens: final.usage?.input_tokens,
+          outputTokens: final.usage?.output_tokens,
+        },
       };
     } catch (err) {
       if (err instanceof Error && err.message === "Aborted") {

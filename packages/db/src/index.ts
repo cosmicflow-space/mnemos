@@ -53,6 +53,8 @@ export {
   listSessions,
   appendMessage,
   getRecentMessages,
+  getUsageTotals,
+  type UsageTotal,
   // Audit
   appendAudit,
   listAuditEvents,
