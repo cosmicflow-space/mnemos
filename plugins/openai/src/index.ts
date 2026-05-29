@@ -32,14 +32,18 @@ const credentialSchema: CredentialSchema = {
   ],
 };
 
+// Costs are USD per 1M tokens (input/output), point-in-time estimates for the
+// UI's cost display — verify against platform.openai.com/pricing. Used only for
+// indicative cost; billing is whatever OpenAI actually charges.
 const CHAT_MODELS: readonly ModelInfo[] = [
-  { id: "gpt-5.5", displayName: "GPT-5.5", contextWindow: 200000 },
-  { id: "gpt-5.4", displayName: "GPT-5.4", contextWindow: 200000 },
-  { id: "gpt-4o", displayName: "GPT-4o", contextWindow: 128000 },
-  { id: "gpt-4o-mini", displayName: "GPT-4o mini", contextWindow: 128000 },
+  { id: "gpt-5.5", displayName: "GPT-5.5", contextWindow: 200000, inputCostPer1M: 1.25, outputCostPer1M: 10.0 },
+  { id: "gpt-5.4", displayName: "GPT-5.4", contextWindow: 200000, inputCostPer1M: 1.25, outputCostPer1M: 10.0 },
+  { id: "gpt-4o", displayName: "GPT-4o", contextWindow: 128000, inputCostPer1M: 2.5, outputCostPer1M: 10.0 },
+  { id: "gpt-4o-mini", displayName: "GPT-4o mini", contextWindow: 128000, inputCostPer1M: 0.15, outputCostPer1M: 0.6 },
 ];
 
-const DEFAULT_CHAT_MODEL = "gpt-5.5";
+// Cheapest capable model is the default — see the Anthropic plugin's rationale.
+const DEFAULT_CHAT_MODEL = "gpt-4o-mini";
 const DEFAULT_MAX_TOKENS = 2048;
 
 class OpenAIChatProvider implements ChatProvider {
@@ -74,12 +78,25 @@ class OpenAIChatProvider implements ChatProvider {
       max_tokens: opts?.maxTokens ?? DEFAULT_MAX_TOKENS,
       temperature: opts?.temperature,
       stream: true,
+      // Opt in to a trailing usage chunk (empty choices, populated `usage`).
+      stream_options: { include_usage: true },
     });
 
     for await (const chunk of stream) {
       if (opts?.signal?.aborted) {
         stream.controller.abort();
         return;
+      }
+      // The include_usage trailer arrives as a chunk with empty `choices` and a
+      // populated `usage` — handle it before the choice guard below.
+      if (chunk.usage) {
+        yield {
+          delta: "",
+          usage: {
+            inputTokens: chunk.usage.prompt_tokens,
+            outputTokens: chunk.usage.completion_tokens,
+          },
+        };
       }
       const choice = chunk.choices[0];
       if (!choice) continue;

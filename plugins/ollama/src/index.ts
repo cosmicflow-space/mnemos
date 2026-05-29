@@ -47,6 +47,9 @@ type OllamaChatStreamLine = {
   message?: { role: string; content: string };
   done: boolean;
   done_reason?: string;
+  /** Token counts on the final (done) line — prompt vs generated. */
+  prompt_eval_count?: number;
+  eval_count?: number;
 };
 
 type OllamaEmbedResponse = {
@@ -158,6 +161,10 @@ class OllamaChatProvider implements ChatProvider {
             line.done_reason === "stop" || line.done_reason === undefined
               ? "stop"
               : "length",
+          usage: {
+            inputTokens: line.prompt_eval_count,
+            outputTokens: line.eval_count,
+          },
         };
       }
     }

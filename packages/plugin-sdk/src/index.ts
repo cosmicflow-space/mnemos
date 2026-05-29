@@ -37,6 +37,13 @@ export type ChatOptions = {
 export type ChatChunk = {
   delta: string;
   finishReason?: "stop" | "length" | "tool_use" | "error";
+  /**
+   * Provider-reported token usage, emitted on the final chunk when the
+   * provider surfaces it. Frontier providers report exact counts; local
+   * providers (Ollama) report eval counts; absent when unknown. Consumed by
+   * the pipeline to persist per-message token totals for cost accounting.
+   */
+  usage?: { inputTokens?: number; outputTokens?: number };
 };
 
 export type ModelInfo = {

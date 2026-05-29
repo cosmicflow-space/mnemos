@@ -17,12 +17,13 @@ import path from 'node:path';
 import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const PLATFORM = process.platform; // 'darwin' | 'linux' | 'win32'
 const REPO_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PLAYBOOK = path.join(REPO_ROOT, 'INSTALL.md');
-const STATE_DIR = path.join(os.homedir(), '.mnemos');
+const HOME = os.homedir();
+const STATE_DIR = path.join(HOME, '.mnemos');
 const ENV_FILE = path.join(STATE_DIR, '.env');
 
 const args = process.argv.slice(2);
@@ -132,6 +133,103 @@ async function runFix(block, rl) {
   return r.status === 0;
 }
 
+// ── local credential auto-detection ───────────────────────────────────────────
+// Frictionless first-run helper: find provider API keys the user already has on
+// disk so they don't re-paste them. LOCAL-ONLY — reads a fixed allowlist of
+// well-known files + shell env; nothing is sent anywhere.
+//
+// This intentionally mirrors apps/web/lib/credential-scan.ts (the same logic
+// behind the /agent page's "scan" button). setup.mjs is zero-dependency and
+// runs before the workspace is built, so it can't import that TS module —
+// keep the two in sync by hand. Only ever PRINT a fingerprint, never a key.
+const relHome = (p) => (p.startsWith(HOME) ? '~' + p.slice(HOME.length) : p);
+
+function fingerprint(v) {
+  return v.length <= 4 ? '•'.repeat(v.length) : '••••' + v.slice(-4);
+}
+
+function readJsonKey(file, keys) {
+  try {
+    // Credential files are tiny; cap the read so an accidental (or malicious)
+    // symlink to a huge file can't balloon memory. statSync follows symlinks,
+    // so the cap reflects the real target size.
+    if (fs.statSync(file).size > 256 * 1024) return null;
+    const j = JSON.parse(fs.readFileSync(file, 'utf8'));
+    for (const k of keys) {
+      if (typeof j[k] === 'string' && j[k].length > 0) return j[k];
+    }
+  } catch { /* missing / not JSON */ }
+  return null;
+}
+
+// Provider API keys we can import. OAuth/ADC files are detected separately
+// below and deliberately NOT imported (vendor TOS / scope mismatch).
+export function scanProviderKeys() {
+  const ENV_MAP = {
+    ANTHROPIC_API_KEY: 'anthropic',
+    OPENAI_API_KEY: 'openai',
+    GEMINI_API_KEY: 'gemini',
+  };
+  const importable = [];
+  const oauthOnly = [];
+  const seen = new Set();
+  const add = (provider, envVar, value, location) => {
+    const v = (value ?? '').trim();
+    if (!v || seen.has(provider)) return; // first hit per provider wins
+    seen.add(provider);
+    importable.push({ provider, envVar, value: v, location });
+  };
+
+  // 1) Live shell environment (strongest signal).
+  for (const [envVar, provider] of Object.entries(ENV_MAP)) {
+    add(provider, envVar, process.env[envVar], `process.env.${envVar}`);
+  }
+
+  // 2) Well-known JSON key files.
+  for (const s of [
+    { provider: 'anthropic', envVar: 'ANTHROPIC_API_KEY', file: path.join(HOME, '.anthropic', 'auth.json') },
+    { provider: 'openai', envVar: 'OPENAI_API_KEY', file: path.join(HOME, '.openai', 'auth.json') },
+    { provider: 'openai', envVar: 'OPENAI_API_KEY', file: path.join(HOME, '.config', 'openai', 'auth.json') },
+  ]) {
+    if (fs.existsSync(s.file)) add(s.provider, s.envVar, readJsonKey(s.file, ['api_key', 'apiKey', 'key']), relHome(s.file));
+  }
+
+  // 3) Shell rc files (export KEY=VAL).
+  const rcRe = /^\s*(?:export\s+)?(ANTHROPIC_API_KEY|OPENAI_API_KEY|GEMINI_API_KEY)\s*=\s*['"]?([^'"\n#]+?)['"]?\s*(?:#.*)?$/gm;
+  for (const f of ['.zshrc', '.zprofile', '.bashrc', '.bash_profile', '.profile', '.envrc']) {
+    const file = path.join(HOME, f);
+    if (!fs.existsSync(file)) continue;
+    let text;
+    try { text = fs.readFileSync(file, 'utf8'); } catch { continue; }
+    let m;
+    while ((m = rcRe.exec(text)) !== null) add(ENV_MAP[m[1]], m[1], m[2], relHome(file));
+  }
+
+  // 4) First-party OAuth / ADC — detected for honesty, never imported.
+  for (const s of [
+    { file: path.join(HOME, '.claude', '.credentials.json'), note: 'Claude Code OAuth — Anthropic prohibits third-party reuse. Create an API key at console.anthropic.com.' },
+    { file: path.join(HOME, '.codex', 'auth.json'), note: 'OpenAI codex CLI OAuth — first-party only. Create an API key at platform.openai.com.' },
+    { file: path.join(HOME, '.config', 'gcloud', 'application_default_credentials.json'), note: 'Google ADC — Vertex AI not wired in v0.1. Use a Gemini API key from aistudio.google.com.' },
+  ]) {
+    if (fs.existsSync(s.file)) oauthOnly.push({ location: relHome(s.file), note: s.note });
+  }
+
+  return { importable, oauthOnly };
+}
+
+function reportScan({ importable, oauthOnly }) {
+  if (importable.length === 0 && oauthOnly.length === 0) {
+    console.log(dim('  No provider keys found in the usual places — paste one below or add it later.'));
+    return;
+  }
+  for (const h of importable) {
+    console.log(`  ${green('✓')} ${h.provider} key found ${dim(`— ${h.location} (${fingerprint(h.value)})`)}`);
+  }
+  for (const h of oauthOnly) {
+    console.log(`  ${yellow('⚠')} ${dim(`${h.location} — ${h.note}`)}`);
+  }
+}
+
 // ── interactive provider wizard ──────────────────────────────────────────────
 async function configureProvider(rl) {
   if (!RECONFIGURE && fs.existsSync(ENV_FILE)) {
@@ -142,6 +240,26 @@ async function configureProvider(rl) {
     console.log(yellow('  --yes given but no ~/.mnemos/.env — skipping wizard, you must create it manually.'));
     return;
   }
+  // ── Frictionless: offer a local-only scan for keys already on this machine ──
+  // Asked once — the wizard only runs when ~/.mnemos/.env is absent.
+  let detected = { importable: [], oauthOnly: [] };
+  console.log('');
+  const consent = (await rl.question(
+    '  Search for model-provider keys automatically?\n' +
+    dim('  Local-only scan of well-known files (~/.anthropic, ~/.openai, …) and your shell\n' +
+        '  environment. Nothing is sent anywhere — it never leaves your machine.') +
+    '\n  [Y/n] ',
+  )).trim().toLowerCase();
+  if (consent === 'n' || consent === 'no') {
+    console.log(dim('  Skipped. Add a key anytime — here, on the Agent page, or by editing ~/.mnemos/.env.'));
+  } else {
+    detected = scanProviderKeys();
+    reportScan(detected);
+  }
+  const detectedByProvider = Object.fromEntries(
+    detected.importable.map((h) => [h.provider, h]),
+  );
+
   console.log('');
   console.log('  Pick your chat provider:');
   // Tier 1 (fully local) is the project default — Ollama listed first to
@@ -149,9 +267,10 @@ async function configureProvider(rl) {
   // (llama.cpp) plugins are stubs (17-line manifests) and would let users
   // finish setup in a non-working state, so they're omitted. When those
   // plugins land, add them back to this list.
+  const tag = (p, fallback) => (detectedByProvider[p] ? green('✓ key detected') : fallback);
   console.log(`    ${bold('1')}) ollama      local daemon on :11434          ${green('no key · fully local · recommended')}`);
-  console.log(`    ${bold('2')}) anthropic   Claude (Sonnet 4.6, Opus 4.7)   needs ANTHROPIC_API_KEY`);
-  console.log(`    ${bold('3')}) openai      GPT-4o / o-series                needs OPENAI_API_KEY`);
+  console.log(`    ${bold('2')}) anthropic   Claude (Sonnet 4.6, Opus 4.7)   ${tag('anthropic', 'needs ANTHROPIC_API_KEY')}`);
+  console.log(`    ${bold('3')}) openai      GPT-4o / o-series                ${tag('openai', 'needs OPENAI_API_KEY')}`);
   console.log(dim(`    (gemini + bundled local llama.cpp are stubs in v0.1 — landing in v0.2)`));
   const choices = { 1: 'ollama', 2: 'anthropic', 3: 'openai' };
   let provider = '';
@@ -161,7 +280,17 @@ async function configureProvider(rl) {
   }
   let apiKey = '';
   if (['anthropic', 'openai'].includes(provider)) {
-    apiKey = (await rl.question(`  Paste your ${provider} API key (or leave blank, fill in later): `)).trim();
+    const hit = detectedByProvider[provider];
+    if (hit) {
+      const use = (await rl.question(
+        `  Use the detected ${provider} key ${dim(`(${fingerprint(hit.value)}, ${hit.location})`)}? [Y/n] `,
+      )).trim().toLowerCase();
+      apiKey = use === 'n' || use === 'no'
+        ? (await rl.question(`  Paste your ${provider} API key (or leave blank): `)).trim()
+        : hit.value;
+    } else {
+      apiKey = (await rl.question(`  Paste your ${provider} API key (or leave blank, fill in later): `)).trim();
+    }
   }
   fs.mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 });
   const lines = [
@@ -258,7 +387,12 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(red(err.stack ?? String(err)));
-  process.exit(1);
-});
+// Run the installer only when executed directly (`node setup.mjs`), not when
+// imported — lets tests exercise scanProviderKeys() without booting the wizard.
+const entryPoint = process.argv[1];
+if (entryPoint && import.meta.url === pathToFileURL(entryPoint).href) {
+  main().catch((err) => {
+    console.error(red(err.stack ?? String(err)));
+    process.exit(1);
+  });
+}

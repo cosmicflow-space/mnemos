@@ -195,9 +195,12 @@ describe("smoke: plugin registry", () => {
 
   it("can look up loaders by id or extension (when loaders are registered)", () => {
     const registry = loadBundledPlugins();
-    // v0.1 stubs don't register loaders; this test confirms the lookup function
-    // doesn't crash when there are no loaders, and throws helpfully.
-    expect(() => getDocumentLoader(registry, ".pdf")).toThrow(/No document loader/);
+    // Bundled loaders (pdf, markdown, plaintext, web, code) are registered, so a
+    // known extension resolves to a loader; an unknown one throws helpfully.
+    expect(getDocumentLoader(registry, ".pdf")).toBeTruthy();
+    expect(() => getDocumentLoader(registry, ".no-such-ext")).toThrow(
+      /No document loader/,
+    );
   });
 
   it("does not register duplicate provider ids", () => {

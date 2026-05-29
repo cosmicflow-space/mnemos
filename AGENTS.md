@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Operating manual for AI agents (and humans) working in the Mnemos codebase.
-Telegraph style — root rules only. Read scoped `AGENTS.md` files before touching subtree.
+Telegraph style — root rules only. No scoped `AGENTS.md` files exist yet; if one appears in a subtree, read it before touching that subtree.
 
 > `CLAUDE.md` is a symlink to this file. Edit `AGENTS.md`; both assistants read the same source.
 
@@ -13,13 +13,16 @@ Telegraph style — root rules only. Read scoped `AGENTS.md` files before touchi
 
 ## Map
 
-- Web UI + API routes: `apps/web/` (Next.js 15 App Router)
+- Web UI + API routes: `apps/web/` (Next.js 15 App Router; routes under `app/api/*`, auth in `lib/auth.ts`, bind logic in `middleware.ts`)
 - Core pipeline (provider-agnostic): `packages/core/`
-- SQLite + sqlite-vec: `packages/db/`
-- Plugin SDK barrel (the only surface plugins can import): `packages/plugin-sdk/`
-- CLI: `packages/cli/`
-- Bundled plugins: `plugins/*/`
-- Spec docs: `docs/`
+  - Write path: `ingestFolder` in `src/ingest/pipeline.ts` (scan → exclude → classify → chunk → embed → store)
+  - Read path: `runQuery` in `src/query/runQuery.ts` — async generator yielding `QueryEvent`s (citations first, then text deltas, then `done`); prompt assembly in `src/query/prompt.ts`
+  - Plugin registry + invariants: `src/registry.ts`
+- SQLite + sqlite-vec: `packages/db/` (`schema.sql` is the source of truth; `crud.ts` is the typed access layer)
+- Plugin SDK barrel (the only surface plugins can import): `packages/plugin-sdk/` — single `src/index.ts`
+- CLI: `packages/cli/` — **v0.1 scaffold only**; commands print help or exit 1 (not yet wired)
+- Bundled plugins: `plugins/*/` (chat: anthropic/openai/gemini/ollama/llama-cpp; embed: embed-local; loaders: pdf/markdown/plaintext/web/code)
+- Spec docs: `docs/` (`architecture.md`); synthetic eval fixtures + demo corpus: `evals/`
 
 ## Architecture invariants
 
@@ -30,6 +33,8 @@ Telegraph style — root rules only. Read scoped `AGENTS.md` files before touchi
 - **Single SQLite file holds everything.** Chunks, vectors (via sqlite-vec), credentials (encrypted), chat history, audit. No separate stores.
 - **Read-only by default.** Mnemos never writes to user folders. Period.
 - **Frontier LLMs only see retrieved chunks.** Never raw documents. Audit log records provider, model, retrieved chunk IDs, prompt-size estimate, and latency per query. Exact payload + provider-reported token counts is a v0.2 goal.
+- **Bundled plugins register statically.** Adding one = add a static import to the `BUNDLED_PLUGINS` array in `packages/core/src/registry.ts`. Dynamic `mnemos-plugin-*` discovery is v0.2.
+- **Embedding dimension is a cross-file contract.** `MNEMOS_EMBEDDING_DIM` (registry.ts) must equal the `vec_chunk` dimension in `packages/db/src/schema.sql` (384 in v0.1). Change one, change both, or vectors mismatch silently.
 
 ## Trust model
 
@@ -49,6 +54,7 @@ Telegraph style — root rules only. Read scoped `AGENTS.md` files before touchi
 - Test: `pnpm test` (vitest). Single test: `pnpm vitest run <file-or-pattern>` or `pnpm test -- -t "<name>"`.
 - Lint: `pnpm lint` (oxlint)
 - Typecheck: `pnpm typecheck` (delegates to per-package tsc --noEmit)
+- Full gate: `pnpm validate` (lint + typecheck + test). Husky enforces it: pre-commit runs lint, pre-push runs lint + typecheck. Don't bypass with `--no-verify`.
 - Docker: `docker compose up -d`
 - Env precedence (highest → lowest): process env → `./.env` → `~/.mnemos/.env` → `~/.mnemos/config.json`.
 
@@ -63,7 +69,7 @@ Telegraph style — root rules only. Read scoped `AGENTS.md` files before touchi
 
 ## Plugin SDK rules
 
-- All plugins import from `mnemos/plugin-sdk` only.
+- All plugins import from the SDK barrel only — workspace package id `@mnemos/plugin-sdk` (the single `src/index.ts`). No deep imports.
 - Plugins implement one or more of: `ChatProvider`, `EmbeddingProvider`, `DocumentLoader`.
 - Plugins declare a manifest with `apiVersion: '0.1'`.
 - Backward-compatible SDK changes are additive only. Breaking changes require apiVersion bump.

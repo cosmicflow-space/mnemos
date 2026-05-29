@@ -37,6 +37,23 @@ const ENV_KEY_FOR_PROVIDER: Record<ProviderId, string | null> = {
   local: null,
 };
 
+/** The env var that holds a provider's API key, or null for providers that
+ * need no credential (ollama, local). Used by routes to name the exact var a
+ * user must set when a credential is missing. */
+export function envKeyForProvider(provider: string): string | null {
+  return ENV_KEY_FOR_PROVIDER[provider as ProviderId] ?? null;
+}
+
+/** True if the provider's API key is already on file (process env or
+ * ~/.mnemos/.env). Providers that need no key (ollama, local) are always
+ * "configured". Lets the UI badge each provider before the user picks it. */
+export function isProviderConfigured(provider: string): boolean {
+  const envKey = ENV_KEY_FOR_PROVIDER[provider as ProviderId] ?? null;
+  if (envKey === null) return true;
+  const merged = readEnvFile();
+  return Boolean((process.env[envKey] ?? merged[envKey] ?? "").trim());
+}
+
 export type ConfigStatus = {
   provider: ProviderId | null;
   hasCredential: boolean;
