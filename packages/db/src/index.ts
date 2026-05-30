@@ -46,6 +46,7 @@ export {
   insertChunk,
   vecSearch,
   getContentChunksForFile,
+  getCorpusStats,
   getChunksByIds,
   type ChunkDetail,
   // Verified answers
