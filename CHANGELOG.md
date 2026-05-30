@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Filename-mention questions now return file *contents*, not just metadata.** A file's synthetic metadata chunk (path/size/type) is a strong lexical match for questions that name the file ("VIN in ipostal?") but holds no answer, so at scale it could out-rank and bury the file's own content. Retrieval now co-retrieves a file's content chunks when it surfaced only via its metadata chunk, spliced adjacent and bounded by a fixed budget. (#17)
+
+### Added
+- **Count/inventory questions answered from exact totals.** "How many documents/files do I have?", "what types?", "which sources?" are now answered from a COUNT-based Library Overview (total files, chunks, by type, by source) injected into the prompt for inventory-intent questions — instead of the model counting the handful of retrieved chunks. Gated to inventory questions so normal queries pay no aggregate cost. (#18)
+
 ## [0.10.0] - 2026-05-30
 
 ### Fixed
