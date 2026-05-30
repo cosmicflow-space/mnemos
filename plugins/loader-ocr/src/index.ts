@@ -7,8 +7,9 @@ import type { Plugin, DocumentLoader, LoadedDoc } from "@mnemos/plugin-sdk";
  * Image OCR loader. Extracts text from raster images via `tesseract.js`
  * (WASM Tesseract — no system binary needed, keeping the Node-only install
  * story intact). On first use it fetches the English trained-data + WASM core
- * and caches them locally — the same one-time-then-offline pattern as the BGE
- * embedding model (Tier 1 stays local after the first run).
+ * and caches the trained-data locally (the WASM core ships in node_modules) — the
+ * same one-time-then-offline pattern as the BGE model (Tier 1 stays local after
+ * the first run; pre-seed the cache dir to run fully offline).
  *
  * Lazily imported via a string-built, `webpackIgnore`'d specifier (and
  * externalized in next.config). For tesseract.js this is REQUIRED, not just an

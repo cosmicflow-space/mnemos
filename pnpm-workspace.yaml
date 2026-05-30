@@ -18,6 +18,3 @@ allowBuilds:
   sharp: true
   esbuild: true
   protobufjs: true
-  # tesseract.js's only postinstall is an opencollective donation nag (no native
-  # build) — intentionally skipped.
-  tesseract.js: false

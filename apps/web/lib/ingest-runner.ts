@@ -35,6 +35,8 @@ export async function runSourceIngestInBackground(sourceId: number): Promise<boo
     try {
       await ingestFolder(db, getRegistry(), embedder, source, {
         signal: controller.signal,
+        // Resume is user-initiated → re-attempt files previously marked failed.
+        retryFailed: true,
         onProgress: (p) => {
           // When aborted, drop the trailing 'done' so the status entry survives
           // as 'paused' (with its progress) instead of being cleared to idle.
