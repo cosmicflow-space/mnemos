@@ -109,6 +109,25 @@ CREATE TABLE IF NOT EXISTS audit_event (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_event_type ON audit_event(event_type, created_at);
 
+-- Verified answers: operator-confirmed Q→A pairs, injected as a trusted chunk
+-- to boost retrieval (esp. for small models). The question embedding lives in
+-- vec_verified. `source_hash` is the combined content hash of the chunks the
+-- answer was grounded in, used for lazy invalidation when those chunks change.
+CREATE TABLE IF NOT EXISTS verified_answer (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  question         TEXT NOT NULL,
+  answer           TEXT NOT NULL,
+  source_chunk_ids TEXT,
+  source_hash      TEXT,
+  provider         TEXT,
+  model            TEXT,
+  created_at       INTEGER NOT NULL
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS vec_verified USING vec0(
+  answer_id INTEGER PRIMARY KEY,
+  embedding FLOAT[384]
+);
+
 -- Schema version (for future migrations)
 CREATE TABLE IF NOT EXISTS schema_version (
   version     INTEGER PRIMARY KEY,

@@ -46,6 +46,45 @@ export function SourcesModal({
     void refresh();
   }, [refresh]);
 
+  // Ingest a path, draining the SSE progress stream. Unchanged files are skipped
+  // server-side (incremental), so re-running is cheap. Throws on error.
+  async function ingestPath(p: string) {
+    setStatus("Ingesting… (reading, chunking, embedding)");
+    const ingRes = await fetch("/api/ingest", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: p }),
+    });
+    if (!ingRes.ok || !ingRes.body) throw new Error((await ingRes.text()) || "ingest failed");
+
+    const reader = ingRes.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const blocks = buf.split("\n\n");
+      buf = blocks.pop() ?? "";
+      for (const b of blocks) {
+        const line = b.trim();
+        if (!line.startsWith("data: ")) continue;
+        let ev: { phase?: string; message?: string; files?: number; chunks?: number };
+        try {
+          ev = JSON.parse(line.slice(6));
+        } catch {
+          continue;
+        }
+        if (ev.phase === "error") throw new Error(ev.message ?? "ingest error");
+        if (typeof ev.files === "number" || typeof ev.chunks === "number") {
+          setStatus(`Ingesting… ${ev.files ?? 0} files, ${ev.chunks ?? 0} chunks`);
+        } else if (ev.phase) {
+          setStatus(`Ingesting… ${ev.phase}`);
+        }
+      }
+    }
+  }
+
   async function addAndIngest() {
     const p = path.trim();
     if (!p || busy) return;
@@ -59,44 +98,27 @@ export function SourcesModal({
         body: JSON.stringify({ path: p }),
       });
       if (!addRes.ok) throw new Error((await addRes.text()) || "add failed");
-
-      setStatus("Ingesting… (reading, chunking, embedding)");
-      const ingRes = await fetch("/api/ingest", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ path: p }),
-      });
-      if (!ingRes.ok || !ingRes.body) throw new Error((await ingRes.text()) || "ingest failed");
-
-      // Drain the SSE progress stream; surface the latest phase, stop on done/error.
-      const reader = ingRes.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const blocks = buf.split("\n\n");
-        buf = blocks.pop() ?? "";
-        for (const b of blocks) {
-          const line = b.trim();
-          if (!line.startsWith("data: ")) continue;
-          let ev: { phase?: string; message?: string; files?: number; chunks?: number };
-          try {
-            ev = JSON.parse(line.slice(6));
-          } catch {
-            continue;
-          }
-          if (ev.phase === "error") throw new Error(ev.message ?? "ingest error");
-          if (typeof ev.files === "number" || typeof ev.chunks === "number") {
-            setStatus(`Ingesting… ${ev.files ?? 0} files, ${ev.chunks ?? 0} chunks`);
-          } else if (ev.phase) {
-            setStatus(`Ingesting… ${ev.phase}`);
-          }
-        }
-      }
+      await ingestPath(p);
       setStatus("Done.");
       setPath("");
+      await refresh();
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+      setStatus(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Re-scan an already-registered source: only changed/new files are re-embedded.
+  async function rescan(p: string) {
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await ingestPath(p);
+      setStatus("Done — re-scanned (unchanged files skipped).");
       await refresh();
       onChanged();
     } catch (e) {
@@ -179,14 +201,24 @@ export function SourcesModal({
                     {typeof s.fileCount === "number" ? ` · ${s.fileCount} files` : ""}
                   </div>
                 </div>
-                <button
-                  onClick={() => void remove(s.path)}
-                  disabled={busy}
-                  className="text-[11px] text-muted hover:text-red-400 transition shrink-0"
-                  title="Remove source and purge its chunks"
-                >
-                  Remove
-                </button>
+                <div className="flex items-center gap-3 shrink-0">
+                  <button
+                    onClick={() => void rescan(s.path)}
+                    disabled={busy}
+                    className="text-[11px] text-cyan-400 hover:text-cyan-300 transition disabled:opacity-50"
+                    title="Re-ingest — only changed/new files are re-embedded"
+                  >
+                    ↻ Re-scan
+                  </button>
+                  <button
+                    onClick={() => void remove(s.path)}
+                    disabled={busy}
+                    className="text-[11px] text-muted hover:text-red-400 transition"
+                    title="Remove source and purge its chunks"
+                  >
+                    Remove
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

@@ -403,6 +403,131 @@ export function getChunksByIds(db: MnemosDb, ids: number[]): ChunkDetail[] {
     .filter((r): r is ChunkDetail => Boolean(r));
 }
 
+// ============================================================================
+// Verified answers (operator-confirmed Q→A memory)
+// ============================================================================
+
+export type SaveVerifiedAnswerInput = {
+  question: string;
+  answer: string;
+  embedding: number[];
+  sourceChunkIds: number[];
+  /** Combined content hash of the grounding chunks (for lazy invalidation). */
+  sourceHash: string;
+  provider?: string | null;
+  model?: string | null;
+};
+
+export function saveVerifiedAnswer(db: MnemosDb, input: SaveVerifiedAnswerInput): number {
+  return db.transaction(() => {
+    const now = Date.now();
+    const result = prepared(db)(
+      `INSERT INTO verified_answer
+         (question, answer, source_chunk_ids, source_hash, provider, model, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      input.question,
+      input.answer,
+      JSON.stringify(input.sourceChunkIds),
+      input.sourceHash,
+      input.provider ?? null,
+      input.model ?? null,
+      now,
+    );
+    const id = Number(result.lastInsertRowid);
+    // vec0 requires BigInt for the primary key; embedding goes in as JSON.
+    prepared(db)(
+      `INSERT INTO vec_verified (answer_id, embedding) VALUES (?, ?)`,
+    ).run(BigInt(id), JSON.stringify(input.embedding));
+    return id;
+  })();
+}
+
+export type VerifiedMatch = {
+  id: number;
+  question: string;
+  answer: string;
+  sourceChunkIds: number[];
+  sourceHash: string | null;
+  provider: string | null;
+  model: string | null;
+  distance: number;
+};
+
+/** Nearest verified answers to a query embedding (cosine distance, ascending). */
+export function searchVerifiedAnswers(
+  db: MnemosDb,
+  queryEmbedding: number[],
+  k = 1,
+): VerifiedMatch[] {
+  const rows = prepared(db)(
+    `SELECT va.id               AS id,
+            va.question         AS question,
+            va.answer           AS answer,
+            va.source_chunk_ids AS sourceChunkIds,
+            va.source_hash      AS sourceHash,
+            va.provider         AS provider,
+            va.model            AS model,
+            v.distance          AS distance
+       FROM vec_verified v
+       JOIN verified_answer va ON v.answer_id = va.id
+      WHERE v.embedding MATCH ? AND k = ?
+      ORDER BY v.distance`,
+  ).all(JSON.stringify(queryEmbedding), k) as Array<{
+    id: number;
+    question: string;
+    answer: string;
+    sourceChunkIds: string | null;
+    sourceHash: string | null;
+    provider: string | null;
+    model: string | null;
+    distance: number;
+  }>;
+  return rows.map((r) => ({
+    ...r,
+    sourceChunkIds: r.sourceChunkIds ? (JSON.parse(r.sourceChunkIds) as number[]) : [],
+  }));
+}
+
+export type VerifiedAnswerRow = {
+  id: number;
+  question: string;
+  answer: string;
+  provider: string | null;
+  model: string | null;
+  createdAt: number;
+};
+
+/** All verified answers, newest first (for the management UI). */
+export function listVerifiedAnswers(db: MnemosDb): VerifiedAnswerRow[] {
+  const rows = prepared(db)(
+    `SELECT id, question, answer, provider, model, created_at
+       FROM verified_answer ORDER BY created_at DESC`,
+  ).all() as Array<{
+    id: number;
+    question: string;
+    answer: string;
+    provider: string | null;
+    model: string | null;
+    created_at: number;
+  }>;
+  return rows.map((r) => ({
+    id: r.id,
+    question: r.question,
+    answer: r.answer,
+    provider: r.provider,
+    model: r.model,
+    createdAt: r.created_at,
+  }));
+}
+
+export function deleteVerifiedAnswer(db: MnemosDb, id: number): void {
+  db.transaction(() => {
+    prepared(db)(`DELETE FROM vec_verified WHERE answer_id = ?`).run(BigInt(id));
+    prepared(db)(`DELETE FROM verified_answer WHERE id = ?`).run(id);
+  })();
+}
+
 /** Count chunks per source (UI status indicator). */
 export function chunkCountBySource(db: MnemosDb): Map<number, number> {
   const rows = prepared(db)(
