@@ -63,7 +63,12 @@ export async function POST(req: Request) {
     );
   }
 
-  const absolutePath = normalizeUserPath(parsed.data.path);
+  let absolutePath: string;
+  try {
+    absolutePath = normalizeUserPath(parsed.data.path);
+  } catch {
+    return Response.json({ error: "invalid_request", message: "path is empty" }, { status: 400 });
+  }
   const db = getDb();
   const source = getSourceByPath(db, absolutePath);
   if (!source) {

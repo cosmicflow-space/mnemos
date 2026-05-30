@@ -39,4 +39,19 @@ describe("normalizeUserPath", () => {
     // result is honest rather than silently fabricating a different path.
     expect(normalizeUserPath("'/Users/sam/docs")).toContain("'");
   });
+
+  it("preserves spaces INSIDE the quotes (quotes exist to protect them)", () => {
+    // The whole-input padding is trimmed, but a genuine name with inner spaces
+    // must survive — otherwise we'd fail to find a real `/Users/sam/ my notes `.
+    expect(normalizeUserPath("'/Users/sam/ my notes '")).toBe("/Users/sam/ my notes ");
+  });
+
+  it("rejects input that is empty once quotes are removed", () => {
+    // Without this, resolve('') would silently target the server's cwd. The
+    // request schemas only `.min(1)`-check the pre-strip string, so these pass
+    // validation and must be caught here.
+    for (const empty of ["''", '""', "   ", "' '", '"  "']) {
+      expect(() => normalizeUserPath(empty)).toThrow();
+    }
+  });
 });

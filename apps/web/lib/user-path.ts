@@ -15,6 +15,15 @@ import { homedir } from "node:os";
  * expands a leading `~` and resolves to absolute. A genuine path whose name both
  * begins and ends with a quote is vanishingly rare; the paste-artifact case is
  * common, so we optimize for it.
+ *
+ * Throws on input that is empty once the surrounding quotes are removed (`''`,
+ * `""`, `"   "`). The request schemas only `.min(1)`-validate the *pre-strip*
+ * string, so without this guard an empty quoted path would `resolve("")` to the
+ * server's cwd and silently target the working directory.
+ *
+ * Content *inside* the quotes is preserved verbatim — quotes exist to protect
+ * spaces, so a folder genuinely named `" my notes "` keeps its inner spaces; only
+ * the outer whole-input padding is trimmed.
  */
 export function normalizeUserPath(input: string): string {
   let p = input.trim();
@@ -22,8 +31,11 @@ export function normalizeUserPath(input: string): string {
     const first = p[0];
     const last = p[p.length - 1];
     if ((first === "'" || first === '"') && last === first) {
-      p = p.slice(1, -1).trim();
+      p = p.slice(1, -1);
     }
+  }
+  if (p.trim().length === 0) {
+    throw new Error("path is empty after removing surrounding quotes");
   }
   if (p.startsWith("~/") || p === "~") {
     return resolve(p.replace(/^~/, homedir()));

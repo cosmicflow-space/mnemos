@@ -121,9 +121,17 @@ export async function POST(req: Request) {
   }
 
   const requestedKind = parsed.data.kind;
-  const absolutePath = isLocalKind(requestedKind)
-    ? normalizeUserPath(parsed.data.path)
-    : parsed.data.path;
+  let absolutePath: string;
+  try {
+    absolutePath = isLocalKind(requestedKind)
+      ? normalizeUserPath(parsed.data.path)
+      : parsed.data.path;
+  } catch {
+    return NextResponse.json(
+      { error: "invalid_request", message: "path is empty" },
+      { status: 400 },
+    );
+  }
 
   // Frictionless: when the caller didn't distinguish (the default "folder"),
   // detect whether the path is actually a single file and register it as such,
