@@ -64,8 +64,9 @@ export function ModelSettingsModal({
   model: string;
   /** Reflect the chosen provider+model back into the chat. */
   onApply: (provider: string, model: string) => void;
-  /** Ask the chat to refetch providers (configured flags changed). */
-  onProvidersChanged: () => void;
+  /** Ask the chat to refetch providers — picks up configured-flag changes AND
+   * newly installed local models. Awaitable so the dialog can show progress. */
+  onProvidersChanged: () => void | Promise<void>;
   onClose: () => void;
   onboarding?: boolean;
 }) {
@@ -80,6 +81,24 @@ export function ModelSettingsModal({
   const [importing, setImporting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [scan, setScan] = useState<DetectedCredential[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Re-detect on open so the model list reflects anything installed since the
+  // chat page first loaded (e.g. `ollama pull gemma3` while the app was running).
+  useEffect(() => {
+    void Promise.resolve(onProvidersChanged());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function refreshModels() {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await onProvidersChanged();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   // Scan well-known credential locations once so the dialog can offer to reuse a
   // key the user already has (and surface — but never reuse — OAuth tokens).
@@ -212,24 +231,47 @@ export function ModelSettingsModal({
         ))}
       </div>
 
-      {models.length > 0 && (
-        <>
-          <label className="block text-xs text-muted mb-1" htmlFor="model-sel">
-            Model
-          </label>
-          <select
-            id="model-sel"
-            value={selModel}
-            onChange={(e) => setSelModel(e.target.value)}
-            className="w-full bg-surface border border-line rounded-md px-2 py-2 text-sm text-fg focus:outline-none focus:border-cyan-500 mb-4"
-          >
-            {models.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.displayName} · {priceLabel(m)}
-              </option>
-            ))}
-          </select>
-        </>
+      {info && (
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs text-muted" htmlFor="model-sel">
+              Model
+            </label>
+            {/* Local model lists come live from the daemon — let the user
+                re-scan after `ollama pull` without reloading the page. */}
+            {!info.needsKey && (
+              <button
+                type="button"
+                onClick={() => void refreshModels()}
+                disabled={refreshing}
+                title="Re-scan the local daemon for newly installed models"
+                className="text-[11px] text-cyan-400 hover:text-cyan-300 disabled:opacity-50"
+              >
+                {refreshing ? "Detecting…" : "↻ Detect new"}
+              </button>
+            )}
+          </div>
+          {models.length > 0 ? (
+            <select
+              id="model-sel"
+              value={selModel}
+              onChange={(e) => setSelModel(e.target.value)}
+              className="w-full bg-surface border border-line rounded-md px-2 py-2 text-sm text-fg focus:outline-none focus:border-cyan-500"
+            >
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.displayName} · {priceLabel(m)}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="text-xs text-muted">
+              {info.needsKey
+                ? "No models available."
+                : "No models detected — pull one (e.g. `ollama pull gemma3`), then ↻ Detect new."}
+            </p>
+          )}
+        </div>
       )}
 
       {needsKey && (
