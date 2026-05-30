@@ -42,6 +42,12 @@ const SECURITY_PATTERNS: Pattern[] = [
   { pattern: /(^|\/)\.netrc$/, reason: "secret", label: ".netrc" },
   { pattern: /(^|\/)credentials(\.|$)/i, reason: "secret", label: "credentials files" },
   { pattern: /(^|\/)\.aws\//, reason: "secret", label: ".aws/" },
+  // Whole credential directories: any path under them is hard-locked, so a
+  // non-secret-named file inside (.ssh/config, .ssh/known_hosts) can't slip
+  // through. The trailing slash means the directory itself only matches when
+  // entered/contained — pass `dir + "/"` to test a directory root.
+  { pattern: /(^|\/)\.ssh\//, reason: "secret", label: ".ssh/" },
+  { pattern: /(^|\/)\.gnupg\//, reason: "secret", label: ".gnupg/" },
 ];
 
 const DEFAULT_EXCLUDE_PATTERNS: Pattern[] = [

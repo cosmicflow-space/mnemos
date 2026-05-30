@@ -121,7 +121,7 @@ export async function scanFolder(
   const skipDirs = opts.skipDirs ?? DEFAULT_SKIP_DIRS;
   const maxDepth = opts.maxDepth ?? DEFAULT_MAX_DEPTH;
   const maxFiles = opts.maxFiles ?? DEFAULT_MAX_FILES;
-  const absoluteRoot = resolve(rootPath);
+  let absoluteRoot = resolve(rootPath);
 
   const files: ScannedFile[] = [];
   const skippedDirs: string[] = [];
@@ -251,6 +251,12 @@ export async function scanFolder(
     const realRoot = await realpath(absoluteRoot).catch(() => absoluteRoot);
     considerFile(absoluteRoot, basename(absoluteRoot), rootStat, true, realRoot);
   } else {
+    // Canonicalize the directory root so a symlinked source dir — an innocuous
+    // alias pointing at, say, ~/.ssh — is walked and security-checked against
+    // its true target path, not the alias (which would dodge the hard-lock and
+    // let credential files into the index). `walk` slices relativePath against
+    // absoluteRoot, so updating it here keeps paths source-relative.
+    absoluteRoot = await realpath(absoluteRoot).catch(() => absoluteRoot);
     await walk(absoluteRoot, 0);
   }
 

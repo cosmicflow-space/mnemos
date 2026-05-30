@@ -54,6 +54,7 @@ export {
 } from "./ingest/scan";
 export {
   checkExclusion,
+  checkSecurityExclusion,
   shouldExclude,
   LARGE_FILE_BYTES,
   type ExclusionReason,

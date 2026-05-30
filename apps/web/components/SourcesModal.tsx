@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Modal } from "@/components/Modal";
+import { FolderPicker } from "@/components/FolderPicker";
 
 type SourceRow = {
   id: number;
@@ -62,6 +63,8 @@ export function SourcesModal({
 }) {
   const [sources, setSources] = useState<SourceRow[]>([]);
   const [path, setPath] = useState("");
+  // When true, the add form is replaced by the server-powered folder/file picker.
+  const [picking, setPicking] = useState(false);
   // New sources default to manual re-scan (0) — opt into a cadence per folder.
   const [addInterval, setAddInterval] = useState<number>(0);
   const [busy, setBusy] = useState(false);
@@ -202,6 +205,22 @@ export function SourcesModal({
     setContainsWarning(null);
     setStatus("Registering source…");
     try {
+      // Validate a typed/pasted path before registering it, so a typo, a
+      // stray-quote paste, or an unreadable path doesn't create a dead source
+      // that silently indexes nothing — nudge to the picker instead. Browse is
+      // loopback-only: a `browse_disabled` error means we're on LAN and can't
+      // pre-validate, so only that case proceeds; every other failure (missing
+      // path, permission denied) stops with an actionable message.
+      const check = await fetch(`/api/browse?path=${encodeURIComponent(p)}`, { cache: "no-store" });
+      if (!check.ok) {
+        const body = (await check.json().catch(() => ({}))) as { error?: string; message?: string };
+        if (body.error !== "browse_disabled") {
+          setErr(`${body.message ?? "That path can't be opened."} Use “Browse…” to pick a folder or file.`);
+          setStatus(null);
+          setBusy(false);
+          return;
+        }
+      }
       const addRes = await fetch("/api/sources", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -312,11 +331,24 @@ export function SourcesModal({
 
   return (
     <Modal title="Sources" onClose={onClose} maxWidth="max-w-xl">
+      {picking ? (
+        <FolderPicker
+          initialPath={path.trim() || undefined}
+          onPick={(abs) => {
+            setPath(abs);
+            setPicking(false);
+            setErr(null);
+            setStatus(null);
+          }}
+          onCancel={() => setPicking(false)}
+        />
+      ) : (
+        <>
       <p className="text-xs text-muted mb-3 leading-relaxed">
         Mnemos is read-only over what you register here. Add a <strong>folder</strong>{" "}
-        (all its files) or a <strong>single file</strong> — it&apos;s chunked, embedded,
-        and made searchable for grounded, cited answers. Paste an absolute path; Mnemos
-        detects whether it&apos;s a file or a folder.
+        (all its files) or a <strong>single file</strong> — <strong>Browse…</strong> to pick one,
+        or paste an absolute path. It&apos;s chunked, embedded, and made searchable for grounded,
+        cited answers; Mnemos detects whether it&apos;s a file or a folder.
       </p>
 
       <div className="flex gap-2 mb-2">
@@ -330,6 +362,17 @@ export function SourcesModal({
           disabled={busy}
           className="flex-1 bg-surface border border-line rounded-md px-3 py-2 text-sm text-fg font-mono focus:outline-none focus:border-cyan-500 disabled:opacity-50"
         />
+        <button
+          onClick={() => {
+            setErr(null);
+            setPicking(true);
+          }}
+          disabled={busy}
+          title="Browse your folders to pick a source"
+          className="rounded-md border border-line bg-surface px-3 py-2 text-xs font-semibold text-fg hover:border-cyan-500 transition disabled:opacity-50 shrink-0"
+        >
+          Browse…
+        </button>
         <button
           onClick={() => void addAndIngest()}
           disabled={busy || !path.trim()}
@@ -487,6 +530,8 @@ export function SourcesModal({
           </ul>
         )}
       </div>
+        </>
+      )}
     </Modal>
   );
 }
