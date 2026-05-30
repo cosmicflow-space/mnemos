@@ -21,8 +21,8 @@
   }
   /* header */
   .hdr{position:absolute;top:26px;left:40px;display:flex;align-items:center;gap:14px;}
-  .logo{font-size:30px;font-weight:800;letter-spacing:.5px;
-    background:linear-gradient(90deg,#fbbf24,#22d3ee);-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .logo{display:inline-flex;align-items:center;gap:11px;font-size:30px;font-weight:800;letter-spacing:.2px;}
+  .logo .wm{display:inline-flex;align-items:center;}
   .tag{color:var(--muted);font-size:15px;font-weight:500;border-left:1px solid var(--line);padding-left:14px;}
   .tag b{color:#cdd6ea;font-weight:600;}
 
@@ -78,7 +78,16 @@
 </head>
 <body>
   <div class="hdr">
-    <span class="logo">🧠 Mnemos</span>
+    <span class="logo">
+      <svg width="34" height="34" viewBox="20 24 216 208" fill="none" style="flex:none">
+        <path d="M 88 44 L 40 44 L 40 212 L 88 212" stroke="#06b6d4" stroke-width="24" stroke-linecap="square" stroke-linejoin="miter"/>
+        <path d="M 168 44 L 216 44 L 216 212 L 168 212" stroke="#06b6d4" stroke-width="24" stroke-linecap="square" stroke-linejoin="miter"/>
+        <path d="M 104 84 L 104 200" stroke="#f59e0b" stroke-width="22" stroke-linecap="square"/>
+        <path d="M 104 172 L 152 172" stroke="#f59e0b" stroke-width="22" stroke-linecap="square"/>
+        <path d="M 152 84 L 152 172" stroke="#f59e0b" stroke-width="22" stroke-linecap="square"/>
+      </svg>
+      <span class="wm"><span style="color:#06b6d4">Mnem</span><svg width="24" height="24" viewBox="0 0 32 32" style="margin:0 1px"><circle cx="16" cy="16" r="9" fill="none" stroke="#06b6d4" stroke-width="3"/><circle cx="16" cy="16" r="3.2" fill="#f59e0b"/><g stroke="#06b6d4" stroke-width="2" stroke-linecap="round"><path d="M16 7V3"/><path d="M16 25v4"/><path d="M7 16H3"/><path d="M25 16h4"/></g><g fill="#f59e0b"><circle cx="16" cy="3" r="1.6"/><circle cx="16" cy="29" r="1.6"/><circle cx="3" cy="16" r="1.6"/><circle cx="29" cy="16" r="1.6"/></g></svg><span style="color:#f59e0b">s</span></span>
+    </span>
     <span class="tag">Personal RAG · <b>local-first</b> · drop a folder, ask a question</span>
   </div>
 
