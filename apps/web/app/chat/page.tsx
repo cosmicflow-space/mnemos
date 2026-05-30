@@ -828,12 +828,12 @@ export default function ChatPage() {
                   onClick={() => setActiveModal("sources")}
                   className="text-xs mt-2 text-cyan-300 hover:text-cyan-200 underline"
                 >
-                  + Add a folder of documents
+                  + Add a folder or file
                 </button>
               ) : (
                 <p className="text-xs mt-1 text-muted/70">
                   {sessions.length === 0
-                    ? "Tip: add a folder from Settings & Sources."
+                    ? "Tip: add a folder or file from Settings & Sources."
                     : "Or pick a past chat from the sidebar."}
                 </p>
               )}
