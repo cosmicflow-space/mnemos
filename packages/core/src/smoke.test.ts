@@ -27,6 +27,7 @@ import {
   getSourceByPath,
   removeSource,
   setSourceWatchInterval,
+  setSourcePaused,
   touchSourceScanned,
   listDueSources,
   tryClaimIngest,
@@ -141,6 +142,15 @@ describe("smoke: db + registry + crypto", () => {
     // Editing the cadence takes effect: manual → every 5 min.
     setSourceWatchInterval(db, def.id, 5 * 60_000);
     expect(getSourceByPath(db, "/tmp/default")?.watchIntervalMs).toBe(5 * 60_000);
+    expect(listDueSources(db, now).map((s) => s.path)).toContain("/tmp/default");
+
+    // A paused source is excluded from the watcher's due-list — even when its
+    // cadence makes it otherwise due. This is what stops the watcher from
+    // auto-resuming a user-paused source on the next tick.
+    setSourcePaused(db, def.id, true);
+    expect(getSourceByPath(db, "/tmp/default")?.paused).toBe(true);
+    expect(listDueSources(db, now).map((s) => s.path)).not.toContain("/tmp/default");
+    setSourcePaused(db, def.id, false);
     expect(listDueSources(db, now).map((s) => s.path)).toContain("/tmp/default");
 
     // url/mailbox kinds are never filesystem-rescanned.

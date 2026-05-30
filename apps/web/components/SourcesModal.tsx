@@ -12,6 +12,7 @@ type SourceRow = {
   watchIntervalMs?: number;
   lastScannedAt?: number | null;
   nextScanDueAt?: number | null;
+  paused?: boolean;
 };
 
 const MINUTE = 60_000;
@@ -66,6 +67,11 @@ export function SourcesModal({
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // Live per-source ingest state (running/paused/error + progress), polled.
+  const [ingest, setIngest] = useState<
+    Record<number, { state: string; filesDone: number; filesTotal: number }>
+  >({});
+  const [anyRunning, setAnyRunning] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -83,10 +89,68 @@ export function SourcesModal({
     void refresh();
   }, [refresh]);
 
+  // Poll ingest status so each row can show Pause/Resume + progress, and refresh
+  // the source list (chunk counts) when a run finishes.
+  useEffect(() => {
+    let alive = true;
+    let wasRunning = false;
+    const poll = async () => {
+      try {
+        const r = await fetch("/api/ingest/status", { cache: "no-store" });
+        if (!r.ok) return;
+        const d = (await r.json()) as {
+          sources: Array<{ sourceId: number; state: string; filesDone: number; filesTotal: number }>;
+          running: number;
+        };
+        if (!alive) return;
+        const map: Record<number, { state: string; filesDone: number; filesTotal: number }> = {};
+        for (const s of d.sources) {
+          map[s.sourceId] = { state: s.state, filesDone: s.filesDone, filesTotal: s.filesTotal };
+        }
+        setIngest(map);
+        setAnyRunning(d.running > 0);
+        if (wasRunning && d.running === 0) void refresh(); // run finished → counts changed
+        wasRunning = d.running > 0;
+      } catch {
+        /* transient */
+      }
+    };
+    void poll();
+    const id = setInterval(() => void poll(), 2000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [refresh]);
+
+  async function pauseSource(id: number) {
+    await fetch("/api/ingest/pause", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sourceId: id }),
+    });
+  }
+  async function resumeSource(id: number) {
+    await fetch("/api/ingest/resume", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sourceId: id }),
+    });
+  }
+  async function pauseAll() {
+    await fetch("/api/ingest/pause", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+  }
+
   // Ingest a path, draining the SSE progress stream. Unchanged files are skipped
   // server-side (incremental), so re-running is cheap. Throws on error.
-  async function ingestPath(p: string) {
+  // Returns true if the run was paused (terminal 'paused' phase) rather than completed.
+  async function ingestPath(p: string): Promise<boolean> {
     setStatus("Ingesting… (reading, chunking, embedding)");
+    let paused = false;
     const ingRes = await fetch("/api/ingest", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -113,13 +177,16 @@ export function SourcesModal({
           continue;
         }
         if (ev.phase === "error") throw new Error(ev.message ?? "ingest error");
-        if (typeof ev.files === "number" || typeof ev.chunks === "number") {
+        if (ev.phase === "paused") {
+          paused = true;
+        } else if (typeof ev.files === "number" || typeof ev.chunks === "number") {
           setStatus(`Ingesting… ${ev.files ?? 0} files, ${ev.chunks ?? 0} chunks`);
         } else if (ev.phase) {
           setStatus(`Ingesting… ${ev.phase}`);
         }
       }
     }
+    return paused;
   }
 
   async function addAndIngest() {
@@ -135,8 +202,8 @@ export function SourcesModal({
         body: JSON.stringify({ path: p, watchIntervalMs: addInterval }),
       });
       if (!addRes.ok) throw new Error((await addRes.text()) || "add failed");
-      await ingestPath(p);
-      setStatus("Done.");
+      const paused = await ingestPath(p);
+      setStatus(paused ? "Paused — resume any time from the list below." : "Done.");
       setPath("");
       await refresh();
       onChanged();
@@ -154,8 +221,12 @@ export function SourcesModal({
     setBusy(true);
     setErr(null);
     try {
-      await ingestPath(p);
-      setStatus("Done — re-scanned (unchanged files skipped).");
+      const paused = await ingestPath(p);
+      setStatus(
+        paused
+          ? "Paused — resume any time from the list below."
+          : "Done — re-scanned (unchanged files skipped).",
+      );
       await refresh();
       onChanged();
     } catch (e) {
@@ -253,8 +324,19 @@ export function SourcesModal({
       {err && <p className="text-xs text-red-400 mb-2">{err}</p>}
 
       <div className="mt-3 border-t border-line pt-3">
-        <div className="text-[11px] uppercase tracking-wider text-muted mb-2">
-          Registered ({sources.length})
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-[11px] uppercase tracking-wider text-muted">
+            Registered ({sources.length})
+          </div>
+          {anyRunning && (
+            <button
+              onClick={() => void pauseAll()}
+              className="text-[11px] text-amber-400 hover:text-amber-300 transition"
+              title="Pause all running ingestions (resume any time)"
+            >
+              ⏸ Pause all
+            </button>
+          )}
         </div>
         {sources.length === 0 ? (
           <p className="text-xs text-muted">No sources yet.</p>
@@ -286,6 +368,11 @@ export function SourcesModal({
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                  {ingest[s.id]?.state === "running" && (
+                    <span className="text-[11px] text-cyan-300 tabular-nums">
+                      {ingest[s.id]?.filesDone ?? 0}/{ingest[s.id]?.filesTotal || "?"}
+                    </span>
+                  )}
                   <select
                     value={s.watchIntervalMs ?? DAY}
                     onChange={(e) => void updateInterval(s.path, Number(e.target.value))}
@@ -299,18 +386,36 @@ export function SourcesModal({
                       </option>
                     ))}
                   </select>
-                  <button
-                    onClick={() => void rescan(s.path)}
-                    disabled={busy}
-                    className="text-[11px] text-cyan-400 hover:text-cyan-300 transition disabled:opacity-50"
-                    title="Re-ingest now — only changed/new files are re-embedded"
-                  >
-                    ↻ Re-scan
-                  </button>
+                  {ingest[s.id]?.state === "running" ? (
+                    <button
+                      onClick={() => void pauseSource(s.id)}
+                      className="text-[11px] text-amber-400 hover:text-amber-300 transition"
+                      title="Pause this ingestion (resume any time)"
+                    >
+                      ⏸ Pause
+                    </button>
+                  ) : ingest[s.id]?.state === "paused" || s.paused ? (
+                    <button
+                      onClick={() => void resumeSource(s.id)}
+                      className="text-[11px] text-cyan-400 hover:text-cyan-300 transition"
+                      title="Resume — continues where it left off (skips finished files)"
+                    >
+                      ▶ Resume
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => void rescan(s.path)}
+                      disabled={busy}
+                      className="text-[11px] text-cyan-400 hover:text-cyan-300 transition disabled:opacity-50"
+                      title="Re-ingest now — only changed/new files are re-embedded"
+                    >
+                      ↻ Re-scan
+                    </button>
+                  )}
                   <button
                     onClick={() => void remove(s.path)}
-                    disabled={busy}
-                    className="text-[11px] text-muted hover:text-red-400 transition"
+                    disabled={busy || ingest[s.id]?.state === "running"}
+                    className="text-[11px] text-muted hover:text-red-400 transition disabled:opacity-50"
                     title="Remove source and purge its chunks"
                   >
                     Remove

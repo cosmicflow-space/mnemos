@@ -3,6 +3,7 @@ import {
   applyIngestProgress,
   getIngestStatus,
   clearIngestStatus,
+  markIngestPaused,
 } from "./lib/ingest-status";
 
 describe("ingest-status registry", () => {
@@ -47,6 +48,16 @@ describe("ingest-status registry", () => {
     expect(snap.running).toBe(1);
     expect(snap.errored).toBe(1);
     expect(snap.overall).toBe("error"); // error outranks running
+  });
+
+  it("markIngestPaused flips a running source to paused, preserving progress", () => {
+    applyIngestProgress(1, "/tmp/s", { phase: "scan-complete", supportedFiles: 4 });
+    applyIngestProgress(1, "/tmp/s", { phase: "file-start", filePath: "a", current: 2, total: 4 });
+    markIngestPaused(1);
+    const s = getIngestStatus().sources.find((x) => x.sourceId === 1);
+    expect(s?.state).toBe("paused");
+    expect(s?.filesDone).toBe(1); // current 2 → 1 done, preserved across pause
+    expect(getIngestStatus().overall).toBe("paused");
   });
 
   it("clearIngestStatus removes a source's status", () => {

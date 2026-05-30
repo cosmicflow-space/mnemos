@@ -7,7 +7,8 @@ import {
   releaseIngest,
 } from "@mnemos/db";
 import { getDb, getRegistry, getDefaultEmbedder } from "@/lib/runtime";
-import { applyIngestProgress } from "@/lib/ingest-status";
+import { applyIngestProgress, markIngestPaused } from "@/lib/ingest-status";
+import { registerIngestController, unregisterIngestController } from "@/lib/ingest-control";
 import { resolve } from "node:path";
 import { homedir } from "node:os";
 
@@ -114,21 +115,36 @@ export async function POST(req: Request) {
         controller.close();
         return;
       }
+      // Register an abort handle so POST /api/ingest/pause can stop this run.
+      const abort = new AbortController();
+      registerIngestController(source.id, abort);
       try {
         await ingestFolder(db, registry, embedder, source, {
+          signal: abort.signal,
           onProgress: (progress) => {
+            // When paused mid-run, drop the trailing 'done' entirely (both to the
+            // client and the status registry) so the terminal event the client
+            // sees is 'paused' — not a misleading success — and the status entry
+            // survives as 'paused' (with progress) rather than clearing to idle.
+            if (abort.signal.aborted && progress.phase === "done") return;
             send(progress);
             applyIngestProgress(source.id, source.path, progress);
           },
           filters: parsed.data.filters,
         });
-        // Manual scan resets the auto re-scan cadence for this source.
-        touchSourceScanned(db, source.id);
+        if (abort.signal.aborted) {
+          markIngestPaused(source.id);
+          send({ phase: "paused" });
+        } else {
+          // Manual scan resets the auto re-scan cadence for this source.
+          touchSourceScanned(db, source.id);
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         send({ phase: "error", message });
         applyIngestProgress(source.id, source.path, { phase: "error", message });
       } finally {
+        unregisterIngestController(source.id, abort);
         releaseIngest(db, source.id, token);
         controller.close();
       }

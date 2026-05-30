@@ -103,6 +103,9 @@ function migrate(db: BetterSqliteDb): void {
   if (!srcCols.some((c) => c.name === "ingesting_since")) {
     db.exec("ALTER TABLE source ADD COLUMN ingesting_since INTEGER");
   }
+  if (!srcCols.some((c) => c.name === "paused")) {
+    db.exec("ALTER TABLE source ADD COLUMN paused INTEGER NOT NULL DEFAULT 0");
+  }
 
   // m2: backfill session.title from the session's first user message for
   // any pre-existing session that doesn't have a title yet. New sessions get
