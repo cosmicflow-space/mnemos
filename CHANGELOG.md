@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-29
+
+### Added
+- **Credential detection in the model dialog** (#3): the AI Model dialog scans well-known locations and offers one-click **"Use this"** to import a detected API key (env var or key file) into `~/.mnemos/.env`. Detected OAuth / subscription tokens (Claude Code, codex, gcloud ADC) are shown as **non-reusable status** with the vendor-ToS note and a "Get a key" link — never reused.
+- **Per-response transparency** (#4): each answer's footer gains **Sources** and **Data sent** links. *Sources* lists the files used with **copyable absolute paths** + modified date + chunk count; *Data sent* shows exactly which chunks were sent to the model — never raw files — framed local ("nothing left your machine") vs external. Works for live turns and reloaded history via the new `GET /api/chunks`. Pipeline now forwards full chunk text + `fileMtime`; `getChunksByIds` in the DB layer.
+
 ## [0.2.0] - 2026-05-29
 
 ### Added
