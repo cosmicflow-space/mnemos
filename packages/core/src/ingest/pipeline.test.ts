@@ -65,6 +65,26 @@ describe("ingest: per-file metadata chunk", () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
+  it("marks a load-error file 'failed', skips it on auto re-scan, re-attempts with retryFailed", async () => {
+    // Garbage bytes with a .xlsx extension → the xlsx loader (exceljs) throws.
+    writeFileSync(join(folder, "corrupt.xlsx"), "not a real spreadsheet");
+    const source = addSource(db, folder);
+
+    // 1st ingest: the load error is recorded.
+    const r1 = await ingestFolder(db, registry, fakeEmbedder, source);
+    expect(r1.errors.length).toBeGreaterThanOrEqual(1);
+
+    // 2nd ingest (auto — no retryFailed): the failed file is skipped, NOT
+    // re-parsed (zero new errors), so a background watcher won't re-burn on it.
+    const r2 = await ingestFolder(db, registry, fakeEmbedder, source);
+    expect(r2.errors).toHaveLength(0);
+    expect(r2.filesSkipped).toBeGreaterThanOrEqual(1);
+
+    // 3rd ingest (retryFailed — user-initiated): re-attempts it (errors again).
+    const r3 = await ingestFolder(db, registry, fakeEmbedder, source, { retryFailed: true });
+    expect(r3.errors.length).toBeGreaterThanOrEqual(1);
+  });
+
   it("writes exactly one metadata chunk (ordinal -1) carrying size + path", async () => {
     const body = "My phone number is 555-0142.\nContact me anytime.";
     writeFileSync(join(folder, "notes.txt"), body);

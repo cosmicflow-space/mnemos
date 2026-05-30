@@ -121,6 +121,8 @@ export async function POST(req: Request) {
       try {
         await ingestFolder(db, registry, embedder, source, {
           signal: abort.signal,
+          // User-initiated re-scan: re-attempt files previously marked failed.
+          retryFailed: true,
           onProgress: (progress) => {
             // When paused mid-run, drop the trailing 'done' entirely (both to the
             // client and the status registry) so the terminal event the client
