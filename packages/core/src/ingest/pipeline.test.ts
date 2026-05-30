@@ -241,6 +241,23 @@ describe("ingest: single-file sources", () => {
     expect(scan.securityExcluded.totalCount).toBe(2);
   });
 
+  it("hard-locks a benignly-named DIRECTORY symlink pointing at a credential dir", async () => {
+    // The picker can navigate (and a user can pick) a symlinked directory. If
+    // the scan walked the alias path instead of the real target, credential
+    // files inside (.ssh/config, known_hosts) would dodge the hard-lock and be
+    // ingested. The walk must canonicalize the root first.
+    const sshDir = join(tempDir, ".ssh");
+    mkdirSync(sshDir, { recursive: true });
+    writeFileSync(join(sshDir, "config"), "Host github.com");
+    writeFileSync(join(sshDir, "known_hosts"), "github.com ssh-ed25519 AAAA...");
+    const alias = join(tempDir, "my-notes"); // innocent-looking folder name
+    symlinkSync(sshDir, alias);
+
+    const scan = await scanFolder(alias);
+    expect(scan.files).toHaveLength(0);
+    expect(scan.securityExcluded.totalCount).toBe(2);
+  });
+
   it("ingests a single-file source into content + metadata chunks", async () => {
     const registry = loadBundledPlugins();
     const filePath = join(tempDir, "notes.md");
