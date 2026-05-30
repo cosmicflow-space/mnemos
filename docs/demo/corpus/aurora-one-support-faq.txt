@@ -1,0 +1,53 @@
+AURORA ONE — CUSTOMER SUPPORT FAQ
+Last updated: 2026-04-18
+
+------------------------------------------------------------
+WARRANTY
+------------------------------------------------------------
+The Aurora One carries a 2-year limited warranty from the date of purchase.
+The warranty covers manufacturing defects in the brew head, pump, and solar
+panel. It does NOT cover consumable parts (the piston seal and the portafilter
+gasket) or damage from descaling neglect.
+
+The piston seal is a consumable. Under normal use (one to three brews per day)
+it should be replaced every 12 months. Replacement seals ship free of charge
+for the first two years; after that they are $9 per pack of three.
+
+------------------------------------------------------------
+RETURNS
+------------------------------------------------------------
+Unopened units may be returned within 30 days for a full refund. Opened units
+that have been used may be returned within 30 days for store credit, provided
+the solar panel and brew head are undamaged. Return shipping is free within the
+continental US.
+
+------------------------------------------------------------
+TROUBLESHOOTING
+------------------------------------------------------------
+Q: The water won't reach brew temperature.
+A: Most heat-up complaints trace to panel angle. Aim the panel directly at the
+   sun — a 30-degree misalignment roughly doubles heat-up time. In full sun the
+   chamber reaches 92 C in about 4 minutes; in overcast light expect ~9 minutes.
+
+Q: The shot tastes weak or runs too fast.
+A: Grind finer. The Aurora One targets 9 bar; too coarse a grind drops pressure
+   and the shot runs in under 20 seconds instead of the intended 28.
+
+Q: Coffee leaks around the portafilter.
+A: The portafilter gasket has likely hardened. Replace it. Gaskets are a
+   consumable and are not covered under warranty.
+
+------------------------------------------------------------
+DESCALING (do this monthly)
+------------------------------------------------------------
+1. Dissolve one teaspoon of citric acid in the full 120 ml chamber.
+2. Run a blank brew cycle (no coffee) with the blind disc installed.
+3. Rinse twice with clean water.
+Skipping descaling is the single most common cause of pump failure and voids
+the warranty on the pump.
+
+------------------------------------------------------------
+CONTACT
+------------------------------------------------------------
+Support is handled entirely by email. We do not operate a phone line.
+Write to support@example-aurora.test and include your order number.
