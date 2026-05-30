@@ -39,6 +39,16 @@ describe("ingest-status registry", () => {
     expect(snap.overall).toBe("error");
   });
 
+  it("surfaces error in the rollup even while another source is running", () => {
+    applyIngestProgress(1, "/tmp/s1", { phase: "scan-start" }); // running
+    applyIngestProgress(2, "/tmp/s2", { phase: "scan-start" });
+    applyIngestProgress(2, "/tmp/s2", { phase: "error", message: "x" });
+    const snap = getIngestStatus();
+    expect(snap.running).toBe(1);
+    expect(snap.errored).toBe(1);
+    expect(snap.overall).toBe("error"); // error outranks running
+  });
+
   it("clearIngestStatus removes a source's status", () => {
     applyIngestProgress(1, "/tmp/s", { phase: "scan-start" });
     expect(getIngestStatus().sources.some((s) => s.sourceId === 1)).toBe(true);

@@ -127,12 +127,25 @@ export function clearIngestStatus(sourceId: number): void {
   registry.delete(sourceId);
 }
 
+// Matches the DB ingest-lease stale window (STALE_INGEST_MS). Generous on
+// purpose: a slow single-file run (e.g. Whisper on one big audio file) may emit
+// no intra-file progress for a while, so we must not drop a legitimately-active
+// run. It only evicts a ghost left by a process that died mid-run without
+// emitting `done`/`error`.
+const STALE_MS = 30 * 60 * 1000;
+
 export function getIngestStatus(): IngestStatusSnapshot {
+  const cutoff = now() - STALE_MS;
+  for (const [id, s] of registry) {
+    if (s.updatedAt < cutoff) registry.delete(id);
+  }
   const sources = [...registry.values()];
   const running = sources.filter((s) => s.state === "running").length;
   const paused = sources.filter((s) => s.state === "paused").length;
   const errored = sources.filter((s) => s.state === "error").length;
+  // Error first: a failure must surface on the launcher even while another
+  // source is still ingesting — otherwise an active run masks a real error.
   const overall: IngestState =
-    running > 0 ? "running" : paused > 0 ? "paused" : errored > 0 ? "error" : "idle";
+    errored > 0 ? "error" : running > 0 ? "running" : paused > 0 ? "paused" : "idle";
   return { sources, overall, running, paused, errored };
 }
