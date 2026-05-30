@@ -1,4 +1,4 @@
-export type SourceKind = "folder" | "url" | "mailbox";
+export type SourceKind = "folder" | "file" | "url" | "mailbox";
 
 export type Source = {
   id: number;

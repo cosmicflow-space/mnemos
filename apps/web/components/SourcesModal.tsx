@@ -152,9 +152,10 @@ export function SourcesModal({
   return (
     <Modal title="Sources" onClose={onClose} maxWidth="max-w-xl">
       <p className="text-xs text-muted mb-3 leading-relaxed">
-        Mnemos is read-only over the folders you register here. Add a folder, and
-        its files are chunked, embedded, and made searchable for grounded,
-        cited answers.
+        Mnemos is read-only over what you register here. Add a <strong>folder</strong>{" "}
+        (all its files) or a <strong>single file</strong> — it&apos;s chunked, embedded,
+        and made searchable for grounded, cited answers. Paste an absolute path; Mnemos
+        detects whether it&apos;s a file or a folder.
       </p>
 
       <div className="flex gap-2 mb-2">
@@ -164,7 +165,7 @@ export function SourcesModal({
           onKeyDown={(e) => {
             if (e.key === "Enter") void addAndIngest();
           }}
-          placeholder="/absolute/path/to/folder"
+          placeholder="/absolute/path/to/folder-or-file.pdf"
           disabled={busy}
           className="flex-1 bg-surface border border-line rounded-md px-3 py-2 text-sm text-fg font-mono focus:outline-none focus:border-cyan-500 disabled:opacity-50"
         />
@@ -194,11 +195,16 @@ export function SourcesModal({
               >
                 <div className="min-w-0">
                   <div className="text-xs font-mono text-fg truncate" title={s.path}>
+                    <span className="mr-1.5 opacity-70" aria-hidden>
+                      {s.kind === "file" ? "▤" : "▦"}
+                    </span>
                     {s.path}
                   </div>
                   <div className="text-[11px] text-muted">
-                    {s.chunkCount} chunks
-                    {typeof s.fileCount === "number" ? ` · ${s.fileCount} files` : ""}
+                    {s.kind === "file" ? "file" : "folder"} · {s.chunkCount} chunks
+                    {s.kind !== "file" && typeof s.fileCount === "number"
+                      ? ` · ${s.fileCount} files`
+                      : ""}
                   </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">

@@ -15,15 +15,17 @@
  *     `largeFiles` so the UI can prompt "10 files over 10 MB, include all?"
  */
 
-import { readdir, stat } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { readdir, stat, realpath } from "node:fs/promises";
+import type { Stats } from "node:fs";
+import { join, resolve, basename } from "node:path";
 import {
   classifyFile,
   type Classification,
   type FileCategory,
 } from "./classify";
 import {
-  checkExclusion,
+  checkSecurityExclusion,
+  checkSoftExclusion,
   LARGE_FILE_BYTES,
   type ExclusionReason,
   type ExclusionVerdict,
@@ -129,6 +131,62 @@ export async function scanFolder(
   let largeFilesCount = 0;
   let largeFilesBytes = 0;
 
+  // Process one file: security/soft-exclusion, classification, large-file tally,
+  // then push into `files`. Shared by the directory walk and the single-file
+  // root branch. For a single explicitly-registered file the user's choice is
+  // deliberate, so `singleFile` skips SOFT exclusions (logs, lockfiles, hidden)
+  // — but the SECURITY hard-lock (.env, *.pem, id_rsa*, .aws/, ...) always
+  // applies. The hard-lock is checked against `securityPath` (the absolute,
+  // symlink-resolved path) so credential files are caught by parent directory
+  // even when relativePath is a bare basename, and a benignly-named symlink to a
+  // secret can't dodge it.
+  function considerFile(
+    full: string,
+    relativePath: string,
+    s: Stats,
+    singleFile: boolean,
+    securityPath: string = full,
+  ): void {
+    const security = checkSecurityExclusion(securityPath);
+    if (security) {
+      securityExcludedRaw.push({
+        relativePath,
+        sizeBytes: s.size,
+        reason: security.reason,
+        label: security.label,
+      });
+      return;
+    }
+    const softExclusion = singleFile ? undefined : checkSoftExclusion(relativePath);
+    if (softExclusion) {
+      defaultExcludedRaw.push({
+        relativePath,
+        sizeBytes: s.size,
+        reason: softExclusion.reason,
+        label: softExclusion.label,
+      });
+    }
+
+    const classification = classifyFile(full);
+
+    if (s.size > LARGE_FILE_BYTES) {
+      largeFilesCount += 1;
+      largeFilesBytes += s.size;
+      if (largeFilesRaw.length < SAMPLE_CAP) {
+        largeFilesRaw.push({ relativePath, sizeBytes: s.size, classification });
+      }
+    }
+
+    files.push({
+      absolutePath: full,
+      relativePath,
+      sizeBytes: s.size,
+      mtime: s.mtimeMs,
+      classification,
+      ...(softExclusion ? { exclusion: softExclusion } : {}),
+    });
+  }
+
   async function walk(dir: string, depth: number): Promise<void> {
     if (depth > maxDepth) return;
     if (files.length >= maxFiles) return;
@@ -172,56 +230,29 @@ export async function scanFolder(
         continue;
       }
 
-      const relativePath = full.slice(absoluteRoot.length + 1);
-
-      // 1. Exclusion check (security + default-noise).
-      // Security-tier files are tracked in summary but NEVER reach files[]
-      // — they can't be opted back in. Soft-excluded files DO go into files[]
-      // tagged with their exclusion verdict so the pipeline can re-include
-      // them based on user overrides.
-      const exclusion = checkExclusion(relativePath);
-      if (exclusion?.hardLocked) {
-        securityExcludedRaw.push({
-          relativePath,
-          sizeBytes: s.size,
-          reason: exclusion.reason,
-          label: exclusion.label,
-        });
-        continue;
-      }
-      if (exclusion) {
-        defaultExcludedRaw.push({
-          relativePath,
-          sizeBytes: s.size,
-          reason: exclusion.reason,
-          label: exclusion.label,
-        });
-      }
-
-      // 2. Classification (loader / category)
-      const classification = classifyFile(full);
-
-      // 3. Large-file flag — INCLUDE the file, but tally separately
-      if (s.size > LARGE_FILE_BYTES) {
-        largeFilesCount += 1;
-        largeFilesBytes += s.size;
-        if (largeFilesRaw.length < SAMPLE_CAP) {
-          largeFilesRaw.push({ relativePath, sizeBytes: s.size, classification });
-        }
-      }
-
-      files.push({
-        absolutePath: full,
-        relativePath,
-        sizeBytes: s.size,
-        mtime: s.mtimeMs,
-        classification,
-        ...(exclusion ? { exclusion } : {}),
-      });
+      // relativePath is computed relative to the scan root (a directory here).
+      considerFile(full, full.slice(absoluteRoot.length + 1), s, false);
     }
   }
 
-  await walk(absoluteRoot, 0);
+  // A source can be a single file, not just a directory. Stat the root once to
+  // decide: a file is scanned on its own (relativePath = its basename); a
+  // directory is walked recursively. A missing/unreadable root yields an empty
+  // result (walk's readdir fails silently), matching prior behavior.
+  let rootStat: Stats | undefined;
+  try {
+    rootStat = await stat(absoluteRoot);
+  } catch {
+    rootStat = undefined;
+  }
+  if (rootStat?.isFile()) {
+    // Resolve symlinks so the hard-lock sees the true target's path — a benign
+    // link name must not let a secret (e.g. a link to ~/.env) slip in.
+    const realRoot = await realpath(absoluteRoot).catch(() => absoluteRoot);
+    considerFile(absoluteRoot, basename(absoluteRoot), rootStat, true, realRoot);
+  } else {
+    await walk(absoluteRoot, 0);
+  }
 
   return {
     rootPath: absoluteRoot,

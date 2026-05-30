@@ -73,19 +73,36 @@ export type ExclusionVerdict = {
   hardLocked: boolean;
 } | null;
 
-/** Check whether a file path matches any exclude rule. */
-export function checkExclusion(relativePath: string): ExclusionVerdict {
+/** Security (hard-lock) tier only. Pass the ABSOLUTE, symlink-resolved path:
+ * the patterns are `/`-anchored, so checking the full path catches credential
+ * files by parent directory (`.aws/`, `.ssh/`) even when the relative path is
+ * just a basename — e.g. a single file registered as `~/.aws/config`, where the
+ * basename "config" carries no signal but the path does. */
+export function checkSecurityExclusion(path: string): ExclusionVerdict {
   for (const { pattern, reason, label } of SECURITY_PATTERNS) {
-    if (pattern.test(relativePath)) {
+    if (pattern.test(path)) {
       return { reason, label, hardLocked: true };
     }
   }
+  return null;
+}
+
+/** Soft (default-noise) tier only. Pass the path you want noise-matched —
+ * typically the source-relative path so project-relative names match. */
+export function checkSoftExclusion(path: string): ExclusionVerdict {
   for (const { pattern, reason, label } of DEFAULT_EXCLUDE_PATTERNS) {
-    if (pattern.test(relativePath)) {
+    if (pattern.test(path)) {
       return { reason, label, hardLocked: false };
     }
   }
   return null;
+}
+
+/** Check whether a file path matches any exclude rule (security then soft).
+ * Operates on a single path — callers wanting the stronger absolute-path
+ * security check should use checkSecurityExclusion directly. */
+export function checkExclusion(relativePath: string): ExclusionVerdict {
+  return checkSecurityExclusion(relativePath) ?? checkSoftExclusion(relativePath);
 }
 
 /** A user-facing flag set indicating which default-noise tiers to opt into. */

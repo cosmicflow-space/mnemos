@@ -12,13 +12,13 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, utimesSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, utimesSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { openDb, type MnemosDb, addSource } from "@mnemos/db";
 import type { EmbeddingProvider } from "@mnemos/plugin-sdk";
-import { loadBundledPlugins, ingestFolder, MNEMOS_EMBEDDING_DIM } from "../index";
+import { loadBundledPlugins, ingestFolder, scanFolder, MNEMOS_EMBEDDING_DIM } from "../index";
 
 // Deterministic constant vector — retrieval ranking is irrelevant here; we only
 // assert chunk rows exist. Unit-norm so sqlite-vec is happy.
@@ -145,5 +145,105 @@ describe("ingest: per-file metadata chunk", () => {
     expect(meta).toHaveLength(1);
     expect(meta[0]?.text).toContain("empty.txt");
     expect(meta[0]?.text).toContain("0 bytes");
+  });
+});
+
+describe("ingest: single-file sources", () => {
+  let tempDir: string;
+  let db: MnemosDb;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "mnemos-file-"));
+    db = openDb({ path: join(tempDir, "test.db") });
+  });
+
+  afterEach(() => {
+    db.close();
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it("scanFolder treats a single file as one scanned file (relativePath = basename)", async () => {
+    const filePath = join(tempDir, "report.txt");
+    writeFileSync(filePath, "quarterly numbers");
+
+    const scan = await scanFolder(filePath);
+    expect(scan.files).toHaveLength(1);
+    expect(scan.files[0]?.relativePath).toBe("report.txt");
+    expect(scan.files[0]?.absolutePath).toBe(filePath);
+    expect(scan.files[0]?.classification.category).toBe("supported");
+  });
+
+  it("scanFolder still security-excludes a hard-locked single file (.env)", async () => {
+    const filePath = join(tempDir, ".env");
+    writeFileSync(filePath, "ANTHROPIC_API_KEY=sk-should-never-be-indexed");
+
+    const scan = await scanFolder(filePath);
+    // Security hard-lock applies even when the file is explicitly chosen.
+    expect(scan.files).toHaveLength(0);
+    expect(scan.securityExcluded.totalCount).toBe(1);
+  });
+
+  it("hard-locks a single file by PARENT directory (e.g. ~/.aws/config)", async () => {
+    // basename "config" carries no signal — only the .aws/ parent does. The
+    // hard-lock must check the absolute path, not just the basename.
+    const awsDir = join(tempDir, ".aws");
+    mkdirSync(awsDir, { recursive: true });
+    const filePath = join(awsDir, "config");
+    writeFileSync(filePath, "[default]\nregion=us-east-1\naws_secret_access_key=...");
+
+    const scan = await scanFolder(filePath);
+    expect(scan.files).toHaveLength(0);
+    expect(scan.securityExcluded.totalCount).toBe(1);
+  });
+
+  it("hard-locks a benignly-named symlink that points at a secret", async () => {
+    const secret = join(tempDir, ".env");
+    writeFileSync(secret, "OPENAI_API_KEY=sk-secret");
+    const link = join(tempDir, "harmless-notes.txt");
+    symlinkSync(secret, link);
+
+    // The link name looks innocent; resolving it reveals the .env target.
+    const scan = await scanFolder(link);
+    expect(scan.files).toHaveLength(0);
+    expect(scan.securityExcluded.totalCount).toBe(1);
+  });
+
+  it("hard-locks files when a credential directory is registered as a FOLDER", async () => {
+    const awsDir = join(tempDir, ".aws");
+    mkdirSync(awsDir, { recursive: true });
+    writeFileSync(join(awsDir, "config"), "region=us-east-1");
+    writeFileSync(join(awsDir, "notes.txt"), "just notes");
+
+    // Registering the .aws dir itself as a source root must not strip the
+    // .aws/ context — every file under it is hard-locked.
+    const scan = await scanFolder(awsDir);
+    expect(scan.files).toHaveLength(0);
+    expect(scan.securityExcluded.totalCount).toBe(2);
+  });
+
+  it("ingests a single-file source into content + metadata chunks", async () => {
+    const registry = loadBundledPlugins();
+    const filePath = join(tempDir, "notes.md");
+    writeFileSync(filePath, "# Notes\n\nThe launch code is alpha-seven.");
+
+    const source = addSource(db, filePath, "file");
+    expect(source.kind).toBe("file");
+
+    const result = await ingestFolder(db, registry, fakeEmbedder, source);
+    expect(result.filesProcessed).toBe(1);
+
+    const chunks = db
+      .prepare(
+        `SELECT c.ordinal AS ordinal, c.text AS text
+           FROM chunk c JOIN file f ON f.id = c.file_id
+          WHERE f.source_id = ? ORDER BY c.ordinal`,
+      )
+      .all(source.id) as Array<{ ordinal: number; text: string }>;
+
+    // At least one content chunk (ordinal >= 0) plus the metadata chunk (-1).
+    expect(chunks.some((c) => c.ordinal >= 0)).toBe(true);
+    const meta = chunks.filter((c) => c.ordinal === -1);
+    expect(meta).toHaveLength(1);
+    expect(meta[0]?.text).toContain("notes.md");
   });
 });
