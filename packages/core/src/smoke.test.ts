@@ -19,6 +19,9 @@ import {
   openDb,
   type MnemosDb,
   addSource,
+  upsertFile,
+  insertChunk,
+  getContentChunksForFile,
   listSources,
   getSourceByPath,
   removeSource,
@@ -388,5 +391,63 @@ describe("smoke: provider structure (no live API calls)", () => {
     const provider = getEmbeddingProvider(registry, "embed-local");
     expect(provider.dimensions).toBe(384);
     expect(provider.credentialSchema.type).toBe("embedLocal");
+  });
+});
+
+// Regression guard for the "metadata chunk decoy" bug: a per-file metadata chunk
+// (ordinal -1) is a strong lexical match for filename-mentioning questions but
+// holds no answer, so retrieval could surface it while burying the file's actual
+// content. getContentChunksForFile is how runQuery expands a metadata hit back
+// into the file's content. See packages/core/src/query/runQuery.ts (step 2b).
+describe("co-retrieval: getContentChunksForFile", () => {
+  let tempDir: string;
+  let db: MnemosDb;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "mnemos-coretrieval-"));
+    db = openDb({ path: join(tempDir, "test.db") });
+  });
+  afterEach(() => {
+    db.close();
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  function seedFile(path: string, contentOrdinals: number[]): number {
+    const src = addSource(db, `/tmp/${path}-src`);
+    const { fileId } = upsertFile(db, {
+      sourceId: src.id,
+      path,
+      contentHash: `hash-${path}`,
+      sizeBytes: 100,
+      mtime: 1,
+      loader: "plaintext",
+    });
+    const vec = new Array(384).fill(0);
+    // The synthetic metadata chunk (ordinal -1) plus content chunks (0..n).
+    insertChunk(db, { fileId, ordinal: -1, text: `metadata for ${path}`, startOffset: 0, endOffset: 0, embedding: vec });
+    for (const o of contentOrdinals) {
+      insertChunk(db, { fileId, ordinal: o, text: `content ${o}`, startOffset: o, endOffset: o + 1, embedding: vec });
+    }
+    return fileId;
+  }
+
+  it("returns content chunks (ordinal >= 0) in document order, excluding the metadata chunk", () => {
+    const fileId = seedFile("vin.txt", [0, 1, 2]);
+    const got = getContentChunksForFile(db, fileId, 5, 0.42);
+    expect(got.map((c) => c.ordinal)).toEqual([0, 1, 2]); // no -1, in order
+    expect(got.map((c) => c.text)).toEqual(["content 0", "content 1", "content 2"]);
+    expect(got.every((c) => c.distance === 0.42)).toBe(true); // inherited distance stamped
+  });
+
+  it("caps expansion at the requested limit", () => {
+    const fileId = seedFile("big.md", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    const got = getContentChunksForFile(db, fileId, 3, 0.5);
+    expect(got).toHaveLength(3);
+    expect(got.map((c) => c.ordinal)).toEqual([0, 1, 2]);
+  });
+
+  it("returns nothing for a metadata-only file (no content chunks)", () => {
+    const fileId = seedFile("empty.txt", []);
+    expect(getContentChunksForFile(db, fileId, 3, 0.1)).toHaveLength(0);
   });
 });

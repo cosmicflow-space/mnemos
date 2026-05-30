@@ -21,6 +21,7 @@ import {
   getRecentMessages,
   searchVerifiedAnswers,
   getChunksByIds,
+  getContentChunksForFile,
   type MnemosDb,
   type SearchHit,
 } from "@mnemos/db";
@@ -119,6 +120,31 @@ export async function* runQuery(
     };
     return;
   }
+
+  // 2b. Metadata-chunk expansion. The synthetic per-file metadata chunk
+  // (ordinal -1: path/size/mtime/type) is a strong lexical match for questions
+  // that name a file ("VIN in ipostal?") but holds no answer — so it can
+  // out-rank and crowd out its own file's content, especially in a large index.
+  // When a file surfaced only via its metadata chunk, pull in that file's
+  // content so "found the file" implies "can answer about its contents".
+  const filesWithContent = new Set(
+    hits.filter((h) => h.ordinal >= 0).map((h) => h.fileId),
+  );
+  const seenChunks = new Set(hits.map((h) => h.chunkId));
+  const PER_FILE_CONTENT = 3;
+  const maxInjected = topK;
+  const injected: SearchHit[] = [];
+  for (const h of hits) {
+    if (injected.length >= maxInjected) break;
+    if (h.ordinal !== -1 || filesWithContent.has(h.fileId)) continue;
+    for (const c of getContentChunksForFile(db, h.fileId, PER_FILE_CONTENT, h.distance)) {
+      if (seenChunks.has(c.chunkId)) continue;
+      seenChunks.add(c.chunkId);
+      injected.push(c);
+      if (injected.length >= maxInjected) break;
+    }
+  }
+  if (injected.length > 0) hits = [...hits, ...injected];
 
   // Emit citations early so the UI can show "looking at 8 chunks..." before
   // the model starts producing text. UX win when the model is slow to first token.
