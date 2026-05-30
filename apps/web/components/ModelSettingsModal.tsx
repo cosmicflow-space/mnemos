@@ -1,7 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal } from "@/components/Modal";
+
+/** A credential the scanner found on disk. Values are never returned by the
+ * scan — only locations + an `importable` flag. OAuth/subscription tokens are
+ * importable: false (vendor ToS prohibits third-party reuse). */
+type DetectedCredential = {
+  provider: string;
+  source: "env" | "rc-file" | "json-file" | "reachable";
+  location: string;
+  importable: boolean;
+  note?: string;
+};
 
 type ModelInfo = {
   id: string;
@@ -66,12 +77,78 @@ export function ModelSettingsModal({
   const [selModel, setSelModel] = useState(initial);
   const [apiKey, setApiKey] = useState("");
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [scan, setScan] = useState<DetectedCredential[]>([]);
+
+  // Scan well-known credential locations once so the dialog can offer to reuse a
+  // key the user already has (and surface — but never reuse — OAuth tokens).
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const r = await fetch("/api/credentials/scan", { cache: "no-store" });
+        if (r.ok) {
+          const d = (await r.json()) as { found: DetectedCredential[] };
+          if (!cancelled) setScan(d.found);
+        }
+      } catch {
+        // silent — detection is a convenience, not required
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const info = providers.find((p) => p.id === provider);
   const needsKey = Boolean(info?.needsKey && !info?.configured);
   const models = info?.models ?? [];
   const docsUrl = extractUrl(info?.credentialDescription ?? null);
+
+  // A detected, importable API key for this provider (env var or key file).
+  const keyHit = scan.find((h) => h.provider === provider && h.importable);
+  // A detected but non-reusable credential (OAuth subscription token / ADC).
+  // Vendor ToS prohibits third-party reuse, so we show it as status only.
+  const blockedHit = scan.find(
+    (h) =>
+      !h.importable &&
+      ((provider === "anthropic" && h.provider === "anthropic-oauth") ||
+        (provider === "openai" && h.provider === "codex-oauth") ||
+        (provider === "gemini" && h.provider === "gemini")),
+  );
+
+  async function useDetected(hit: DetectedCredential) {
+    if (importing) return;
+    setImporting(true);
+    setErr(null);
+    try {
+      const r = await fetch("/api/credentials/import", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ provider, source: hit.source, location: hit.location }),
+      });
+      // Parse defensively — a non-JSON error body (proxy/HTML 500) shouldn't
+      // surface as a confusing "Unexpected token" instead of the real failure.
+      const text = await r.text();
+      let j: { ok?: boolean; error?: string; message?: string } = {};
+      try {
+        j = text ? JSON.parse(text) : {};
+      } catch {
+        /* non-JSON body — fall back to raw text below */
+      }
+      if (!r.ok || !j.ok) {
+        throw new Error(j.message ?? j.error ?? (text || `HTTP ${r.status}`));
+      }
+      onProvidersChanged();
+      onApply(provider, selModel);
+      onClose();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setImporting(false);
+    }
+  }
 
   function pickProvider(id: string) {
     setProvider(id);
@@ -157,9 +234,33 @@ export function ModelSettingsModal({
 
       {needsKey && (
         <div className="mb-4">
+          {keyHit && (
+            <div className="mb-3 rounded-md border border-cyan-700/40 bg-cyan-500/10 px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-fg min-w-0">
+                  🔑 Key detected{" "}
+                  <span className="font-mono text-muted">{keyHit.location}</span>
+                </span>
+                <button
+                  onClick={() => void useDetected(keyHit)}
+                  disabled={importing}
+                  className="rounded-md bg-cyan-500 px-3 py-1 text-xs font-semibold text-gray-900 hover:bg-cyan-400 transition disabled:opacity-50 shrink-0"
+                >
+                  {importing ? "Using…" : "Use this"}
+                </button>
+              </div>
+            </div>
+          )}
+          {blockedHit && (
+            <div className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-fg/90 leading-relaxed">
+              ⚠{" "}
+              {blockedHit.note ??
+                "An OAuth/subscription token was found but can't be reused — create an API key instead."}
+            </div>
+          )}
           <div className="flex items-center justify-between mb-1">
             <label className="text-xs text-muted" htmlFor="api-key-field">
-              {info?.credentialLabel ?? "API Key"}
+              {keyHit ? "Or paste a key" : (info?.credentialLabel ?? "API Key")}
             </label>
             {docsUrl && (
               <a
