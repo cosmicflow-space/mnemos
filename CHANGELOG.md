@@ -215,3 +215,15 @@ Roughly 90 seconds from clone to first answer on a typical laptop.
 - First end-to-end `pnpm install` + `pnpm dev` verification — Day 5
 - Docker build verification + 90-second demo recording — Day 6
 - Publish to GitHub — Day 7
+
+<!-- Version links: each header above is a GitHub compare view of that release's diff.
+     [Unreleased] is a live diff of everything on `main` since the latest tag. -->
+[Unreleased]: https://github.com/cosmicflow-space/mnemos/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.5.0...v0.8.0
+[0.5.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.1.0-rc.1...v0.2.0
+[0.1.0-rc.1]: https://github.com/cosmicflow-space/mnemos/releases/tag/v0.1.0-rc.1
