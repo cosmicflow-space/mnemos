@@ -16,6 +16,8 @@ const nextConfig = {
     "@mnemos/plugin-llama-cpp",
     "@mnemos/plugin-embed-local",
     "@mnemos/plugin-loader-pdf",
+    "@mnemos/plugin-loader-docx",
+    "@mnemos/plugin-loader-xlsx",
     "@mnemos/plugin-loader-markdown",
     "@mnemos/plugin-loader-plaintext",
     "@mnemos/plugin-loader-web",
@@ -36,6 +38,8 @@ const nextConfig = {
     "@xenova/transformers",
     "onnxruntime-node",
     "pdf-parse",
+    "mammoth",
+    "xlsx",
     "sharp",
   ],
   webpack: (config, { isServer }) => {
@@ -57,6 +61,8 @@ const nextConfig = {
         "sharp",
         "@xenova/transformers",
         "pdf-parse",
+        "mammoth",
+        "xlsx",
       ];
       const existing = Array.isArray(config.externals) ? config.externals : [config.externals].filter(Boolean);
       config.externals = [
