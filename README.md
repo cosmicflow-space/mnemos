@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node: 22+](https://img.shields.io/badge/Node-22%2B-339933.svg)](https://nodejs.org/)
-[![Status: Pre-release](https://img.shields.io/badge/Status-v0.1--rc-orange.svg)](CHANGELOG.md)
+[![Status: v0.9](https://img.shields.io/badge/Status-v0.9-cyan.svg)](CHANGELOG.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-cyan.svg)](CONTRIBUTING.md)
 
 </div>
@@ -35,13 +35,13 @@ node setup.mjs
 
 That's it. The installer detects your OS (macOS, Linux, Windows), checks what's installed, asks before fixing anything, walks you through provider configuration, and starts the dev server. The install logic lives in [`INSTALL.md`](INSTALL.md) — readable as docs, executable by `setup.mjs`, no per-OS shell scripts to drift.
 
-Then open <http://127.0.0.1:3030>:
+Then open <http://127.0.0.1:3030> — it's a single chat page. Everything lives behind the **settings launcher** (the glowing avatar, bottom-left):
 
-1. **Configure an agent** — pick Claude, GPT, or Ollama (we auto-detect existing keys on disk).
-2. **Add a source** — drop a folder path. Mnemos scans + classifies + ingests with local BGE-small embeddings (no API key for ingest).
-3. **Chat** — ask a question, see streamed answers with inline citations to the exact source chunks.
+1. **AI Model** — pick Claude, GPT, or Ollama (we auto-detect existing keys on disk). Local Ollama is the default and needs no key.
+2. **Sources** — paste a folder *or single-file* path. Mnemos scans, classifies, and ingests with local BGE-small embeddings (no API key for ingest).
+3. **Ask** — type a question; answers stream in with inline citations to the exact source chunks. (No sources yet? It still answers from the model's own knowledge, clearly labelled.)
 
-End-to-end in under 90 seconds on a typical laptop.
+End-to-end in under 90 seconds on a typical laptop. Then, optionally, pair **📲 Telegram** to ask from your phone.
 
 Prefer Docker? `docker compose up -d`. Prefer manual? `pnpm install && pnpm dev`.
 
@@ -69,6 +69,19 @@ Prefer Docker? `docker compose up -d`. Prefer manual? `pnpm install && pnpm dev`
     </td>
   </tr>
 </table>
+
+## Ask from your phone (Telegram)
+
+Your personal RAG runs on your computer — but you don't have to be *at* your computer to use it. Pair a private Telegram bot and ask questions from anywhere:
+
+- **No public server, nothing exposed.** Mnemos *reaches out* to Telegram (long polling), so it works behind your home NAT with no port-forwarding, no tunnel, no public IP — the same outbound-only posture as everything else.
+- **Private by default.** The bot answers **only you**. You pair your phone once with a single-use code from the UI; any other chat is ignored. Direct messages only — never groups.
+- **Your documents stay home.** Only the question and answer pass through Telegram (and whichever model you've configured). Files never leave the machine.
+- **Uses your configured model.** Local Ollama by default, or Claude/GPT/Gemini if you've set one — the bot mirrors your choice.
+
+Set it up in **Settings → 📲 Telegram** (there's a built-in [step-by-step guide](apps/web/app/telegram-guide/page.tsx) for anyone new to Telegram bots). The catch, by design: your computer must be awake with Mnemos running for the bot to reply.
+
+> WhatsApp is on the radar but not yet supported — there's no free, local-first-friendly bot API for it the way Telegram offers.
 
 ## How private do you want it? Three tiers
 
@@ -119,7 +132,11 @@ Train a small open model on your own corpus. Stays on your machine. Becomes spec
 - **Auditable**: Every `query` event is recorded with chat-provider, model, retrieved chunk IDs, prompt-size estimate, and latency. Every `ingest` event is recorded without a `provider` field (ingest is locked to the local embedder in v0.1). In Tier 1 (local default), `query` events show `provider: "ollama"` (or another local provider) — no external-provider call is ever recorded. Visible in the UI. (v0.2 goal: capture exact request payloads + provider-reported token counts for external calls; add explicit `external: boolean` flag.)
 - **Safe defaults**: Auto-excludes credentials (`.env`, `*.pem`, `id_rsa*`) and noise (logs, lockfiles, minified bundles). Security excludes are hard-locked even against explicit user opt-in.
 - **Citations**: Every answer references the source files, last-modified date, file type, and exact byte range.
-- **Incremental**: Re-ingest skips unchanged files via content-hash comparison; partial-state ingests recover automatically via the `ingest_status` invariant.
+- **Folders or single files**: Register a whole folder *or* one individual file. Mnemos auto-detects which — and the credential hard-lock holds either way (a file under `~/.aws/`, or a symlink to `~/.env`, is still refused).
+- **Per-file metadata**: Each file carries a retrievable metadata chunk, so "how big is X" / "when was X modified" answer reliably even when no content chunk ranks high.
+- **Incremental & self-updating**: Re-ingest skips unchanged files via content-hash comparison; partial-state ingests recover automatically via the `ingest_status` invariant. Sources can **auto re-scan** on a per-source schedule (manual by default — static archives cost zero background CPU; point a changing folder at a faster cadence from a dropdown). A concurrency-safe lease prevents a manual and a background scan from ever colliding.
+- **Verified-answer memory**: Mark a correct answer as verified, and a closely-matching future question gets that confirmed answer injected into the prompt — so even a small local model nails facts it would otherwise fumble. Strict semantic matching, with lazy invalidation when the underlying files change. ([design notes](docs/design-notes/verified-answer-memory.md))
+- **Ask from anywhere**: Pair a private Telegram bot and query your RAG from your phone — outbound-only, default-deny, your files never leave the machine (see [above](#ask-from-your-phone-telegram)).
 
 ## What Mnemos is not
 
@@ -130,7 +147,7 @@ Train a small open model on your own corpus. Stays on your machine. Becomes spec
 
 ## Status
 
-Pre-release. v0.1 is being built. Track progress in [CHANGELOG.md](CHANGELOG.md).
+Active development — **v0.9**. The core (local-first RAG, audit, atomic ingestion, cross-OS install) has been stable since v0.1; releases since then have added single-file sources, per-file metadata, automatic re-scan, verified-answer memory, and the Telegram remote channel. Track every release in [CHANGELOG.md](CHANGELOG.md).
 
 ## Architecture
 
@@ -174,27 +191,36 @@ Mnemos uses a **single-user trust model** — one person on one machine, not a m
 
 ## Your first 90 seconds
 
-After `node setup.mjs` finishes and the dev server starts:
+After `node setup.mjs` finishes, open **`http://127.0.0.1:3030`**. It's one page; the **settings launcher** (glowing avatar, bottom-left) opens everything as in-place panels — you never leave the chat.
 
-1. **Open `http://127.0.0.1:3030/agent`**. Mnemos auto-scans your machine for credentials in standard locations (`~/.zshrc`, `~/.bashrc`, `~/.anthropic/auth.json`, `~/.openai/auth.json`, `~/.config/gcloud/...`, and the Ollama daemon on `:11434`). Click **Use this** on any detected credential to import it — values stay on your machine, only locations are exchanged with the UI. Or pick a provider from the radio list and paste a key.
+1. **Settings → AI Model.** Mnemos auto-detects credentials in standard locations (shell rc files, provider auth files, gcloud ADC, the Ollama daemon on `:11434`). Click **Use this** on a detected key to import it (values stay on your machine — only locations are exchanged with the UI), or pick a provider and paste a key. Local Ollama needs none.
 
-2. **Open `http://127.0.0.1:3030/sources`**. Type a folder path (e.g. `~/Documents/notes`) and click **Scan**. The scan summary tells you:
-   - How many files will be ingested (by type — uncheck a type to skip it for this run)
-   - What's auto-excluded (logs, lockfiles, hidden dotfiles — opt-in toggles to override)
-   - What's security-blocked (`.env`, `*.pem`, `id_rsa*` — never indexed even with override)
-   - How many files are over 10 MB (confirmation toggle, default include)
+2. **Settings → Sources.** Paste a folder *or single-file* path (e.g. `~/Documents/notes` or `~/Documents/resume.pdf`). Mnemos detects which it is, then ingests with a live per-file progress indicator — entirely local via BGE-small, no API key. Security-blocked files (`.env`, `*.pem`, `id_rsa*`, anything under `~/.aws/` or `~/.ssh/`) are hard-locked and never indexed. Set a per-source auto re-scan cadence if the folder changes often (default is manual).
 
-   Click **Add to Mnemos**. The streaming progress bar shows per-file embedding in real time. Ingestion runs entirely locally via BGE-small (no API key needed).
+3. **Ask.** Type a question in the chat box. Answers stream in with citations to the exact source files; per-answer **Sources** and **Data sent** panels show precisely which files were used and which chunks (if any) left your machine. Mark a great answer **✓ verified** so it's nailed next time.
 
-3. **Open `http://127.0.0.1:3030/chat`**. Ask anything about the folder you just ingested. Each answer streams in with citations linking to the exact source files. The metrics footer shows which provider/model answered, how long it took, and tokens used.
+4. **Optional — pair Telegram** (Settings → 📲 Telegram) to ask all of the above from your phone.
 
 That's it. End-to-end on a fresh laptop: usually under 90 seconds for the install + 30 seconds for the first ingestion of a small folder.
 
 ## Roadmap
 
-- **v0.1** (current): single-folder RAG, BYO API key, audit log, atomic ingestion, smart-default file exclusions, credential auto-detection, bearer-token auth (loopback bypass), cross-OS install via `setup.mjs`
-- **v0.2**: Gemini + bundled `llama.cpp` providers, per-source persistent filters, response-quality cross-encoder reranking, npm global install
-- **v0.3**: macOS/Linux native installers, plugin marketplace, email ingestion (Gmail OAuth), Telegram bot
+**Shipped since v0.1:**
+- **v0.5** — verified-answer memory
+- **v0.6** — per-file metadata chunks
+- **v0.7** — single-file sources + hardened credential guardrail
+- **v0.8** — automatic per-source re-scan (concurrency-safe)
+- **v0.9** — **Telegram remote channel** (ask your RAG from your phone), model selection persisted server-side
+
+**Foundations (v0.1–v0.4):** single-folder RAG, BYO API key, audit log, atomic ingestion, smart-default file exclusions, credential auto-detection, bearer-token auth (loopback bypass), cross-OS install via `setup.mjs`, in-chat onboarding, per-model cost tracking, rich Markdown output, light/dark theme.
+
+**Directions we're exploring** *(ideas, not promises — community input very welcome):*
+- **More file types** beyond text & PDF — images (OCR for text-in-images, or vision-model description) and audio/video (local speech-to-text). Today these are detected and politely deferred rather than ingested.
+- **Better answers** — cross-encoder reranking of retrieved chunks; Gemini + bundled `llama.cpp` providers fully wired.
+- **Easier installs** — npm global install, native macOS/Linux installers.
+- **More places to ask from** — WhatsApp (pending a local-first-friendly API path), email ingestion.
+
+These follow the project's north star: local-first, single-operator, RAG — not an agent platform. We'd rather ship a few things well than promise many.
 
 ## Contributing
 

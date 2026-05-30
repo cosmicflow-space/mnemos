@@ -186,8 +186,10 @@ export function ModelSettingsModal({
     setSaving(true);
     setErr(null);
     try {
-      const body: { provider: string; apiKey?: string } = { provider };
+      const body: { provider: string; apiKey?: string; model?: string } = { provider };
       if (apiKey.trim()) body.apiKey = apiKey.trim();
+      // Persist the chosen model server-side so the Telegram bot mirrors it.
+      if (selModel) body.model = selModel;
       const r = await fetch("/api/config", {
         method: "POST",
         headers: { "content-type": "application/json" },

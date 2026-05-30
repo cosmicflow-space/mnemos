@@ -84,18 +84,18 @@ function migrate(db: BetterSqliteDb): void {
   }
 
   // m3: source watch columns. Added so existing DBs gain background re-scan
-  // scheduling. watch_interval_ms defaults to once daily; last_scanned_at is
-  // left NULL so the watcher treats already-registered sources as due once
-  // (a cheap incremental re-ingest) on next tick.
+  // scheduling. watch_interval_ms defaults to 0 (manual only) — auto re-scan is
+  // opt-in, so upgrading users get no surprise background scans; last_scanned_at
+  // is left NULL.
   const srcCols = db
     .prepare("PRAGMA table_info(source)")
     .all() as Array<{ name: string }>;
   if (!srcCols.some((c) => c.name === "watch_interval_ms")) {
     db.exec(
-      "ALTER TABLE source ADD COLUMN watch_interval_ms INTEGER NOT NULL DEFAULT 86400000",
+      "ALTER TABLE source ADD COLUMN watch_interval_ms INTEGER NOT NULL DEFAULT 0",
     );
     // eslint-disable-next-line no-console
-    console.log("[mnemos/db migrate] m3: source.watch_interval_ms added (default daily).");
+    console.log("[mnemos/db migrate] m3: source.watch_interval_ms added (default manual).");
   }
   if (!srcCols.some((c) => c.name === "last_scanned_at")) {
     db.exec("ALTER TABLE source ADD COLUMN last_scanned_at INTEGER");

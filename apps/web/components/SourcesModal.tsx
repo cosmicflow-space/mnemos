@@ -61,7 +61,8 @@ export function SourcesModal({
 }) {
   const [sources, setSources] = useState<SourceRow[]>([]);
   const [path, setPath] = useState("");
-  const [addInterval, setAddInterval] = useState<number>(DAY);
+  // New sources default to manual re-scan (0) — opt into a cadence per folder.
+  const [addInterval, setAddInterval] = useState<number>(0);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);

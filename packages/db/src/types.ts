@@ -15,6 +15,20 @@ export type Source = {
 
 export type IngestStatus = "pending" | "partial" | "complete" | "failed";
 
+export type TelegramChat = {
+  chatId: number;
+  label: string | null;
+  sessionId: string | null;
+  pairedAt: number;
+};
+
+export type TelegramState = {
+  enabled: boolean;
+  updateOffset: number;
+  pairingCode: string | null;
+  pairingExpiresAt: number | null;
+};
+
 export type FileRow = {
   id: number;
   sourceId: number;

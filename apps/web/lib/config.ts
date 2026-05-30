@@ -203,6 +203,9 @@ export type SetProviderInput = {
   apiKey?: string;
   ollamaBaseUrl?: string;
   ollamaModel?: string;
+  /** The specific model selected in the UI. Persisted so server-initiated
+   * queries (e.g. the Telegram bot) use the same model after a restart. */
+  model?: string;
 };
 
 export function setProviderConfig(input: SetProviderInput): ConfigStatus {
@@ -234,8 +237,76 @@ export function setProviderConfig(input: SetProviderInput): ConfigStatus {
       }
     }
   }
+  // Persist the UI's selected model so server-side callers (the Telegram bot)
+  // mirror it. For ollama, keep MNEMOS_OLLAMA_MODEL in sync since the provider
+  // reads that var specifically.
+  if (input.model) {
+    const m = input.model.trim();
+    if (m) {
+      merged.MNEMOS_DEFAULT_MODEL = m;
+      process.env.MNEMOS_DEFAULT_MODEL = m;
+      if (input.provider === "ollama") {
+        merged.MNEMOS_OLLAMA_MODEL = m;
+        process.env.MNEMOS_OLLAMA_MODEL = m;
+      }
+    }
+  }
   writeEnvFile(merged);
   return getConfigStatus();
+}
+
+/** The UI's last-selected model, persisted in ~/.mnemos/.env. Used by the
+ * Telegram bot so its answers use the same model you picked in the web UI.
+ * Falls back to MNEMOS_OLLAMA_MODEL (the legacy local-model var), else
+ * undefined → the provider's own default. */
+export function getDefaultModel(): string | undefined {
+  const merged = readEnvFile();
+  const m = (process.env.MNEMOS_DEFAULT_MODEL ?? merged.MNEMOS_DEFAULT_MODEL ?? "").trim();
+  if (m) return m;
+  const om = (process.env.MNEMOS_OLLAMA_MODEL ?? merged.MNEMOS_OLLAMA_MODEL ?? "").trim();
+  return om || undefined;
+}
+
+/** Set a single `~/.mnemos/.env` value (and process.env), preserving the rest.
+ * Used for secrets that aren't provider API keys — e.g. the Telegram bot token.
+ * An empty value removes the key. */
+export function setEnvValue(key: string, value: string): void {
+  const merged = readEnvFile();
+  const v = value.trim();
+  if (v) {
+    merged[key] = v;
+    process.env[key] = v;
+  } else {
+    delete merged[key];
+    delete process.env[key];
+  }
+  writeEnvFile(merged);
+}
+
+/** The configured default chat provider id (MNEMOS_DEFAULT_PROVIDER), falling
+ * back to local Ollama so background channels (e.g. Telegram) stay on-machine
+ * until the operator picks otherwise. */
+export function getDefaultProviderId(): string {
+  return currentProvider(readEnvFile()) ?? "ollama";
+}
+
+/** Build a chat/embedding provider's credential map from the environment.
+ * Shared by the query route and the Telegram channel so both initialize
+ * providers identically. No hardcoded secrets — reads process.env only. */
+export function credentialsForProvider(providerId: string): Record<string, string> {
+  const c: Record<string, string> = {};
+  if (providerId === "anthropic" && process.env.ANTHROPIC_API_KEY) {
+    c.apiKey = process.env.ANTHROPIC_API_KEY;
+  } else if (providerId === "openai" && process.env.OPENAI_API_KEY) {
+    c.apiKey = process.env.OPENAI_API_KEY;
+  } else if (providerId === "gemini") {
+    const key = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+    if (key) c.apiKey = key;
+  } else if (providerId === "ollama") {
+    if (process.env.OLLAMA_BASE_URL) c.baseURL = process.env.OLLAMA_BASE_URL;
+    if (process.env.MNEMOS_OLLAMA_MODEL) c.model = process.env.MNEMOS_OLLAMA_MODEL;
+  }
+  return c;
 }
 
 /**
