@@ -18,9 +18,9 @@ If you choose to add a frontier LLM (Anthropic Claude, OpenAI, Gemini), mnemos s
 Built from scratch in TypeScript + Next.js. Opinionated single-pane UI — no drag-and-drop canvas, one strong default per pipeline stage, plug your own providers via a versioned SDK.
 
 <p align="center">
-  <img src="docs/demo/install-demo.gif" alt="Mnemos install demo — clone, run setup, drop a folder, ask a question" width="900"/>
+  <img src="docs/demo/hero.gif" alt="Mnemos — cited answers from your own files, on your desktop and from your phone" width="900"/>
   <br/>
-  <em>30-second walkthrough: clone, run setup (default = fully local), drop a folder, ask a question with cited answers from your own files.</em>
+  <em>One brain, two surfaces: ask on your desktop, or from your phone via a private Telegram bot — every answer cited to your own files. 100% local by default.</em>
 </p>
 
 ## Quick start
@@ -43,6 +43,12 @@ Then open <http://127.0.0.1:3030> — it's a single chat page. Everything lives 
 
 End-to-end in under 90 seconds on a typical laptop. Then, optionally, pair **📲 Telegram** to ask from your phone.
 
+<p align="center">
+  <img src="docs/screenshots/02-launcher-menu.png" alt="Mnemos settings launcher menu — theme, AI model, sources, verified answers, Telegram" width="760"/>
+  <br/>
+  <em>Everything lives behind the settings launcher: theme, AI model, sources, verified answers, and Telegram.</em>
+</p>
+
 Prefer Docker? `docker compose up -d`. Prefer manual? `pnpm install && pnpm dev`.
 
 ## What it looks like
@@ -50,22 +56,22 @@ Prefer Docker? `docker compose up -d`. Prefer manual? `pnpm install && pnpm dev`
 <table>
   <tr>
     <td width="50%">
-      <img src="docs/screenshots/01-home.png" alt="Mnemos home page" />
-      <p align="center"><sub><strong>1. Home</strong> — three actions, no chrome. Configure an agent first; chat + sources unlock from there.</sub></p>
+      <img src="docs/screenshots/01-chat-cited-answer.png" alt="Mnemos chat — cited cross-document answer" />
+      <p align="center"><sub><strong>1. Ask</strong> — one chat pane, no chrome. Answers stream in with inline numbered citations, a metrics line (provider · model · tokens · duration), and inline actions to inspect <em>Sources</em>, see exactly what was sent to the model (<em>Data sent</em>), and mark an answer <em>✓ verified</em>. This answer fuses facts from a Markdown spec and a PDF report.</sub></p>
     </td>
     <td width="50%">
-      <img src="docs/screenshots/02-agent.png" alt="Mnemos agent settings — detected credentials" />
-      <p align="center"><sub><strong>2. Configure agent</strong> — auto-detects credentials already on disk (shell env, provider auth files, gcloud ADC). Click <em>Use this</em> to import without copying tokens. Locations only — values are never returned by the scan API.</sub></p>
+      <img src="docs/screenshots/03-ai-model-local.png" alt="Mnemos AI model picker — local Ollama default, frontier providers opt-in" />
+      <p align="center"><sub><strong>2. Pick your model</strong> — local Ollama is the default (green = ready, no key, free). Anthropic Claude and OpenAI are opt-in and stay locked until you add a key. Privacy is the default, not a setting.</sub></p>
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <img src="docs/screenshots/03-sources.png" alt="Mnemos sources — scan result with filter tiers" />
-      <p align="center"><sub><strong>3. Add a source</strong> — scan shows what will ingest, what's deferred (images/audio for v0.2+), and what's auto-excluded. Security-blocked files (.env, *.pem, id_rsa*) are hard-locked. Logs, lockfiles, hidden dotfiles are opt-in. Large files (>10 MB) get a confirmation toggle.</sub></p>
+      <img src="docs/screenshots/05-sources-manage.png" alt="Mnemos sources — register a folder or single file, read-only" />
+      <p align="center"><sub><strong>3. Add a source</strong> — paste an absolute path to a folder or a single file. Mnemos is read-only over what you register; it chunks and embeds locally (BGE-small), shows chunk/file counts, and offers per-source incremental re-scan.</sub></p>
     </td>
     <td width="50%">
-      <img src="docs/screenshots/04-chat.png" alt="Mnemos chat — RAG answer with citations" />
-      <p align="center"><sub><strong>4. Chat</strong> — sidebar groups sessions by date with titles derived from the first question. Each answer shows collapsed citations (top 3 + "more"), a metrics footer (provider · model · duration · tokens), and a hover-to-copy affordance.</sub></p>
+      <img src="docs/screenshots/06-citations-multiformat.png" alt="Mnemos citations — the exact source chunks an answer drew from" />
+      <p align="center"><sub><strong>4. Trace every claim</strong> — each answer's <em>Sources</em> opens the exact files it drew from, across formats (.md, .txt, .pdf), with chunk counts. Click a path to copy it. No black-box answers.</sub></p>
     </td>
   </tr>
 </table>
@@ -80,6 +86,12 @@ Your personal RAG runs on your computer — but you don't have to be *at* your c
 - **Uses your configured model.** Local Ollama by default, or Claude/GPT/Gemini if you've set one — the bot mirrors your choice.
 
 Set it up in **Settings → 📲 Telegram** (there's a built-in [step-by-step guide](apps/web/app/telegram-guide/page.tsx) for anyone new to Telegram bots). The catch, by design: your computer must be awake with Mnemos running for the bot to reply.
+
+<p align="center">
+  <img src="docs/screenshots/04-telegram-ask-from-phone.png" alt="Mnemos Telegram setup — paste a bot token, enable the channel, pair your phone" width="640"/>
+  <br/>
+  <em>Paste a bot token, enable the channel, pair your phone with a single-use code — token stored chmod-600, never echoed back.</em>
+</p>
 
 > WhatsApp is on the radar but not yet supported — there's no free, local-first-friendly bot API for it the way Telegram offers.
 
