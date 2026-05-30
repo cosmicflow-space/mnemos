@@ -14,9 +14,11 @@ import Image from "next/image";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Modal } from "@/components/Modal";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { SettingsMenu } from "@/components/SettingsMenu";
 import { ModelSettingsModal } from "@/components/ModelSettingsModal";
 import { SourcesModal } from "@/components/SourcesModal";
+import { VerifiedAnswersModal } from "@/components/VerifiedAnswersModal";
 
 type SessionRow = {
   id: string;
@@ -124,6 +126,8 @@ type LiveMessage = {
   /** Token usage if the provider reports it (Ollama doesn't; frontier providers do). */
   tokensIn?: number | null;
   tokensOut?: number | null;
+  /** True when a previously-verified answer boosted this response. */
+  verifiedUsed?: boolean;
   /** True while the response is still streaming. */
   streaming?: boolean;
 };
@@ -154,7 +158,11 @@ export default function ChatPage() {
     useState<ChatProviderInfo | null>(null);
   // Single source of truth for the centered modals — opened by the settings
   // popover, the onboarding flow, or the provider dropdown.
-  const [activeModal, setActiveModal] = useState<"model" | "sources" | null>(null);
+  const [activeModal, setActiveModal] = useState<
+    "model" | "sources" | "verified" | null
+  >(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [modelModalOnboarding, setModelModalOnboarding] = useState(false);
   const [sourceCount, setSourceCount] = useState<number | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
@@ -335,16 +343,25 @@ export default function ChatPage() {
     }
   }
 
-  async function deleteSession(id: string, title: string) {
-    if (!confirm(`Delete this session?\n\n${title}\n\nThis can't be undone.`)) return;
+  // Open the custom confirm dialog (replaces the native confirm()).
+  function deleteSession(id: string, title: string) {
+    setDeleteTarget({ id, title });
+  }
+
+  async function confirmDeleteSession() {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
     try {
-      const r = await fetch(`/api/sessions/${id}`, { method: "DELETE" });
+      const r = await fetch(`/api/sessions/${deleteTarget.id}`, { method: "DELETE" });
       if (!r.ok) throw new Error(await r.text());
       // If we just deleted the active session, reset state.
-      if (sessionId === id) newChat();
+      if (sessionId === deleteTarget.id) newChat();
       await refreshSessions();
+      setDeleteTarget(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -492,6 +509,7 @@ export default function ChatPage() {
               model?: string | null;
               durationMs?: number;
               tokenCounts?: { in?: number | null; out?: number | null };
+              verifiedAnswerUsed?: boolean;
             };
             setMessages((prev) => {
               const next = [...prev];
@@ -503,6 +521,7 @@ export default function ChatPage() {
                   durationMs: done.durationMs,
                   tokensIn: done.tokenCounts?.in ?? null,
                   tokensOut: done.tokenCounts?.out ?? null,
+                  verifiedUsed: Boolean(done.verifiedAnswerUsed),
                 };
               }
               return next;
@@ -674,6 +693,28 @@ export default function ChatPage() {
           onClose={() => setActiveModal(null)}
         />
       )}
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Delete chat?"
+          danger
+          confirmLabel="Delete"
+          busy={deleting}
+          message={
+            <>
+              This permanently deletes{" "}
+              <span className="text-fg font-medium">
+                “{deleteTarget.title}”
+              </span>{" "}
+              and its messages. This can&apos;t be undone.
+            </>
+          }
+          onConfirm={() => void confirmDeleteSession()}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
+      {activeModal === "verified" && (
+        <VerifiedAnswersModal onClose={() => setActiveModal(null)} />
+      )}
       {/* Sidebar */}
       <aside className="border-r border-line bg-surface flex flex-col">
         <div className="px-4 py-3.5 border-b border-line flex items-center gap-2">
@@ -730,6 +771,7 @@ export default function ChatPage() {
               setModelModalOnboarding(false);
               setActiveModal("model");
             }}
+            onOpenVerified={() => setActiveModal("verified")}
           />
           <button
             onClick={newChat}
@@ -798,7 +840,16 @@ export default function ChatPage() {
             </div>
           ) : (
             messages.map((m, i) => (
-              <MessageBubble key={i} message={m} providers={providers} />
+              <MessageBubble
+                key={i}
+                message={m}
+                providers={providers}
+                question={
+                  messages[i - 1]?.role === "user"
+                    ? messages[i - 1]?.content
+                    : undefined
+                }
+              />
             ))
           )}
         </div>
@@ -1175,18 +1226,47 @@ function CredentialPrompt({
 function MessageBubble({
   message,
   providers,
+  question,
 }: {
   message: LiveMessage;
   providers: ChatProviderInfo[];
+  /** The user question this answer responded to (for "Save as verified"). */
+  question?: string;
 }) {
   const isUser = message.role === "user";
   const [copied, setCopied] = useState(false);
   const [panel, setPanel] = useState<"sources" | "audit" | null>(null);
   const [chunks, setChunks] = useState<SourceChunk[] | null>(null);
   const [loadingChunks, setLoadingChunks] = useState(false);
+  const [verifyState, setVerifyState] = useState<"idle" | "saving" | "saved">("idle");
 
   const hasSources =
     (message.hits?.length ?? 0) > 0 || (message.citations?.length ?? 0) > 0;
+
+  // Save this answer as a verified Q→A so future similar questions get it
+  // injected. Chunk IDs come from live hits or reloaded citations.
+  async function saveVerified() {
+    if (!question || verifyState !== "idle") return;
+    const chunkIds =
+      message.hits?.map((h) => h.chunkId) ?? message.citations ?? [];
+    setVerifyState("saving");
+    try {
+      const r = await fetch("/api/verified", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          question,
+          answer: message.content,
+          chunkIds,
+          provider: message.provider,
+          model: message.model ?? undefined,
+        }),
+      });
+      setVerifyState(r.ok ? "saved" : "idle");
+    } catch {
+      setVerifyState("idle");
+    }
+  }
 
   function copyToClipboard() {
     if (!message.content) return;
@@ -1262,6 +1342,14 @@ function MessageBubble({
         {!isUser && !message.streaming && message.content && (
           <div className="flex items-center justify-between mt-2 text-xs text-muted gap-3">
             <span className="flex items-center gap-2 min-w-0">
+              {message.verifiedUsed && (
+                <span
+                  className="text-emerald-400 shrink-0"
+                  title="Boosted by a previously-verified answer"
+                >
+                  ✓ verified
+                </span>
+              )}
               <span className="truncate">{formatMessageMetrics(message, providers)}</span>
               {hasSources && (
                 <>
@@ -1280,6 +1368,20 @@ function MessageBubble({
                   >
                     Data sent
                   </button>
+                  {question && (
+                    <button
+                      onClick={() => void saveVerified()}
+                      disabled={verifyState !== "idle"}
+                      className="text-emerald-400 hover:text-emerald-300 shrink-0 disabled:opacity-60"
+                      title="Confirm this answer is correct — similar future questions will reuse it"
+                    >
+                      {verifyState === "saved"
+                        ? "✓ saved"
+                        : verifyState === "saving"
+                          ? "saving…"
+                          : "✓ Save verified"}
+                    </button>
+                  )}
                 </>
               )}
             </span>
