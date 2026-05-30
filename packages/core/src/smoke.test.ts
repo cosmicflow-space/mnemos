@@ -22,6 +22,13 @@ import {
   listSources,
   getSourceByPath,
   removeSource,
+  setSourceWatchInterval,
+  touchSourceScanned,
+  listDueSources,
+  tryClaimIngest,
+  releaseIngest,
+  STALE_INGEST_MS,
+  DEFAULT_WATCH_INTERVAL_MS,
   upsertCredential,
   getCredentialByName,
   createSession,
@@ -96,6 +103,64 @@ describe("smoke: db + registry + crypto", () => {
     expect(result.chunksPurged).toBe(0); // no chunks to purge in this test
 
     expect(listSources(db)).toHaveLength(0);
+  });
+
+  it("schedules source auto re-scan by per-source interval", () => {
+    // Default cadence + never-scanned → due immediately.
+    const daily = addSource(db, "/tmp/daily");
+    expect(daily.watchIntervalMs).toBe(DEFAULT_WATCH_INTERVAL_MS);
+    expect(daily.lastScannedAt).toBeNull();
+
+    const now = 1_000_000_000_000;
+    expect(listDueSources(db, now).map((s) => s.path)).toContain("/tmp/daily");
+
+    // Just scanned → not due until a full interval elapses.
+    touchSourceScanned(db, daily.id, now);
+    expect(listDueSources(db, now).map((s) => s.path)).not.toContain("/tmp/daily");
+    expect(
+      listDueSources(db, now + DEFAULT_WATCH_INTERVAL_MS).map((s) => s.path),
+    ).toContain("/tmp/daily");
+
+    // Manual-only (0) is never due, even if never scanned.
+    const manual = addSource(db, "/tmp/manual", "folder", 0);
+    expect(manual.watchIntervalMs).toBe(0);
+    expect(listDueSources(db, now).map((s) => s.path)).not.toContain("/tmp/manual");
+
+    // Editing the cadence takes effect.
+    setSourceWatchInterval(db, manual.id, 5 * 60_000);
+    expect(getSourceByPath(db, "/tmp/manual")?.watchIntervalMs).toBe(5 * 60_000);
+    expect(listDueSources(db, now).map((s) => s.path)).toContain("/tmp/manual");
+
+    // url/mailbox kinds are never filesystem-rescanned.
+    addSource(db, "https://example.com", "url", 5 * 60_000);
+    expect(listDueSources(db, now).map((s) => s.path)).not.toContain("https://example.com");
+  });
+
+  it("ingest lease is mutually exclusive, fenced, and reclaims stale claims", () => {
+    const src = addSource(db, "/tmp/leased");
+    const t0 = 2_000_000_000_000;
+
+    // First claim wins (returns its token); a second concurrent claim loses.
+    const token = tryClaimIngest(db, src.id, t0);
+    expect(token).toBe(t0);
+    expect(tryClaimIngest(db, src.id, t0)).toBeNull();
+    // Still held a little later (not yet stale).
+    expect(tryClaimIngest(db, src.id, t0 + 1000)).toBeNull();
+
+    // Releasing with the right token frees it.
+    releaseIngest(db, src.id, token as number);
+    const token2 = tryClaimIngest(db, src.id, t0 + 2000);
+    expect(token2).toBe(t0 + 2000);
+
+    // A crashed holder's claim is reclaimable once it goes stale.
+    expect(tryClaimIngest(db, src.id, t0 + 2000 + 1000)).toBeNull();
+    const stolen = tryClaimIngest(db, src.id, t0 + 2000 + STALE_INGEST_MS + 1);
+    expect(stolen).not.toBeNull();
+
+    // Fencing: the old holder (token2) releasing must NOT clear the new
+    // holder's (stolen) lease — its token no longer matches.
+    releaseIngest(db, src.id, token2 as number);
+    expect(tryClaimIngest(db, src.id, t0 + 2000 + STALE_INGEST_MS + 2)).toBeNull();
   });
 
   it("upserts credentials idempotently", () => {

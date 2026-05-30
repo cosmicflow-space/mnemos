@@ -9,14 +9,33 @@ import {
   removeSource,
   chunkCountBySource,
   ingestStatsBySource,
+  getSourceByPath,
+  setSourceWatchInterval,
+  DEFAULT_WATCH_INTERVAL_MS,
 } from "@mnemos/db";
 import { getDb } from "@/lib/runtime";
 
 export const runtime = "nodejs";
 
+// Auto re-scan cadence: 0 (manual only) or at least one minute. Guards against
+// a pathological sub-second polling loop.
+const watchIntervalSchema = z
+  .number()
+  .int()
+  .min(0)
+  .refine((v) => v === 0 || v >= 60_000, {
+    message: "watchIntervalMs must be 0 (manual) or at least 60000",
+  });
+
 const AddRequest = z.object({
   path: z.string().min(1),
   kind: z.enum(["folder", "file", "url", "mailbox"]).optional().default("folder"),
+  watchIntervalMs: watchIntervalSchema.optional().default(DEFAULT_WATCH_INTERVAL_MS),
+});
+
+const PatchRequest = z.object({
+  path: z.string().min(1),
+  watchIntervalMs: watchIntervalSchema,
 });
 
 /** Local kinds are filesystem paths we expand `~` for; url/mailbox are opaque. */
@@ -48,6 +67,11 @@ export async function GET() {
     return NextResponse.json({
       sources: sources.map((s) => {
         const stat = stats.get(s.id);
+        // Next auto re-scan time: never-scanned → due now; manual (0) → null.
+        const nextScanDueAt =
+          s.watchIntervalMs > 0
+            ? (s.lastScannedAt ?? 0) + s.watchIntervalMs
+            : null;
         return {
           id: s.id,
           path: s.path,
@@ -58,6 +82,9 @@ export async function GET() {
           chunkCount: counts.get(s.id) ?? 0,
           fileCount: stat?.fileCount ?? 0,
           lastIngestedAt: stat?.lastIngestedAt ?? null,
+          watchIntervalMs: s.watchIntervalMs,
+          lastScannedAt: s.lastScannedAt,
+          nextScanDueAt,
         };
       }),
     });
@@ -115,12 +142,56 @@ export async function POST(req: Request) {
 
   try {
     const db = getDb();
-    const source = addSource(db, absolutePath, kind);
+    const source = addSource(db, absolutePath, kind, parsed.data.watchIntervalMs);
     return NextResponse.json({ source });
   } catch (err) {
     return NextResponse.json(
       {
         error: "add_failed",
+        message: err instanceof Error ? err.message : String(err),
+      },
+      { status: 500 },
+    );
+  }
+}
+
+/**
+ * PATCH /api/sources
+ * Body: { path: string, watchIntervalMs: number }
+ * Updates a source's auto re-scan cadence (0 = manual only).
+ */
+export async function PATCH(req: Request) {
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "invalid_json" }, { status: 400 });
+  }
+
+  const parsed = PatchRequest.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "invalid_request", details: parsed.error.flatten() },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const db = getDb();
+    // Match the stored path as sent first (covers opaque url/mailbox sources),
+    // then fall back to home-expanded for local paths typed with a leading ~.
+    const source =
+      getSourceByPath(db, parsed.data.path) ??
+      getSourceByPath(db, expandHome(parsed.data.path));
+    if (!source) {
+      return NextResponse.json({ error: "source_not_found" }, { status: 404 });
+    }
+    setSourceWatchInterval(db, source.id, parsed.data.watchIntervalMs);
+    return NextResponse.json({ ok: true, watchIntervalMs: parsed.data.watchIntervalMs });
+  } catch (err) {
+    return NextResponse.json(
+      {
+        error: "update_failed",
         message: err instanceof Error ? err.message : String(err),
       },
       { status: 500 },

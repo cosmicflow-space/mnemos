@@ -26,79 +26,134 @@ import type {
 // Sources (registered folders, URLs, etc.)
 // ============================================================================
 
-export function addSource(
-  db: MnemosDb,
-  path: string,
-  kind: SourceKind = "folder",
-): Source {
-  const p = prepared(db);
-  const now = Date.now();
-  const result = p(
-    `INSERT INTO source (path, kind, scope, created_at, updated_at)
-     VALUES (?, ?, 'read-only', ?, ?)
-     ON CONFLICT(path) DO UPDATE SET updated_at = excluded.updated_at
-     RETURNING id, path, kind, scope, created_at, updated_at`,
-  ).get(path, kind, now, now) as {
-    id: number;
-    path: string;
-    kind: SourceKind;
-    scope: "read-only";
-    created_at: number;
-    updated_at: number;
-  };
-  return {
-    id: result.id,
-    path: result.path,
-    kind: result.kind,
-    scope: result.scope,
-    createdAt: result.created_at,
-    updatedAt: result.updated_at,
-  };
-}
+/** Background auto re-scan cadence default: once per day. */
+export const DEFAULT_WATCH_INTERVAL_MS = 86_400_000;
 
-export function listSources(db: MnemosDb): Source[] {
-  const rows = prepared(db)(
-    `SELECT id, path, kind, scope, created_at, updated_at FROM source ORDER BY path`,
-  ).all() as Array<{
-    id: number;
-    path: string;
-    kind: SourceKind;
-    scope: "read-only";
-    created_at: number;
-    updated_at: number;
-  }>;
-  return rows.map((r) => ({
+type SourceRow = {
+  id: number;
+  path: string;
+  kind: SourceKind;
+  scope: "read-only";
+  created_at: number;
+  updated_at: number;
+  watch_interval_ms: number;
+  last_scanned_at: number | null;
+};
+
+const SOURCE_COLS =
+  "id, path, kind, scope, created_at, updated_at, watch_interval_ms, last_scanned_at";
+
+function rowToSource(r: SourceRow): Source {
+  return {
     id: r.id,
     path: r.path,
     kind: r.kind,
     scope: r.scope,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
-  }));
+    watchIntervalMs: r.watch_interval_ms,
+    lastScannedAt: r.last_scanned_at,
+  };
+}
+
+export function addSource(
+  db: MnemosDb,
+  path: string,
+  kind: SourceKind = "folder",
+  watchIntervalMs: number = DEFAULT_WATCH_INTERVAL_MS,
+): Source {
+  const p = prepared(db);
+  const now = Date.now();
+  // ON CONFLICT keeps an already-customized interval (only bumps updated_at) so
+  // re-registering a path doesn't silently reset the user's chosen cadence.
+  const result = p(
+    `INSERT INTO source (path, kind, scope, created_at, updated_at, watch_interval_ms)
+     VALUES (?, ?, 'read-only', ?, ?, ?)
+     ON CONFLICT(path) DO UPDATE SET updated_at = excluded.updated_at
+     RETURNING ${SOURCE_COLS}`,
+  ).get(path, kind, now, now, watchIntervalMs) as SourceRow;
+  return rowToSource(result);
+}
+
+export function listSources(db: MnemosDb): Source[] {
+  const rows = prepared(db)(
+    `SELECT ${SOURCE_COLS} FROM source ORDER BY path`,
+  ).all() as SourceRow[];
+  return rows.map(rowToSource);
 }
 
 export function getSourceByPath(db: MnemosDb, path: string): Source | null {
   const row = prepared(db)(
-    `SELECT id, path, kind, scope, created_at, updated_at FROM source WHERE path = ?`,
-  ).get(path) as
-    | {
-        id: number;
-        path: string;
-        kind: SourceKind;
-        scope: "read-only";
-        created_at: number;
-        updated_at: number;
-      }
-    | undefined;
-  if (!row) return null;
-  return {
-    id: row.id,
-    path: row.path,
-    kind: row.kind,
-    scope: row.scope,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
+    `SELECT ${SOURCE_COLS} FROM source WHERE path = ?`,
+  ).get(path) as SourceRow | undefined;
+  return row ? rowToSource(row) : null;
+}
+
+/** Set a source's auto re-scan cadence (ms). 0 = manual only. */
+export function setSourceWatchInterval(
+  db: MnemosDb,
+  sourceId: number,
+  watchIntervalMs: number,
+): void {
+  prepared(db)(
+    `UPDATE source SET watch_interval_ms = ?, updated_at = ? WHERE id = ?`,
+  ).run(watchIntervalMs, Date.now(), sourceId);
+}
+
+/** Record that a source was just scanned (auto or manual), backing off the
+ * next auto re-scan by its interval. */
+export function touchSourceScanned(db: MnemosDb, sourceId: number, at: number = Date.now()): void {
+  prepared(db)(`UPDATE source SET last_scanned_at = ? WHERE id = ?`).run(at, sourceId);
+}
+
+/** A claimed ingest older than this is treated as stale (the worker likely
+ * crashed) and can be re-claimed. Generous so a genuinely long scan isn't
+ * stolen mid-flight. */
+export const STALE_INGEST_MS = 30 * 60_000;
+
+/** Atomically claim a source for ingestion. Returns a fencing token (the claim
+ * timestamp) if this caller won — no one else is ingesting it, or a prior claim
+ * is stale — or null if it lost. SQLite serializes writes, so this single
+ * conditional UPDATE is the mutual-exclusion point: it makes manual ingest, the
+ * background watcher, and even multiple server processes safe against concurrent
+ * double-ingest (which would otherwise race purgeFileChunks/insertChunk into
+ * UNIQUE violations). Pass the returned token to releaseIngest. */
+export function tryClaimIngest(
+  db: MnemosDb,
+  sourceId: number,
+  now: number = Date.now(),
+  staleMs: number = STALE_INGEST_MS,
+): number | null {
+  const res = prepared(db)(
+    `UPDATE source SET ingesting_since = ?
+      WHERE id = ?
+        AND (ingesting_since IS NULL OR ? - ingesting_since > ?)`,
+  ).run(now, sourceId, now, staleMs);
+  return res.changes === 1 ? now : null;
+}
+
+/** Release an ingest claim. Fenced by the token from tryClaimIngest: only clears
+ * the lease if this holder still owns it, so a slow worker whose lease was
+ * reclaimed as stale can't wipe the new holder's claim. Always call in finally. */
+export function releaseIngest(db: MnemosDb, sourceId: number, token: number): void {
+  prepared(db)(
+    `UPDATE source SET ingesting_since = NULL WHERE id = ? AND ingesting_since = ?`,
+  ).run(sourceId, token);
+}
+
+/** Sources whose auto re-scan is due: a local (folder/file) source with a
+ * positive interval that has never been scanned, or whose last scan is older
+ * than its interval. url/mailbox kinds are excluded — they aren't filesystem
+ * ingestible yet. */
+export function listDueSources(db: MnemosDb, now: number = Date.now()): Source[] {
+  const rows = prepared(db)(
+    `SELECT ${SOURCE_COLS} FROM source
+      WHERE kind IN ('folder', 'file')
+        AND watch_interval_ms > 0
+        AND (last_scanned_at IS NULL OR ? - last_scanned_at >= watch_interval_ms)
+      ORDER BY path`,
+  ).all(now) as SourceRow[];
+  return rows.map(rowToSource);
 }
 
 /**

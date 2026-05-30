@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.7.0] - 2026-05-30
+## [0.8.0] - 2026-05-30
+
+### Added
+- **Automatic re-scan (per-source schedule)**: Mnemos now re-checks your sources in the background and re-ingests changes on its own — no need to click ↻ Re-scan. Each source has its **own cadence** (set when you add it, editable anytime): **Daily** by default, down to every 5 minutes for hot folders, or **Manual only** to opt a static archive out entirely. Re-scans are incremental, so only changed/new files re-embed. The Sources panel shows each source's cadence and when its next scan is due. Implemented as a periodic poll (not a live filesystem watcher) started via Next.js `instrumentation.ts`; tune with `MNEMOS_WATCH_TICK_MS`, disable with `MNEMOS_DISABLE_WATCHER=1`. New `watch_interval_ms` + `last_scanned_at` on `source`; `PATCH /api/sources` to edit cadence.
+  - **Concurrency-safe**: manual ↻ Re-scan, the background watcher, and even multiple server processes coordinate through an atomic DB ingest lease (`source.ingesting_since`), so the same source is never ingested twice at once (which would otherwise race chunk writes). A failed auto-scan stays due and retries next tick instead of going quiet for a full interval; a crashed lease self-heals after 30 minutes.
 
 ### Added
 - **Single-file sources**: register one individual file as a source, not just a folder. Paste an absolute path in **Sources** and Mnemos **auto-detects** whether it's a file or a folder — "drop a file" and "drop a folder" both work from one input. A single explicitly-chosen file bypasses the soft noise-filters (logs/lockfiles/hidden) since the choice is deliberate, while the **security hard-lock** (`.env`, `*.pem`, `id_rsa*`) still always applies. New `file` source kind; the Sources list shows each entry's kind.
