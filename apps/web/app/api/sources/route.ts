@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { resolve } from "node:path";
-import { homedir } from "node:os";
 import { stat, realpath } from "node:fs/promises";
 import { classifyContainment, type SourceEntry } from "@/lib/path-containment";
+import { normalizeUserPath } from "@/lib/user-path";
 import {
   addSource,
   listSources,
@@ -51,13 +50,6 @@ function isLocalKind(kind: string): boolean {
 const RemoveRequest = z.object({
   path: z.string().min(1),
 });
-
-function expandHome(p: string): string {
-  if (p.startsWith("~/") || p === "~") {
-    return resolve(p.replace(/^~/, homedir()));
-  }
-  return resolve(p);
-}
 
 /**
  * GET /api/sources
@@ -129,9 +121,17 @@ export async function POST(req: Request) {
   }
 
   const requestedKind = parsed.data.kind;
-  const absolutePath = isLocalKind(requestedKind)
-    ? expandHome(parsed.data.path)
-    : parsed.data.path;
+  let absolutePath: string;
+  try {
+    absolutePath = isLocalKind(requestedKind)
+      ? normalizeUserPath(parsed.data.path)
+      : parsed.data.path;
+  } catch {
+    return NextResponse.json(
+      { error: "invalid_request", message: "path is empty" },
+      { status: 400 },
+    );
+  }
 
   // Frictionless: when the caller didn't distinguish (the default "folder"),
   // detect whether the path is actually a single file and register it as such,
@@ -209,7 +209,7 @@ export async function PATCH(req: Request) {
     // then fall back to home-expanded for local paths typed with a leading ~.
     const source =
       getSourceByPath(db, parsed.data.path) ??
-      getSourceByPath(db, expandHome(parsed.data.path));
+      getSourceByPath(db, normalizeUserPath(parsed.data.path));
     if (!source) {
       return NextResponse.json({ error: "source_not_found" }, { status: 404 });
     }
@@ -249,7 +249,7 @@ export async function DELETE(req: Request) {
 
   try {
     const db = getDb();
-    const expanded = expandHome(parsed.data.path);
+    const expanded = normalizeUserPath(parsed.data.path);
     // Resolve the id first so we can evict any live ingest status — otherwise a
     // removed source in an error/running state would ghost in /api/ingest/status.
     const existing = getSourceByPath(db, expanded);

@@ -1,22 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { scanFolder } from "@mnemos/core";
-import { resolve } from "node:path";
-import { homedir } from "node:os";
+import { normalizeUserPath } from "@/lib/user-path";
 
 export const runtime = "nodejs";
 
 const ScanRequest = z.object({
   path: z.string().min(1),
 });
-
-/** Resolve `~/foo` to the absolute path. */
-function expandHome(p: string): string {
-  if (p.startsWith("~/") || p === "~") {
-    return resolve(p.replace(/^~/, homedir()));
-  }
-  return resolve(p);
-}
 
 /**
  * POST /api/sources/scan
@@ -44,7 +35,15 @@ export async function POST(req: Request) {
     );
   }
 
-  const absolutePath = expandHome(parsed.data.path);
+  let absolutePath: string;
+  try {
+    absolutePath = normalizeUserPath(parsed.data.path);
+  } catch {
+    return NextResponse.json(
+      { error: "invalid_request", message: "path is empty" },
+      { status: 400 },
+    );
+  }
 
   try {
     const result = await scanFolder(absolutePath);
