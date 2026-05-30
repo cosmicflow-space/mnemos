@@ -29,6 +29,14 @@ import {
   releaseIngest,
   STALE_INGEST_MS,
   DEFAULT_WATCH_INTERVAL_MS,
+  getTelegramState,
+  setTelegramPairingCode,
+  consumeTelegramPairingCode,
+  addTelegramChat,
+  isTelegramChatPaired,
+  listTelegramChats,
+  removeTelegramChat,
+  setTelegramOffset,
   upsertCredential,
   getCredentialByName,
   createSession,
@@ -105,31 +113,28 @@ describe("smoke: db + registry + crypto", () => {
     expect(listSources(db)).toHaveLength(0);
   });
 
-  it("schedules source auto re-scan by per-source interval", () => {
-    // Default cadence + never-scanned → due immediately.
-    const daily = addSource(db, "/tmp/daily");
-    expect(daily.watchIntervalMs).toBe(DEFAULT_WATCH_INTERVAL_MS);
-    expect(daily.lastScannedAt).toBeNull();
-
+  it("defaults new sources to manual, and schedules per-source interval", () => {
     const now = 1_000_000_000_000;
-    expect(listDueSources(db, now).map((s) => s.path)).toContain("/tmp/daily");
 
+    // Default is MANUAL (0): a new source is NOT auto-scanned until opted in.
+    const def = addSource(db, "/tmp/default");
+    expect(DEFAULT_WATCH_INTERVAL_MS).toBe(0);
+    expect(def.watchIntervalMs).toBe(0);
+    expect(def.lastScannedAt).toBeNull();
+    expect(listDueSources(db, now).map((s) => s.path)).not.toContain("/tmp/default");
+
+    // A source given an explicit cadence + never scanned → due immediately.
+    const hourly = addSource(db, "/tmp/hourly", "folder", 60 * 60_000);
+    expect(listDueSources(db, now).map((s) => s.path)).toContain("/tmp/hourly");
     // Just scanned → not due until a full interval elapses.
-    touchSourceScanned(db, daily.id, now);
-    expect(listDueSources(db, now).map((s) => s.path)).not.toContain("/tmp/daily");
-    expect(
-      listDueSources(db, now + DEFAULT_WATCH_INTERVAL_MS).map((s) => s.path),
-    ).toContain("/tmp/daily");
+    touchSourceScanned(db, hourly.id, now);
+    expect(listDueSources(db, now).map((s) => s.path)).not.toContain("/tmp/hourly");
+    expect(listDueSources(db, now + 60 * 60_000).map((s) => s.path)).toContain("/tmp/hourly");
 
-    // Manual-only (0) is never due, even if never scanned.
-    const manual = addSource(db, "/tmp/manual", "folder", 0);
-    expect(manual.watchIntervalMs).toBe(0);
-    expect(listDueSources(db, now).map((s) => s.path)).not.toContain("/tmp/manual");
-
-    // Editing the cadence takes effect.
-    setSourceWatchInterval(db, manual.id, 5 * 60_000);
-    expect(getSourceByPath(db, "/tmp/manual")?.watchIntervalMs).toBe(5 * 60_000);
-    expect(listDueSources(db, now).map((s) => s.path)).toContain("/tmp/manual");
+    // Editing the cadence takes effect: manual → every 5 min.
+    setSourceWatchInterval(db, def.id, 5 * 60_000);
+    expect(getSourceByPath(db, "/tmp/default")?.watchIntervalMs).toBe(5 * 60_000);
+    expect(listDueSources(db, now).map((s) => s.path)).toContain("/tmp/default");
 
     // url/mailbox kinds are never filesystem-rescanned.
     addSource(db, "https://example.com", "url", 5 * 60_000);
@@ -161,6 +166,35 @@ describe("smoke: db + registry + crypto", () => {
     // holder's (stolen) lease — its token no longer matches.
     releaseIngest(db, src.id, token2 as number);
     expect(tryClaimIngest(db, src.id, t0 + 2000 + STALE_INGEST_MS + 2)).toBeNull();
+  });
+
+  it("telegram pairing code is single-use, time-boxed, and gates the allowlist", () => {
+    const now = 3_000_000_000_000;
+    // Default-deny: nobody is paired, state disabled, offset 0.
+    expect(getTelegramState(db).enabled).toBe(false);
+    expect(getTelegramState(db).updateOffset).toBe(0);
+    expect(isTelegramChatPaired(db, 12345)).toBe(false);
+
+    setTelegramPairingCode(db, "ABCD2345", now + 600_000);
+
+    // Wrong code, and a correct code past expiry, both fail.
+    expect(consumeTelegramPairingCode(db, "WRONG777", now)).toBe(false);
+    expect(consumeTelegramPairingCode(db, "ABCD2345", now + 700_000)).toBe(false);
+
+    // Correct + unexpired succeeds exactly once (single-use).
+    expect(consumeTelegramPairingCode(db, "ABCD2345", now)).toBe(true);
+    expect(consumeTelegramPairingCode(db, "ABCD2345", now)).toBe(false);
+
+    // Pairing adds to the allowlist; removal revokes.
+    addTelegramChat(db, 12345, "Sam");
+    expect(isTelegramChatPaired(db, 12345)).toBe(true);
+    expect(listTelegramChats(db).map((c) => c.chatId)).toEqual([12345]);
+    removeTelegramChat(db, 12345);
+    expect(isTelegramChatPaired(db, 12345)).toBe(false);
+
+    // Offset persists (no reprocessing across restarts).
+    setTelegramOffset(db, 42);
+    expect(getTelegramState(db).updateOffset).toBe(42);
   });
 
   it("upserts credentials idempotently", () => {

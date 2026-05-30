@@ -19,6 +19,8 @@ export type {
   Session,
   ChatMessage,
   AuditEvent,
+  TelegramChat,
+  TelegramState,
 } from "./types";
 
 export {
@@ -77,6 +79,18 @@ export {
   // Audit
   appendAudit,
   listAuditEvents,
+  // Telegram channel
+  getTelegramState,
+  setTelegramEnabled,
+  setTelegramOffset,
+  setTelegramPairingCode,
+  consumeTelegramPairingCode,
+  addTelegramChat,
+  isTelegramChatPaired,
+  listTelegramChats,
+  removeTelegramChat,
+  getTelegramChatSession,
+  setTelegramChatSession,
   // Input types
   type UpsertFileInput,
   type InsertChunkInput,
