@@ -31,6 +31,27 @@ import type {
   EmbeddingProvider,
 } from "@mnemos/plugin-sdk";
 import { assemblePrompt } from "./prompt";
+
+/**
+ * Count/inventory intent — questions about the library as a whole rather than
+ * its contents. Only these get the (whole-index) corpus stats injected, so
+ * normal queries pay no aggregate-query latency and carry no source paths in
+ * their prompt. Conservative: a miss just falls back to retrieved-context.
+ */
+export function isInventoryQuestion(query: string): boolean {
+  return /\bhow many\b|\bhow much\b|\bnumber of\b|\bcount\b|\btotal\b|\binventory\b|\bwhat (kind|type)s? of\b|\bwhich (source|folder|file|document)s?\b|\blist (all |my |the )*(file|document|source)s\b/i.test(
+    query,
+  );
+}
+
+/** Strip control chars/newlines and cap length before putting an indexed path
+ * into the prompt — keeps untrusted path text out of the high-priority system
+ * block as an instruction-injection vector, and bounds prompt size. */
+function sanitizeForPrompt(s: string, max = 120): string {
+  // eslint-disable-next-line no-control-regex
+  const clean = s.replace(/[\u0000-\u001f\u007f]/g, " ").trim();
+  return clean.length > max ? `${clean.slice(0, max)}…` : clean;
+}
 import { hashString } from "../ingest/hash";
 
 // Max L2 distance for a verified answer to count as "the same question". On
@@ -204,25 +225,29 @@ export async function* runQuery(
     // Verified-answer lookup is a best-effort boost; never block the query.
   }
 
-  // 4. Assemble prompt
-  // Whole-index totals (COUNT-based, not derived from `hits`) so "how many
-  // files/documents do I have" is answered from the truth instead of from the
-  // top-K that happened to match this query.
-  const stats = getCorpusStats(db);
-  const typeSummary = stats.byType
-    .slice(0, 6)
-    .map((t) => `${t.fileCount} ${t.loader}`)
-    .join(", ");
-  const sourceSummary = stats.sources
-    .slice(0, 5)
-    .map((s) => `${s.path} (${s.fileCount} files)`)
-    .join("; ");
-  const corpusFacts =
-    `${stats.totalFiles} files, ${stats.totalChunks} chunks across ${stats.sources.length} source(s).` +
-    (typeSummary ? ` By file type: ${typeSummary}.` : "") +
-    (sourceSummary
-      ? ` Sources: ${sourceSummary}${stats.sources.length > 5 ? ", …" : ""}.`
-      : "");
+  // 4. Assemble prompt.
+  // For count/inventory questions ONLY, inject whole-index totals (COUNT-based,
+  // not derived from `hits`) so "how many files/documents do I have" is answered
+  // from the truth instead of the top-K that matched. Gated so normal queries
+  // pay no aggregate-query latency and carry no source paths in their prompt.
+  let corpusFacts: string | undefined;
+  if (isInventoryQuestion(opts.query)) {
+    const stats = getCorpusStats(db);
+    const typeSummary = stats.byType
+      .slice(0, 6)
+      .map((t) => `${t.fileCount} ${t.loader}`)
+      .join(", ");
+    const sourceSummary = stats.sources
+      .slice(0, 5)
+      .map((s) => `${sanitizeForPrompt(s.path)} (${s.fileCount} files)`)
+      .join("; ");
+    corpusFacts =
+      `${stats.totalFiles} files, ${stats.totalChunks} chunks across ${stats.sources.length} source(s).` +
+      (typeSummary ? ` By file type: ${typeSummary}.` : "") +
+      (sourceSummary
+        ? ` Sources: ${sourceSummary}${stats.sources.length > 5 ? ", …" : ""}.`
+        : "");
+  }
 
   const { messages } = assemblePrompt(opts.query, hits, memory, verifiedAnswer, corpusFacts);
 

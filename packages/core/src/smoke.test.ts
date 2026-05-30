@@ -62,6 +62,7 @@ import {
   runQuery,
 } from "./index";
 import type { ChatProvider, EmbeddingProvider } from "@mnemos/plugin-sdk";
+import { isInventoryQuestion } from "./query/runQuery";
 
 describe("smoke: db + registry + crypto", () => {
   let tempDir: string;
@@ -474,6 +475,26 @@ describe("co-retrieval: getContentChunksForFile", () => {
     const s1stats = stats.sources.find((s) => s.path === "/tmp/stats-s1");
     expect(s1stats?.fileCount).toBe(2);
     expect(s1stats?.chunkCount).toBe(3);
+  });
+
+  it("isInventoryQuestion gates corpus stats to count/inventory phrasings only", () => {
+    for (const q of [
+      "how many documents do I have?",
+      "what is the total number of files?",
+      "count my PDFs",
+      "which folders are indexed?",
+      "list all my documents",
+      "what types of files are in here?",
+    ]) {
+      expect(isInventoryQuestion(q)).toBe(true);
+    }
+    for (const q of [
+      "what is my car VIN?",
+      "summarize the field test report",
+      "when was the spec last modified?",
+    ]) {
+      expect(isInventoryQuestion(q)).toBe(false);
+    }
   });
 });
 
