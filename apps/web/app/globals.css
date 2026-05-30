@@ -82,3 +82,22 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 0 28px -18px rgba(99, 102, 241, 0.65);
 }
+
+/* Settings-launcher ingestion ring (background-ingestion observability).
+   "Breathing" glow while ingesting; steady amber/red for paused/error. */
+@keyframes mnemos-breathe {
+  0%, 100% { box-shadow: 0 0 9px -4px rgba(34, 211, 238, 0.65); }
+  50%      { box-shadow: 0 0 22px 0px rgba(34, 211, 238, 0.95); }
+}
+.mnemos-ring-running {
+  border-color: rgb(34, 211, 238);
+  animation: mnemos-breathe 1.8s ease-in-out infinite;
+}
+.mnemos-ring-paused {
+  border-color: rgb(251, 191, 36);
+  box-shadow: 0 0 14px -4px rgba(251, 191, 36, 0.85);
+}
+.mnemos-ring-error {
+  border-color: rgb(248, 113, 113);
+  box-shadow: 0 0 14px -4px rgba(248, 113, 113, 0.85);
+}

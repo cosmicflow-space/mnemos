@@ -7,6 +7,7 @@ import {
   releaseIngest,
 } from "@mnemos/db";
 import { getDb, getRegistry, getDefaultEmbedder } from "@/lib/runtime";
+import { applyIngestProgress } from "@/lib/ingest-status";
 import { resolve } from "node:path";
 import { homedir } from "node:os";
 
@@ -115,16 +116,18 @@ export async function POST(req: Request) {
       }
       try {
         await ingestFolder(db, registry, embedder, source, {
-          onProgress: (progress) => send(progress),
+          onProgress: (progress) => {
+            send(progress);
+            applyIngestProgress(source.id, source.path, progress);
+          },
           filters: parsed.data.filters,
         });
         // Manual scan resets the auto re-scan cadence for this source.
         touchSourceScanned(db, source.id);
       } catch (err) {
-        send({
-          phase: "error",
-          message: err instanceof Error ? err.message : String(err),
-        });
+        const message = err instanceof Error ? err.message : String(err);
+        send({ phase: "error", message });
+        applyIngestProgress(source.id, source.path, { phase: "error", message });
       } finally {
         releaseIngest(db, source.id, token);
         controller.close();
