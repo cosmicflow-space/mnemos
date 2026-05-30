@@ -30,6 +30,7 @@ export {
   getSourceByPath,
   removeSource,
   setSourceWatchInterval,
+  setSourcePaused,
   touchSourceScanned,
   listDueSources,
   tryClaimIngest,

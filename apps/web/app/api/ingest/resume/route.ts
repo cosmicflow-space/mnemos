@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { setSourcePaused } from "@mnemos/db";
+import { getDb } from "@/lib/runtime";
 import { runSourceIngestInBackground } from "@/lib/ingest-runner";
 
 export const runtime = "nodejs";
@@ -23,6 +25,9 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
+  // Clear the durable paused flag first so the watcher won't see it paused and
+  // so the UI flips off "Resume" immediately, then kick the (incremental) re-ingest.
+  setSourcePaused(getDb(), parsed.data.sourceId, false);
   const started = await runSourceIngestInBackground(parsed.data.sourceId);
   return NextResponse.json({ started });
 }

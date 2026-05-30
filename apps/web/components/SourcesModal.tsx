@@ -12,6 +12,7 @@ type SourceRow = {
   watchIntervalMs?: number;
   lastScannedAt?: number | null;
   nextScanDueAt?: number | null;
+  paused?: boolean;
 };
 
 const MINUTE = 60_000;
@@ -146,8 +147,10 @@ export function SourcesModal({
 
   // Ingest a path, draining the SSE progress stream. Unchanged files are skipped
   // server-side (incremental), so re-running is cheap. Throws on error.
-  async function ingestPath(p: string) {
+  // Returns true if the run was paused (terminal 'paused' phase) rather than completed.
+  async function ingestPath(p: string): Promise<boolean> {
     setStatus("Ingesting… (reading, chunking, embedding)");
+    let paused = false;
     const ingRes = await fetch("/api/ingest", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -174,13 +177,16 @@ export function SourcesModal({
           continue;
         }
         if (ev.phase === "error") throw new Error(ev.message ?? "ingest error");
-        if (typeof ev.files === "number" || typeof ev.chunks === "number") {
+        if (ev.phase === "paused") {
+          paused = true;
+        } else if (typeof ev.files === "number" || typeof ev.chunks === "number") {
           setStatus(`Ingesting… ${ev.files ?? 0} files, ${ev.chunks ?? 0} chunks`);
         } else if (ev.phase) {
           setStatus(`Ingesting… ${ev.phase}`);
         }
       }
     }
+    return paused;
   }
 
   async function addAndIngest() {
@@ -196,8 +202,8 @@ export function SourcesModal({
         body: JSON.stringify({ path: p, watchIntervalMs: addInterval }),
       });
       if (!addRes.ok) throw new Error((await addRes.text()) || "add failed");
-      await ingestPath(p);
-      setStatus("Done.");
+      const paused = await ingestPath(p);
+      setStatus(paused ? "Paused — resume any time from the list below." : "Done.");
       setPath("");
       await refresh();
       onChanged();
@@ -215,8 +221,12 @@ export function SourcesModal({
     setBusy(true);
     setErr(null);
     try {
-      await ingestPath(p);
-      setStatus("Done — re-scanned (unchanged files skipped).");
+      const paused = await ingestPath(p);
+      setStatus(
+        paused
+          ? "Paused — resume any time from the list below."
+          : "Done — re-scanned (unchanged files skipped).",
+      );
       await refresh();
       onChanged();
     } catch (e) {
@@ -384,7 +394,7 @@ export function SourcesModal({
                     >
                       ⏸ Pause
                     </button>
-                  ) : ingest[s.id]?.state === "paused" ? (
+                  ) : ingest[s.id]?.state === "paused" || s.paused ? (
                     <button
                       onClick={() => void resumeSource(s.id)}
                       className="text-[11px] text-cyan-400 hover:text-cyan-300 transition"

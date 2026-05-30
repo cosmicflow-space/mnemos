@@ -86,6 +86,7 @@ export async function GET() {
           watchIntervalMs: s.watchIntervalMs,
           lastScannedAt: s.lastScannedAt,
           nextScanDueAt,
+          paused: s.paused,
         };
       }),
     });

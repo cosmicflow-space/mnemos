@@ -19,12 +19,23 @@ export function registerIngestController(sourceId: number, controller: AbortCont
   controllers.set(sourceId, controller);
 }
 
-export function unregisterIngestController(sourceId: number): void {
-  controllers.delete(sourceId);
+/** Remove a run's controller — but only if it's still the registered one.
+ * Instance-aware so a finishing run can't evict a newer run's controller that
+ * already re-claimed the slot (e.g. a resume racing the old run's cleanup). */
+export function unregisterIngestController(sourceId: number, controller: AbortController): void {
+  if (controllers.get(sourceId) === controller) {
+    controllers.delete(sourceId);
+  }
 }
 
 export function isIngesting(sourceId: number): boolean {
   return controllers.has(sourceId);
+}
+
+/** Source ids with an in-flight run — used by "pause all" to know which sources
+ * to persist as paused. */
+export function ingestingSourceIds(): number[] {
+  return [...controllers.keys()];
 }
 
 /** Abort one source's ingest. Returns true if a run was actually in flight. */

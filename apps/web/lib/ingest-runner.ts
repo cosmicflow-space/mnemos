@@ -50,8 +50,10 @@ export async function runSourceIngestInBackground(sourceId: number): Promise<boo
         message: err instanceof Error ? err.message : String(err),
       });
     } finally {
+      // Unregister our own controller first (instance-aware, so a resume that
+      // already re-claimed the slot is untouched), then release the lease.
+      unregisterIngestController(sourceId, controller);
       releaseIngest(db, sourceId, token);
-      unregisterIngestController(sourceId);
     }
   })();
 

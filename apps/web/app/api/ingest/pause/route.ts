@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { pauseIngest, pauseAllIngest } from "@/lib/ingest-control";
+import { setSourcePaused } from "@mnemos/db";
+import { getDb } from "@/lib/runtime";
+import { pauseIngest, pauseAllIngest, ingestingSourceIds } from "@/lib/ingest-control";
 
 export const runtime = "nodejs";
 
@@ -23,9 +25,15 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
+  const db = getDb();
   if (parsed.data.sourceId === undefined) {
+    // Persist paused for every in-flight source first (durable — the watcher
+    // skips paused sources), then abort them.
+    for (const id of ingestingSourceIds()) setSourcePaused(db, id, true);
     return NextResponse.json({ scope: "all", paused: pauseAllIngest() });
   }
+  // Persist paused even if no run is in flight, so the watcher won't (re)start it.
+  setSourcePaused(db, parsed.data.sourceId, true);
   return NextResponse.json({
     scope: "source",
     sourceId: parsed.data.sourceId,

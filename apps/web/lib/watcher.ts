@@ -102,7 +102,7 @@ async function tick(): Promise<void> {
         // eslint-disable-next-line no-console
         console.warn(`[mnemos/watcher] re-scan failed for ${source.path}: ${message}`);
       } finally {
-        unregisterIngestController(source.id);
+        unregisterIngestController(source.id, abort);
         releaseIngest(db, source.id, token);
       }
     }
