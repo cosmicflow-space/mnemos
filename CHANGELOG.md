@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-30
+
+### Added
+- **Per-file metadata chunks**: every ingested file now carries one extra retrievable chunk describing its path, size (human + raw bytes), last-modified date, and type. Metadata questions like *"how big is resume.pdf"* or *"when was notes.md modified"* now retrieve reliably even when no content chunk ranks high — the metadata sentence embeds next to the question itself, not buried in a chunk header. Re-scanning an existing source **backfills** metadata chunks for files indexed before this feature, without re-embedding their content.
+
 ## [0.5.0] - 2026-05-30
 
 ### Added

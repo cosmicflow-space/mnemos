@@ -18,6 +18,8 @@ import {
   setFileIngestStatus,
   insertChunk,
   purgeFileChunks,
+  getMetadataChunkText,
+  deleteMetadataChunk,
   appendAudit,
 } from "@mnemos/db";
 import type { EmbeddingProvider } from "@mnemos/plugin-sdk";
@@ -64,6 +66,65 @@ export type IngestFolderOptions = {
   /** User-chosen filters from the scan-result UI. */
   filters?: IngestFilters;
 };
+
+function humanSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+/** Natural-language metadata sentence for a file — embedded as its own chunk so
+ * metadata questions ("how big", "when modified", "what type") retrieve it. */
+function fileMetadataText(
+  relativePath: string,
+  sizeBytes: number,
+  mtimeMs: number,
+  loader: string,
+): string {
+  const name = relativePath.split("/").pop() ?? relativePath;
+  const modified = new Date(mtimeMs).toISOString().slice(0, 10);
+  return `File metadata for "${name}" (path: ${relativePath}). Size: ${humanSize(sizeBytes)} (${sizeBytes} bytes). Last modified: ${modified}. Type: ${loader}.`;
+}
+
+/** Ensure the file's metadata chunk (ordinal -1) reflects its current path,
+ * size, mtime, and type. No-ops when the stored chunk already matches (so
+ * steady-state re-scans cost one cheap SELECT and zero embeds); refreshes it
+ * when the text has drifted (e.g. a touch changed mtime without changing
+ * content, which takes the skip path). Also backfills files that predate this
+ * feature. Best-effort — never throws into the caller. Returns true only when a
+ * NEW chunk was inserted (i.e. there was none before), so callers can count it. */
+async function upsertMetadataChunk(
+  db: MnemosDb,
+  embedder: EmbeddingProvider,
+  fileId: number,
+  relativePath: string,
+  sizeBytes: number,
+  mtimeMs: number,
+  loader: string,
+): Promise<boolean> {
+  try {
+    const text = fileMetadataText(relativePath, sizeBytes, mtimeMs, loader);
+    const existing = getMetadataChunkText(db, fileId);
+    if (existing === text) return false; // already current — no embed needed
+    const [vec] = await embedder.embed([text]);
+    if (!vec) return false;
+    // Replace any stale chunk first — ordinal -1 is UNIQUE(file_id, ordinal),
+    // so a refresh must delete the old row (and its vector) before inserting.
+    if (existing !== undefined) deleteMetadataChunk(db, fileId);
+    insertChunk(db, {
+      fileId,
+      ordinal: -1,
+      text,
+      startOffset: 0,
+      endOffset: text.length,
+      embedding: vec,
+    });
+    return existing === undefined; // count only first-time inserts, not refreshes
+  } catch {
+    return false;
+  }
+}
 
 export async function ingestFolder(
   db: MnemosDb,
@@ -153,6 +214,22 @@ export async function ingestFolder(
     // even when the hash hasn't moved — this is the atomic-ingest guarantee
     // that prevents mid-file crashes from leaving permanently corrupt indexes.
     if (!upsertResult.changed && upsertResult.ingestStatus === "complete") {
+      // Backfill the metadata chunk for files ingested before this feature
+      // existed. upsertMetadataChunk no-ops if one is already present, so this
+      // re-embeds nothing on steady-state re-scans — it only fills the gap once.
+      if (
+        await upsertMetadataChunk(
+          db,
+          embedder,
+          upsertResult.fileId,
+          file.relativePath,
+          fileStat.size,
+          fileStat.mtimeMs,
+          loaderId,
+        )
+      ) {
+        chunksCreated += 1;
+      }
       filesSkipped += 1;
       onProgress({ phase: "file-skipped", filePath: file.relativePath, reason: "unchanged", current, total });
       continue;
@@ -180,6 +257,25 @@ export async function ingestFolder(
     onProgress({ phase: "file-chunked", filePath: file.relativePath, chunkCount: chunks.length, current, total });
 
     if (chunks.length === 0) {
+      // Empty/near-empty file: no content chunks, but it's still a real file the
+      // user may ask about ("how big is X"). Give it its metadata chunk so the
+      // "every ingested file is retrievable by metadata" contract holds, then
+      // mark complete so it's stable on re-scan (purge above already cleared any
+      // stale metadata chunk).
+      if (
+        await upsertMetadataChunk(
+          db,
+          embedder,
+          upsertResult.fileId,
+          file.relativePath,
+          fileStat.size,
+          fileStat.mtimeMs,
+          loaderId,
+        )
+      ) {
+        chunksCreated += 1;
+      }
+      setFileIngestStatus(db, upsertResult.fileId, "complete");
       filesProcessed += 1;
       onProgress({ phase: "file-complete", filePath: file.relativePath, chunkCount: 0, current, total });
       continue;
@@ -234,6 +330,23 @@ export async function ingestFolder(
       setFileIngestStatus(db, upsertResult.fileId, "partial");
       onProgress({ phase: "file-skipped", filePath: file.relativePath, reason: "load-error", current, total });
     } else {
+      // Add a per-file metadata chunk so questions like "how big is X" or "when
+      // was X modified" retrieve reliably even when no content chunk ranks high.
+      // purgeFileChunks above already removed any prior metadata chunk, so this
+      // always inserts a fresh one (ordinal -1 marks it as metadata).
+      if (
+        await upsertMetadataChunk(
+          db,
+          embedder,
+          upsertResult.fileId,
+          file.relativePath,
+          fileStat.size,
+          fileStat.mtimeMs,
+          loaderId,
+        )
+      ) {
+        chunksCreated += 1;
+      }
       // All chunks for this file landed successfully — flip to 'complete'
       // atomically as the last step. Crash before this line → status stays
       // 'pending'/'partial', next run reprocesses.

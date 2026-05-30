@@ -48,6 +48,8 @@ export {
   type VerifiedAnswerRow,
   chunkCountBySource,
   countChunksForFile,
+  getMetadataChunkText,
+  deleteMetadataChunk,
   ingestStatsBySource,
   type SourceIngestStats,
   getChunk,
