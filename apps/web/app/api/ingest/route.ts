@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { ingestFolder } from "@mnemos/core";
-import { getSourceByPath } from "@mnemos/db";
+import {
+  getSourceByPath,
+  touchSourceScanned,
+  tryClaimIngest,
+  releaseIngest,
+} from "@mnemos/db";
 import { getDb, getRegistry, getDefaultEmbedder } from "@/lib/runtime";
 import { resolve } from "node:path";
 import { homedir } from "node:os";
@@ -97,17 +102,31 @@ export async function POST(req: Request) {
       const send = (event: unknown) => {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
       };
+      // Acquire the same lease the watcher uses, so a manual ↻ Re-scan and a
+      // background tick can't ingest this source concurrently.
+      const token = tryClaimIngest(db, source.id);
+      if (token === null) {
+        send({
+          phase: "error",
+          message: "An ingest is already in progress for this source — try again in a moment.",
+        });
+        controller.close();
+        return;
+      }
       try {
         await ingestFolder(db, registry, embedder, source, {
           onProgress: (progress) => send(progress),
           filters: parsed.data.filters,
         });
+        // Manual scan resets the auto re-scan cadence for this source.
+        touchSourceScanned(db, source.id);
       } catch (err) {
         send({
           phase: "error",
           message: err instanceof Error ? err.message : String(err),
         });
       } finally {
+        releaseIngest(db, source.id, token);
         controller.close();
       }
     },

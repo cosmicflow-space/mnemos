@@ -7,6 +7,10 @@ export type Source = {
   scope: "read-only";
   createdAt: number;
   updatedAt: number;
+  /** Auto re-scan cadence in ms. 0 = manual only (no background re-scan). */
+  watchIntervalMs: number;
+  /** Epoch ms of the last scan (auto or manual). Null until first scanned. */
+  lastScannedAt: number | null;
 };
 
 export type IngestStatus = "pending" | "partial" | "complete" | "failed";

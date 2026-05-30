@@ -83,6 +83,27 @@ function migrate(db: BetterSqliteDb): void {
     console.log("[mnemos/db migrate] m1: file.ingest_status added; existing rows with chunks marked 'complete'.");
   }
 
+  // m3: source watch columns. Added so existing DBs gain background re-scan
+  // scheduling. watch_interval_ms defaults to once daily; last_scanned_at is
+  // left NULL so the watcher treats already-registered sources as due once
+  // (a cheap incremental re-ingest) on next tick.
+  const srcCols = db
+    .prepare("PRAGMA table_info(source)")
+    .all() as Array<{ name: string }>;
+  if (!srcCols.some((c) => c.name === "watch_interval_ms")) {
+    db.exec(
+      "ALTER TABLE source ADD COLUMN watch_interval_ms INTEGER NOT NULL DEFAULT 86400000",
+    );
+    // eslint-disable-next-line no-console
+    console.log("[mnemos/db migrate] m3: source.watch_interval_ms added (default daily).");
+  }
+  if (!srcCols.some((c) => c.name === "last_scanned_at")) {
+    db.exec("ALTER TABLE source ADD COLUMN last_scanned_at INTEGER");
+  }
+  if (!srcCols.some((c) => c.name === "ingesting_since")) {
+    db.exec("ALTER TABLE source ADD COLUMN ingesting_since INTEGER");
+  }
+
   // m2: backfill session.title from the session's first user message for
   // any pre-existing session that doesn't have a title yet. New sessions get
   // a title server-side at /api/query time; this rescues the legacy ones so

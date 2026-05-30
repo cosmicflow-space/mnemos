@@ -9,7 +9,42 @@ type SourceRow = {
   kind: string;
   chunkCount: number;
   fileCount?: number;
+  watchIntervalMs?: number;
+  lastScannedAt?: number | null;
+  nextScanDueAt?: number | null;
 };
+
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+
+// Auto re-scan cadence choices. Daily is the default; "Manual only" (0) opts a
+// source out of background re-scans entirely.
+const INTERVAL_OPTIONS: ReadonlyArray<{ label: string; ms: number }> = [
+  { label: "Every 5 min", ms: 5 * MINUTE },
+  { label: "Every 15 min", ms: 15 * MINUTE },
+  { label: "Hourly", ms: HOUR },
+  { label: "Every 6 hours", ms: 6 * HOUR },
+  { label: "Daily", ms: DAY },
+  { label: "Manual only", ms: 0 },
+];
+
+function intervalLabel(ms: number | undefined): string {
+  if (ms === 0) return "Manual only";
+  const found = INTERVAL_OPTIONS.find((o) => o.ms === ms);
+  return found ? found.label : "Daily";
+}
+
+/** "in 3h", "in 12m", "due now" — coarse, human, no live ticking needed. */
+function nextScanText(row: SourceRow): string | null {
+  if (!row.watchIntervalMs) return null; // manual only
+  const due = row.nextScanDueAt ?? 0;
+  const delta = due - Date.now();
+  if (delta <= 0) return "due now";
+  if (delta < HOUR) return `in ${Math.max(1, Math.round(delta / MINUTE))}m`;
+  if (delta < DAY) return `in ${Math.round(delta / HOUR)}h`;
+  return `in ${Math.round(delta / DAY)}d`;
+}
 
 /**
  * Manage sources without leaving chat: list registered folders, add a new one
@@ -26,6 +61,7 @@ export function SourcesModal({
 }) {
   const [sources, setSources] = useState<SourceRow[]>([]);
   const [path, setPath] = useState("");
+  const [addInterval, setAddInterval] = useState<number>(DAY);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -95,7 +131,7 @@ export function SourcesModal({
       const addRes = await fetch("/api/sources", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ path: p }),
+        body: JSON.stringify({ path: p, watchIntervalMs: addInterval }),
       });
       if (!addRes.ok) throw new Error((await addRes.text()) || "add failed");
       await ingestPath(p);
@@ -126,6 +162,22 @@ export function SourcesModal({
       setStatus(null);
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Change a source's auto re-scan cadence. Optimistic: refresh after.
+  async function updateInterval(p: string, ms: number) {
+    setErr(null);
+    try {
+      const r = await fetch("/api/sources", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ path: p, watchIntervalMs: ms }),
+      });
+      if (!r.ok) throw new Error((await r.text()) || "update failed");
+      await refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -177,6 +229,25 @@ export function SourcesModal({
           {busy ? "Working…" : "Add & ingest"}
         </button>
       </div>
+
+      <label className="flex items-center gap-2 mb-2 text-[11px] text-muted">
+        <span>Auto re-scan:</span>
+        <select
+          value={addInterval}
+          onChange={(e) => setAddInterval(Number(e.target.value))}
+          disabled={busy}
+          className="bg-surface border border-line rounded px-1.5 py-1 text-fg focus:outline-none focus:border-cyan-500 disabled:opacity-50"
+        >
+          {INTERVAL_OPTIONS.map((o) => (
+            <option key={o.ms} value={o.ms}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <span className="text-muted/70">
+          incremental — only changed files re-embed
+        </span>
+      </label>
       {status && <p className="text-xs text-cyan-300 mb-2">{status}</p>}
       {err && <p className="text-xs text-red-400 mb-2">{err}</p>}
 
@@ -205,14 +276,33 @@ export function SourcesModal({
                     {s.kind !== "file" && typeof s.fileCount === "number"
                       ? ` · ${s.fileCount} files`
                       : ""}
+                    {(() => {
+                      const next = nextScanText(s);
+                      return s.watchIntervalMs === 0
+                        ? " · auto: off"
+                        : ` · auto: ${intervalLabel(s.watchIntervalMs)}${next ? ` (${next})` : ""}`;
+                    })()}
                   </div>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
+                  <select
+                    value={s.watchIntervalMs ?? DAY}
+                    onChange={(e) => void updateInterval(s.path, Number(e.target.value))}
+                    disabled={busy}
+                    title="Auto re-scan cadence"
+                    className="bg-surface border border-line rounded px-1 py-1 text-[11px] text-muted focus:outline-none focus:border-cyan-500 disabled:opacity-50"
+                  >
+                    {INTERVAL_OPTIONS.map((o) => (
+                      <option key={o.ms} value={o.ms}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
                   <button
                     onClick={() => void rescan(s.path)}
                     disabled={busy}
                     className="text-[11px] text-cyan-400 hover:text-cyan-300 transition disabled:opacity-50"
-                    title="Re-ingest — only changed/new files are re-embedded"
+                    title="Re-ingest now — only changed/new files are re-embedded"
                   >
                     ↻ Re-scan
                   </button>
