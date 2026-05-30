@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { readdir, stat, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, parse } from "node:path";
+import { checkSecurityExclusion } from "@mnemos/core";
 import { isLoopbackBind } from "@/lib/auth";
 import { normalizeUserPath } from "@/lib/user-path";
 import { filterBrowseEntries } from "@/lib/browse";
@@ -10,6 +11,44 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_ENTRIES = 1000;
+// Bound concurrent stat()s when resolving symlink entries, so a directory with
+// thousands of symlinks can't exhaust file descriptors (EMFILE).
+const STAT_CONCURRENCY = 32;
+
+/** A directory is credential-hard-locked if it (or anything it contains) matches
+ * a security pattern. Test both the bare path and a trailing-slash form so the
+ * `.ssh/`/`.aws/` (slash-anchored) and `credentials`/`id_rsa` (end-anchored)
+ * patterns both fire. */
+function isHardLockedDir(absDir: string): boolean {
+  return Boolean(checkSecurityExclusion(absDir) || checkSecurityExclusion(`${absDir}/`));
+}
+
+/** Resolve raw dirents to {name,isDir} in bounded-concurrency batches. Symlinks
+ * are followed to their real target: a broken link is dropped, and a link whose
+ * target is a credential file/dir is dropped so an innocuous alias can't expose
+ * (or later be picked to ingest) a secret. */
+async function resolveEntries(
+  dir: string,
+  dirents: Array<{ name: string; isDir: boolean; isSymlink: boolean }>,
+): Promise<Array<{ name: string; isDir: boolean }>> {
+  const out: Array<{ name: string; isDir: boolean }> = [];
+  for (let i = 0; i < dirents.length; i += STAT_CONCURRENCY) {
+    const batch = await Promise.all(
+      dirents.slice(i, i + STAT_CONCURRENCY).map(async (d) => {
+        if (!d.isSymlink) return { name: d.name, isDir: d.isDir };
+        try {
+          const real = await realpath(join(dir, d.name));
+          if (checkSecurityExclusion(real) || isHardLockedDir(real)) return null;
+          return { name: d.name, isDir: (await stat(real)).isDirectory() };
+        } catch {
+          return null; // broken link
+        }
+      }),
+    );
+    for (const e of batch) if (e) out.push(e);
+  }
+  return out;
+}
 
 /**
  * GET /api/browse?path=<dir>
@@ -44,37 +83,37 @@ export async function GET(req: Request) {
   }
 
   try {
+    // realpath canonicalizes the whole path, so a symlink alias to a credential
+    // dir (~/Documents/secrets -> ~/.ssh) resolves to its true target here.
     const real = await realpath(requested);
     const st = await stat(real);
     // A file was passed (e.g. the picker re-opened on a selected file): list its
     // containing directory so the user lands somewhere navigable.
     const targetDir = st.isDirectory() ? real : dirname(real);
 
+    // Refuse to list a credential directory even via a direct/aliased request —
+    // the entry filter only guards children, not the container itself.
+    if (isHardLockedDir(targetDir)) {
+      return NextResponse.json(
+        { error: "permission_denied", message: "That directory is protected and can't be browsed." },
+        { status: 403 },
+      );
+    }
+
     const dirents = await readdir(targetDir, { withFileTypes: true });
-    const resolved = await Promise.all(
-      dirents.map(async (d) => {
-        if (d.isSymbolicLink()) {
-          // Resolve the link target's type so a symlinked dir stays navigable;
-          // a broken link resolves to nothing and is dropped.
-          try {
-            return { name: d.name, isDir: (await stat(join(targetDir, d.name))).isDirectory() };
-          } catch {
-            return null;
-          }
-        }
-        return { name: d.name, isDir: d.isDirectory() };
-      }),
+    const raw = await resolveEntries(
+      targetDir,
+      dirents.map((d) => ({ name: d.name, isDir: d.isDirectory(), isSymlink: d.isSymbolicLink() })),
     );
-    const raw = resolved.filter((e): e is { name: string; isDir: boolean } => e !== null);
-    const entries = filterBrowseEntries(targetDir, raw).slice(0, MAX_ENTRIES);
+    const filtered = filterBrowseEntries(targetDir, raw);
     const root = parse(targetDir).root;
 
     return NextResponse.json({
       path: targetDir,
       parent: targetDir === root ? null : dirname(targetDir),
       home: homedir(),
-      entries,
-      truncated: raw.length > MAX_ENTRIES,
+      entries: filtered.slice(0, MAX_ENTRIES),
+      truncated: filtered.length > MAX_ENTRIES,
     });
   } catch (err) {
     const code = (err as NodeJS.ErrnoException)?.code;

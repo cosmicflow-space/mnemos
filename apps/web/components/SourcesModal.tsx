@@ -205,16 +205,21 @@ export function SourcesModal({
     setContainsWarning(null);
     setStatus("Registering source…");
     try {
-      // Validate a typed/pasted path exists before registering it, so a typo or a
-      // stray-quote paste doesn't create a dead source that silently indexes
-      // nothing — nudge to the picker instead. (browse is loopback-only; a 403
-      // means it's unavailable, so we skip the check and let the add proceed.)
+      // Validate a typed/pasted path before registering it, so a typo, a
+      // stray-quote paste, or an unreadable path doesn't create a dead source
+      // that silently indexes nothing — nudge to the picker instead. Browse is
+      // loopback-only: a `browse_disabled` error means we're on LAN and can't
+      // pre-validate, so only that case proceeds; every other failure (missing
+      // path, permission denied) stops with an actionable message.
       const check = await fetch(`/api/browse?path=${encodeURIComponent(p)}`, { cache: "no-store" });
-      if (check.status === 404) {
-        setErr("That path doesn't exist. Use “Browse…” to pick a real folder or file.");
-        setStatus(null);
-        setBusy(false);
-        return;
+      if (!check.ok) {
+        const body = (await check.json().catch(() => ({}))) as { error?: string; message?: string };
+        if (body.error !== "browse_disabled") {
+          setErr(`${body.message ?? "That path can't be opened."} Use “Browse…” to pick a folder or file.`);
+          setStatus(null);
+          setBusy(false);
+          return;
+        }
       }
       const addRes = await fetch("/api/sources", {
         method: "POST",
