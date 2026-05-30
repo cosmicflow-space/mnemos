@@ -58,7 +58,9 @@ import {
   decryptString,
   DEFAULT_EMBEDDING_PROVIDER_ID,
   MNEMOS_EMBEDDING_DIM,
+  runQuery,
 } from "./index";
+import type { ChatProvider, EmbeddingProvider } from "@mnemos/plugin-sdk";
 
 describe("smoke: db + registry + crypto", () => {
   let tempDir: string;
@@ -449,5 +451,68 @@ describe("co-retrieval: getContentChunksForFile", () => {
   it("returns nothing for a metadata-only file (no content chunks)", () => {
     const fileId = seedFile("empty.txt", []);
     expect(getContentChunksForFile(db, fileId, 3, 0.1)).toHaveLength(0);
+  });
+});
+
+// End-to-end guard for the injection loop in runQuery (step 2b): when a file
+// surfaces ONLY via its metadata chunk, its content must be co-retrieved AND
+// spliced immediately after the metadata hit (not appended at the tail).
+describe("co-retrieval: runQuery splices content next to a metadata-only file hit", () => {
+  let tempDir: string;
+  let db: MnemosDb;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "mnemos-runquery-"));
+    db = openDb({ path: join(tempDir, "test.db") });
+  });
+  afterEach(() => {
+    db.close();
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it("pulls a file's content in right after its metadata chunk when only metadata ranked", async () => {
+    const axis = (i: number): number[] => {
+      const a = new Array(384).fill(0);
+      a[i] = 1;
+      return a;
+    };
+    const nearAxis0 = (): number[] => {
+      const a = new Array(384).fill(0);
+      a[0] = 0.9;
+      return a;
+    };
+
+    // File A: metadata chunk sits on the query axis (closest); its content chunk
+    // is orthogonal (far), so a small top-K won't retrieve the content directly.
+    const srcA = addSource(db, "/tmp/run-A");
+    const fileA = upsertFile(db, { sourceId: srcA.id, path: "vin.txt", contentHash: "a", sizeBytes: 50, mtime: 1, loader: "plaintext" }).fileId;
+    insertChunk(db, { fileId: fileA, ordinal: -1, text: "metadata for vin.txt", startOffset: 0, endOffset: 0, embedding: axis(0) });
+    insertChunk(db, { fileId: fileA, ordinal: 0, text: "the VIN is XYZ123", startOffset: 0, endOffset: 17, embedding: axis(1) });
+
+    // File B: a filler content chunk near the query axis — takes the other top-K slot.
+    const srcB = addSource(db, "/tmp/run-B");
+    const fileB = upsertFile(db, { sourceId: srcB.id, path: "other.txt", contentHash: "b", sizeBytes: 50, mtime: 1, loader: "plaintext" }).fileId;
+    insertChunk(db, { fileId: fileB, ordinal: 0, text: "unrelated filler", startOffset: 0, endOffset: 16, embedding: nearAxis0() });
+
+    createSession(db, "s1", "test");
+
+    const embedder = { embed: async () => [axis(0)] } as unknown as EmbeddingProvider;
+    // Chat is never invoked: we break after the "retrieved" event.
+    const chat = { chat: async function* () {} } as unknown as ChatProvider;
+
+    let hits: Array<{ filePath: string; text: string }> | undefined;
+    for await (const ev of runQuery(db, embedder, chat, { query: "VIN in vin.txt?", sessionId: "s1", topK: 2 })) {
+      if (ev.phase === "retrieved") {
+        hits = ev.hits;
+        break;
+      }
+    }
+
+    expect(hits).toBeDefined();
+    const vinIdx = hits!.findIndex((h) => h.text.includes("the VIN is"));
+    // The content chunk was co-retrieved even though it didn't rank in the top-2…
+    expect(vinIdx).toBeGreaterThanOrEqual(0);
+    // …and it sits immediately after its file's metadata chunk (adjacency, not tail).
+    expect(hits![vinIdx - 1]?.text).toContain("metadata for vin.txt");
   });
 });
