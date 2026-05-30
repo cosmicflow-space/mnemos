@@ -20,14 +20,19 @@ import type {
   Session,
   ChatMessage,
   AuditEvent,
+  TelegramChat,
+  TelegramState,
 } from "./types";
 
 // ============================================================================
 // Sources (registered folders, URLs, etc.)
 // ============================================================================
 
-/** Background auto re-scan cadence default: once per day. */
-export const DEFAULT_WATCH_INTERVAL_MS = 86_400_000;
+/** Default auto re-scan cadence for a NEW source: 0 = manual only. Auto re-scan
+ * is opt-in per source — most people add static documents and don't want
+ * background CPU spent re-scanning them; folders that actually change can pick a
+ * cadence from the Sources dropdown. */
+export const DEFAULT_WATCH_INTERVAL_MS = 0;
 
 type SourceRow = {
   id: number;
@@ -969,4 +974,131 @@ export function listAuditEvents(
     data: JSON.parse(r.data) as Record<string, unknown>,
     createdAt: r.created_at,
   }));
+}
+
+// ============================================================================
+// Telegram remote channel (allowlist + poller state)
+// ============================================================================
+
+type TelegramChatRow = {
+  chat_id: number;
+  label: string | null;
+  session_id: string | null;
+  paired_at: number;
+};
+
+function rowToTelegramChat(r: TelegramChatRow): TelegramChat {
+  return {
+    chatId: r.chat_id,
+    label: r.label,
+    sessionId: r.session_id,
+    pairedAt: r.paired_at,
+  };
+}
+
+/** Read the singleton poller state row (created by schema INSERT OR IGNORE). */
+export function getTelegramState(db: MnemosDb): TelegramState {
+  const row = prepared(db)(
+    `SELECT enabled, update_offset, pairing_code, pairing_expires_at
+       FROM telegram_state WHERE id = 1`,
+  ).get() as
+    | { enabled: number; update_offset: number; pairing_code: string | null; pairing_expires_at: number | null }
+    | undefined;
+  return {
+    enabled: Boolean(row?.enabled),
+    updateOffset: row?.update_offset ?? 0,
+    pairingCode: row?.pairing_code ?? null,
+    pairingExpiresAt: row?.pairing_expires_at ?? null,
+  };
+}
+
+export function setTelegramEnabled(db: MnemosDb, enabled: boolean): void {
+  prepared(db)(`UPDATE telegram_state SET enabled = ? WHERE id = 1`).run(enabled ? 1 : 0);
+}
+
+/** Persist the last processed update id so a restart doesn't reprocess.
+ * Monotonic (MAX) so a stray concurrent poller can't rewind the offset and
+ * cause already-answered updates to be replayed. Telegram also enforces
+ * single-consumer long polling (a second getUpdates gets 409), so concurrent
+ * pollers are doubly guarded. */
+export function setTelegramOffset(db: MnemosDb, offset: number): void {
+  prepared(db)(
+    `UPDATE telegram_state SET update_offset = MAX(update_offset, ?) WHERE id = 1`,
+  ).run(offset);
+}
+
+export function setTelegramPairingCode(db: MnemosDb, code: string, expiresAt: number): void {
+  prepared(db)(
+    `UPDATE telegram_state SET pairing_code = ?, pairing_expires_at = ? WHERE id = 1`,
+  ).run(code, expiresAt);
+}
+
+/** Atomically consume a pairing code: succeeds only if it matches AND is
+ * unexpired, and clears it in the same write (single-use). SQLite serializes
+ * writes, so two concurrent /pair attempts can't both win. */
+export function consumeTelegramPairingCode(
+  db: MnemosDb,
+  code: string,
+  now: number = Date.now(),
+): boolean {
+  const res = prepared(db)(
+    `UPDATE telegram_state
+        SET pairing_code = NULL, pairing_expires_at = NULL
+      WHERE id = 1
+        AND pairing_code IS NOT NULL
+        AND pairing_code = ?
+        AND pairing_expires_at > ?`,
+  ).run(code, now);
+  return res.changes === 1;
+}
+
+/** Add (or refresh) an allowlisted chat. Idempotent on chat_id. */
+export function addTelegramChat(
+  db: MnemosDb,
+  chatId: number,
+  label: string | null = null,
+): TelegramChat {
+  const row = prepared(db)(
+    `INSERT INTO telegram_chat (chat_id, label, paired_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(chat_id) DO UPDATE SET label = excluded.label
+     RETURNING chat_id, label, session_id, paired_at`,
+  ).get(chatId, label, Date.now()) as TelegramChatRow;
+  return rowToTelegramChat(row);
+}
+
+export function isTelegramChatPaired(db: MnemosDb, chatId: number): boolean {
+  return (
+    prepared(db)(`SELECT 1 FROM telegram_chat WHERE chat_id = ? LIMIT 1`).get(chatId) !==
+    undefined
+  );
+}
+
+export function listTelegramChats(db: MnemosDb): TelegramChat[] {
+  const rows = prepared(db)(
+    `SELECT chat_id, label, session_id, paired_at FROM telegram_chat ORDER BY paired_at`,
+  ).all() as TelegramChatRow[];
+  return rows.map(rowToTelegramChat);
+}
+
+export function removeTelegramChat(db: MnemosDb, chatId: number): void {
+  prepared(db)(`DELETE FROM telegram_chat WHERE chat_id = ?`).run(chatId);
+}
+
+export function getTelegramChatSession(db: MnemosDb, chatId: number): string | null {
+  const row = prepared(db)(`SELECT session_id FROM telegram_chat WHERE chat_id = ?`).get(
+    chatId,
+  ) as { session_id: string | null } | undefined;
+  return row?.session_id ?? null;
+}
+
+export function setTelegramChatSession(
+  db: MnemosDb,
+  chatId: number,
+  sessionId: string | null,
+): void {
+  prepared(db)(`UPDATE telegram_chat SET session_id = ? WHERE chat_id = ?`).run(
+    sessionId,
+    chatId,
+  );
 }

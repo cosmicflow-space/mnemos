@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-05-30
+
+### Added
+- **Telegram remote channel — ask your RAG from your phone.** Pair a private Telegram bot and query your indexed documents from anywhere. Uses long polling, so Mnemos reaches *out* to Telegram — no public server, no tunnel, nothing inbound exposed (works behind home NAT). **Default-deny security**: the bot answers only chats you've paired via a single-use, time-boxed, CSPRNG pairing code; **direct messages only** (groups refused); query-only (no source/admin commands). Your documents never leave the machine — only the question and answer transit Telegram. Replies use your configured model. Set up in **Settings → 📲 Telegram**; the bot token is stored locally (`~/.mnemos/.env`, never logged). Reviewed by a 3-way AI security pass (no authorization bypass, no token leakage, atomic pairing).
+- **Telegram onboarding guide** (`/telegram-guide`, linked from the Telegram panel): step-by-step for users new to Telegram bots, with optional drop-in screenshot slots and a link to Telegram's official tutorial.
+- **Model selection persisted server-side**: the model you pick in the UI is now saved (`MNEMOS_DEFAULT_MODEL`) so server-initiated queries (the Telegram bot) mirror your choice across restarts.
+- **Design note**: `docs/design-notes/verified-answer-memory.md` documents how verified-answer memory works (soft cache, vector-matched, lazy invalidation) and records considered-and-deferred alternatives.
+
+### Changed
+- **Auto re-scan now defaults to Manual.** New sources are no longer auto-scanned daily by default — most people add static documents and don't want background CPU spent re-scanning them. Point a changing folder at a faster cadence from the Sources dropdown anytime. (Existing sources keep their current setting.)
+- **README/About page** brought current: a prominent "Ask from your phone" section, the new features (single-file sources, per-file metadata, auto re-scan, verified memory, Telegram), an accurate single-pane UI walkthrough, and a refreshed (non-committal) roadmap including possible richer file types (images via OCR/vision; audio/video via local speech-to-text).
+
 ## [0.8.0] - 2026-05-30
 
 ### Added

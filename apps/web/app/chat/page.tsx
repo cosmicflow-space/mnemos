@@ -19,6 +19,7 @@ import { SettingsMenu } from "@/components/SettingsMenu";
 import { ModelSettingsModal } from "@/components/ModelSettingsModal";
 import { SourcesModal } from "@/components/SourcesModal";
 import { VerifiedAnswersModal } from "@/components/VerifiedAnswersModal";
+import { TelegramSettingsModal } from "@/components/TelegramSettingsModal";
 
 type SessionRow = {
   id: string;
@@ -159,7 +160,7 @@ export default function ChatPage() {
   // Single source of truth for the centered modals — opened by the settings
   // popover, the onboarding flow, or the provider dropdown.
   const [activeModal, setActiveModal] = useState<
-    "model" | "sources" | "verified" | null
+    "model" | "sources" | "verified" | "telegram" | null
   >(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -715,6 +716,9 @@ export default function ChatPage() {
       {activeModal === "verified" && (
         <VerifiedAnswersModal onClose={() => setActiveModal(null)} />
       )}
+      {activeModal === "telegram" && (
+        <TelegramSettingsModal onClose={() => setActiveModal(null)} />
+      )}
       {/* Sidebar */}
       <aside className="border-r border-line bg-surface flex flex-col">
         <div className="px-4 py-3.5 border-b border-line flex items-center gap-2">
@@ -772,6 +776,7 @@ export default function ChatPage() {
               setActiveModal("model");
             }}
             onOpenVerified={() => setActiveModal("verified")}
+            onOpenTelegram={() => setActiveModal("telegram")}
           />
           <button
             onClick={newChat}

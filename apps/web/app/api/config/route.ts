@@ -19,6 +19,7 @@ const SaveRequest = z.object({
   apiKey: z.string().optional(),
   ollamaBaseUrl: z.string().url().optional(),
   ollamaModel: z.string().optional(),
+  model: z.string().max(200).optional(),
 });
 
 export function GET() {

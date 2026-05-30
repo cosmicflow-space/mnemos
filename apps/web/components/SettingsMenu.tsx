@@ -14,10 +14,12 @@ export function SettingsMenu({
   onOpenSources,
   onOpenModel,
   onOpenVerified,
+  onOpenTelegram,
 }: {
   onOpenSources: () => void;
   onOpenModel: () => void;
   onOpenVerified: () => void;
+  onOpenTelegram: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [theme, setThemeState] = useState<Theme>("dark");
@@ -91,6 +93,15 @@ export function SettingsMenu({
             className="w-full flex items-center gap-2 px-3 py-2.5 text-fg hover:bg-surface transition"
           >
             <span aria-hidden>✓</span> Verified answers
+          </button>
+          <button
+            onClick={() => {
+              onOpenTelegram();
+              setOpen(false);
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2.5 text-fg hover:bg-surface transition"
+          >
+            <span aria-hidden>📲</span> Telegram
           </button>
         </div>
       )}

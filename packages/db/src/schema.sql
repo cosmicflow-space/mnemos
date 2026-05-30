@@ -12,10 +12,11 @@ CREATE TABLE IF NOT EXISTS source (
   scope       TEXT NOT NULL DEFAULT 'read-only',
   created_at  INTEGER NOT NULL,
   updated_at  INTEGER NOT NULL,
-  -- Auto re-scan cadence (ms). Default once daily; 0 = manual only. The web
-  -- server's watcher periodically re-ingests due sources (incremental, so only
-  -- changed files re-embed). last_scanned_at backs off the next due time.
-  watch_interval_ms INTEGER NOT NULL DEFAULT 86400000,
+  -- Auto re-scan cadence (ms). Default 0 = manual only (auto re-scan is opt-in
+  -- per source). When > 0, the web server's watcher periodically re-ingests the
+  -- source (incremental, so only changed files re-embed); last_scanned_at backs
+  -- off the next due time.
+  watch_interval_ms INTEGER NOT NULL DEFAULT 0,
   last_scanned_at   INTEGER,
   -- Ingest lease: epoch ms when a scan claimed this source, NULL when idle. An
   -- atomic conditional UPDATE on this column is the mutual-exclusion lock that
@@ -136,6 +137,27 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_verified USING vec0(
   answer_id INTEGER PRIMARY KEY,
   embedding FLOAT[384]
 );
+
+-- Telegram remote channel.
+-- telegram_chat is the DEFAULT-DENY allowlist: only chats that completed the
+-- pairing handshake may query. A stranger who finds the bot handle is ignored.
+CREATE TABLE IF NOT EXISTS telegram_chat (
+  chat_id     INTEGER PRIMARY KEY,   -- Telegram numeric chat id (the operator's DM)
+  label       TEXT,                  -- display name captured at pairing time
+  session_id  TEXT,                  -- maps this chat to a Mnemos session (memory)
+  paired_at   INTEGER NOT NULL
+);
+
+-- Singleton control row for the poller: enable flag, last processed update id
+-- (so restarts don't reprocess), and the current single-use pairing code.
+CREATE TABLE IF NOT EXISTS telegram_state (
+  id                  INTEGER PRIMARY KEY CHECK (id = 1),
+  enabled             INTEGER NOT NULL DEFAULT 0,
+  update_offset       INTEGER NOT NULL DEFAULT 0,
+  pairing_code        TEXT,
+  pairing_expires_at  INTEGER
+);
+INSERT OR IGNORE INTO telegram_state (id, enabled, update_offset) VALUES (1, 0, 0);
 
 -- Schema version (for future migrations)
 CREATE TABLE IF NOT EXISTS schema_version (
