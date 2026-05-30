@@ -260,7 +260,9 @@ export default function SourcesPage() {
     setIngestingPath(scanResult.rootPath);
     setDoneEvent(null);
 
-    // 1. Register source (idempotent)
+    // 1. Register source. The overlap guard may decline to add when the path is
+    // inside (fold into the parent) or contains existing sources (refuse).
+    let ingestTarget = scanResult.rootPath;
     try {
       const addRes = await fetch("/api/sources", {
         method: "POST",
@@ -270,6 +272,25 @@ export default function SourcesPage() {
       if (!addRes.ok) {
         const err = (await addRes.json()) as { message?: string; error: string };
         throw new Error(err.message ?? err.error);
+      }
+      const data = (await addRes.json()) as {
+        outcome?: string;
+        parentPath?: string;
+        childPaths?: string[];
+      };
+      if (data.outcome === "inside" && data.parentPath) {
+        // Folder is inside an existing source → refresh the parent (not the
+        // unregistered subpath, which would 404). The subtree is picked up by
+        // the parent's incremental scan.
+        ingestTarget = data.parentPath;
+      } else if (data.outcome === "contains") {
+        setCurrentProgress({
+          phase: "error",
+          message: `This folder contains existing source(s): ${(data.childPaths ?? []).join(", ")}. Remove the smaller source(s) first, or add it from the in-chat Sources panel ("Add anyway").`,
+        });
+        setIngesting(false);
+        setIngestingPath(null);
+        return;
       }
     } catch (err) {
       setCurrentProgress({
@@ -283,7 +304,8 @@ export default function SourcesPage() {
 
     // 2. Stream ingestion
     try {
-      await streamIngestion(scanResult.rootPath);
+      setIngestingPath(ingestTarget);
+      await streamIngestion(ingestTarget);
       await refreshSources();
     } catch (err) {
       setCurrentProgress({

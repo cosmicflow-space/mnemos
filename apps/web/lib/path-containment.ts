@@ -19,10 +19,20 @@ export type Containment =
 
 export type SourceEntry = { path: string; real: string };
 
-function isStrictlyInside(childReal: string, parentReal: string): boolean {
-  if (childReal === parentReal) return false;
-  const prefix = parentReal.endsWith("/") ? parentReal : `${parentReal}/`;
-  return childReal.startsWith(prefix);
+// Normalize separators so the boundary check works for Windows realpaths
+// (`C:\Users\me\Docs`) as well as POSIX. We don't lowercase: realpath already
+// canonicalizes casing for existing paths, and lowercasing would wrongly merge
+// distinct paths on case-sensitive filesystems.
+function norm(p: string): string {
+  return p.replace(/\\/g, "/");
+}
+
+function isStrictlyInside(childRealRaw: string, parentRealRaw: string): boolean {
+  const child = norm(childRealRaw);
+  const parent = norm(parentRealRaw);
+  if (child === parent) return false;
+  const prefix = parent.endsWith("/") ? parent : `${parent}/`;
+  return child.startsWith(prefix);
 }
 
 export function classifyContainment(newReal: string, existing: SourceEntry[]): Containment {

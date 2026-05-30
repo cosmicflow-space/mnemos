@@ -35,4 +35,13 @@ describe("classifyContainment", () => {
     // /Users/me/Documents-old must not be considered inside /Users/me/Documents
     expect(classifyContainment("/Users/me/Documents-old", existing)).toEqual({ kind: "none" });
   });
+
+  it("detects nesting in Windows-style backslash paths", () => {
+    const win = [{ path: "C:\\Users\\me\\Docs", real: "C:\\Users\\me\\Docs" }];
+    expect(classifyContainment("C:\\Users\\me\\Docs\\child", win)).toEqual({
+      kind: "inside",
+      parentPath: "C:\\Users\\me\\Docs",
+    });
+    expect(classifyContainment("C:\\Users\\me\\Docs-old", win)).toEqual({ kind: "none" });
+  });
 });
