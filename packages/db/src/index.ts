@@ -27,6 +27,13 @@ export {
   listSources,
   getSourceByPath,
   removeSource,
+  setSourceWatchInterval,
+  touchSourceScanned,
+  listDueSources,
+  tryClaimIngest,
+  releaseIngest,
+  DEFAULT_WATCH_INTERVAL_MS,
+  STALE_INGEST_MS,
   // Files
   upsertFile,
   setFileIngestStatus,

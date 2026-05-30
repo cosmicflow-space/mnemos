@@ -11,7 +11,16 @@ CREATE TABLE IF NOT EXISTS source (
   kind        TEXT NOT NULL DEFAULT 'folder',  -- 'folder' | 'file' | 'url' | 'mailbox' (v0.2+)
   scope       TEXT NOT NULL DEFAULT 'read-only',
   created_at  INTEGER NOT NULL,
-  updated_at  INTEGER NOT NULL
+  updated_at  INTEGER NOT NULL,
+  -- Auto re-scan cadence (ms). Default once daily; 0 = manual only. The web
+  -- server's watcher periodically re-ingests due sources (incremental, so only
+  -- changed files re-embed). last_scanned_at backs off the next due time.
+  watch_interval_ms INTEGER NOT NULL DEFAULT 86400000,
+  last_scanned_at   INTEGER,
+  -- Ingest lease: epoch ms when a scan claimed this source, NULL when idle. An
+  -- atomic conditional UPDATE on this column is the mutual-exclusion lock that
+  -- keeps manual + auto (+ multi-process) ingests from running concurrently.
+  ingesting_since   INTEGER
 );
 
 -- Ingested files (one row per file across all registered sources).
