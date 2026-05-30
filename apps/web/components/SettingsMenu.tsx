@@ -13,9 +13,11 @@ import { getTheme, setTheme, type Theme } from "@/lib/theme";
 export function SettingsMenu({
   onOpenSources,
   onOpenModel,
+  onOpenVerified,
 }: {
   onOpenSources: () => void;
   onOpenModel: () => void;
+  onOpenVerified: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [theme, setThemeState] = useState<Theme>("dark");
@@ -80,6 +82,15 @@ export function SettingsMenu({
             className="w-full flex items-center gap-2 px-3 py-2.5 text-fg hover:bg-surface transition"
           >
             <span aria-hidden>📁</span> Sources
+          </button>
+          <button
+            onClick={() => {
+              onOpenVerified();
+              setOpen(false);
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2.5 text-fg hover:bg-surface transition"
+          >
+            <span aria-hidden>✓</span> Verified answers
           </button>
         </div>
       )}

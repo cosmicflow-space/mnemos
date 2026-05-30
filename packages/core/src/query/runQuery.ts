@@ -19,6 +19,8 @@ import {
   appendMessage,
   appendAudit,
   getRecentMessages,
+  searchVerifiedAnswers,
+  getChunksByIds,
   type MnemosDb,
   type SearchHit,
 } from "@mnemos/db";
@@ -27,6 +29,12 @@ import type {
   EmbeddingProvider,
 } from "@mnemos/plugin-sdk";
 import { assemblePrompt } from "./prompt";
+import { hashString } from "../ingest/hash";
+
+// Max L2 distance for a verified answer to count as "the same question". On
+// unit-norm embeddings this is ≈ cosine 0.9 — deliberately strict so a merely
+// related question never injects the wrong confirmed answer. Tunable.
+const VERIFIED_MATCH_MAX_DISTANCE = 0.45;
 
 export type QueryEvent =
   | { phase: "embed"; query: string }
@@ -58,6 +66,8 @@ export type QueryEvent =
       model: string | null;
       durationMs: number;
       citationChunkIds: number[];
+      /** True when a previously-verified answer was injected for this query. */
+      verifiedAnswerUsed: boolean;
     }
   | { phase: "error"; message: string };
 
@@ -134,8 +144,28 @@ export async function* runQuery(
     content: m.content,
   }));
 
+  // 3b. Verified-answer memory: if a closely-matching question was confirmed
+  // before AND its grounding chunks are unchanged, inject the confirmed answer
+  // so even a small model nails it. Lazy invalidation: re-hash the source chunks
+  // and skip if they've changed (re-ingest purges old chunk IDs → mismatch).
+  let verifiedAnswer: { question: string; answer: string } | undefined;
+  try {
+    const [match] = searchVerifiedAnswers(db, queryVector, 1);
+    if (match && match.distance <= VERIFIED_MATCH_MAX_DISTANCE) {
+      const fetched = getChunksByIds(db, match.sourceChunkIds);
+      const stillValid =
+        fetched.length === match.sourceChunkIds.length &&
+        hashString(fetched.map((c) => c.text).join("\n")) === match.sourceHash;
+      if (stillValid) {
+        verifiedAnswer = { question: match.question, answer: match.answer };
+      }
+    }
+  } catch {
+    // Verified-answer lookup is a best-effort boost; never block the query.
+  }
+
   // 4. Assemble prompt
-  const { messages } = assemblePrompt(opts.query, hits, memory);
+  const { messages } = assemblePrompt(opts.query, hits, memory, verifiedAnswer);
 
   // Persist user message before streaming, so a crash mid-stream still leaves
   // the question in history.
@@ -210,6 +240,7 @@ export async function* runQuery(
     model: opts.model ?? null,
     durationMs,
     citationChunkIds,
+    verifiedAnswerUsed: Boolean(verifiedAnswer),
   };
 }
 

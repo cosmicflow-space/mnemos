@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-30
+
+### Added
+- **Verified-answer memory**: click **"✓ Save verified"** on a correct answer to store the Q→A; future closely-matching questions inject the confirmed answer so even small local models answer correctly. Strict semantic match, **lazy content-hash invalidation** (a verified answer stops firing once its source chunks change), a **"✓ verified"** badge on boosted answers, and a **Verified answers** management view (Settings). New `/api/verified` + `verified_answer`/`vec_verified` tables.
+- **Re-scan sources**: a **"↻ Re-scan"** button per source surfaces the existing incremental re-ingest — only changed/new files are re-embedded.
+
+### Changed
+- Session delete now uses a custom confirmation dialog instead of the native browser prompt.
+
 ## [0.4.0] - 2026-05-29
 
 ### Added

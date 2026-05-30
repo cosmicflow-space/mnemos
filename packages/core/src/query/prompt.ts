@@ -52,6 +52,7 @@ export function assemblePrompt(
   userQuery: string,
   retrievedChunks: SearchHit[],
   conversationMemory: ChatMessage[],
+  verifiedAnswer?: { question: string; answer: string },
 ): AssembledPrompt {
   const citationMap = new Map<number, SearchHit>();
   const contextLines: string[] = [];
@@ -76,8 +77,15 @@ export function assemblePrompt(
       ? `== Retrieved Context ==\n${contextLines.join("\n")}`
       : `== Retrieved Context ==\n(No relevant chunks found in the indexed sources for this query.)`;
 
+  // A previously operator-verified answer for a similar question — placed above
+  // the retrieved context so even a small model reads the confirmed fact, while
+  // still being told to verify against the chunks and cite.
+  const verifiedBlock = verifiedAnswer
+    ? `== Verified Answer (the user previously confirmed this for a closely-matching question) ==\nQ: ${verifiedAnswer.question}\nA: ${verifiedAnswer.answer}\n\nTreat this as authoritative for the matching fact. Still cross-check the retrieved context and cite sources.\n\n`
+    : "";
+
   const messages: ChatMessage[] = [
-    { role: "system", content: `${SYSTEM_PROMPT}\n\n${contextBlock}` },
+    { role: "system", content: `${SYSTEM_PROMPT}\n\n${verifiedBlock}${contextBlock}` },
     // Only past turns from this session (skip the current user turn — added below)
     ...conversationMemory.filter((m) => m.role !== "system"),
     { role: "user", content: userQuery },
