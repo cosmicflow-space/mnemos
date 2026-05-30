@@ -260,9 +260,9 @@ describe("smoke: db + registry + crypto", () => {
 });
 
 describe("smoke: plugin registry", () => {
-  it("loads all 11 bundled plugins without validation errors", () => {
+  it("loads all 13 bundled plugins without validation errors", () => {
     const registry = loadBundledPlugins();
-    expect(registry.plugins.length).toBe(11);
+    expect(registry.plugins.length).toBe(13);
   });
 
   it("registers chat providers (anthropic, openai, ollama)", () => {
