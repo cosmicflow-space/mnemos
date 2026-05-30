@@ -15,6 +15,8 @@ export type FileCategory = "supported" | "deferred" | "unsupported";
 
 export type FileKind =
   | "pdf"
+  | "docx"
+  | "xlsx"
   | "markdown"
   | "plaintext"
   | "code"
@@ -41,6 +43,8 @@ export type Classification = {
 const EXT_TO_CLASSIFICATION: Record<string, Classification> = {
   // Supported — fully ingested in v0.1
   ".pdf": { kind: "pdf", category: "supported", loaderId: "pdf", label: "PDFs" },
+  ".docx": { kind: "docx", category: "supported", loaderId: "docx", label: "Word documents" },
+  ".xlsx": { kind: "xlsx", category: "supported", loaderId: "xlsx", label: "spreadsheets" },
   ".md": { kind: "markdown", category: "supported", loaderId: "markdown", label: "markdown files" },
   ".mdx": { kind: "markdown", category: "supported", loaderId: "markdown", label: "markdown files" },
   ".markdown": { kind: "markdown", category: "supported", loaderId: "markdown", label: "markdown files" },

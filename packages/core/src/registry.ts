@@ -23,6 +23,8 @@ import geminiPlugin from "@mnemos/plugin-gemini";
 import ollamaPlugin from "@mnemos/plugin-ollama";
 import llamaCppPlugin from "@mnemos/plugin-llama-cpp";
 import loaderPdfPlugin from "@mnemos/plugin-loader-pdf";
+import loaderDocxPlugin from "@mnemos/plugin-loader-docx";
+import loaderXlsxPlugin from "@mnemos/plugin-loader-xlsx";
 import loaderMarkdownPlugin from "@mnemos/plugin-loader-markdown";
 import loaderPlaintextPlugin from "@mnemos/plugin-loader-plaintext";
 import loaderWebPlugin from "@mnemos/plugin-loader-web";
@@ -37,6 +39,8 @@ const BUNDLED_PLUGINS: readonly Plugin[] = [
   ollamaPlugin,
   llamaCppPlugin,
   loaderPdfPlugin,
+  loaderDocxPlugin,
+  loaderXlsxPlugin,
   loaderMarkdownPlugin,
   loaderPlaintextPlugin,
   loaderWebPlugin,

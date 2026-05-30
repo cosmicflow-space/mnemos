@@ -13,7 +13,7 @@ import { describe, it, expect } from "vitest";
 // while still passing a production `standalone` build.
 //
 // Regression guard for the "pdf-parse unresolvable in next dev" bug.
-const MUST_RESOLVE_FROM_WEB = ["pdf-parse", "@xenova/transformers"];
+const MUST_RESOLVE_FROM_WEB = ["pdf-parse", "@xenova/transformers", "mammoth", "exceljs"];
 
 const requireFromWeb = createRequire(
   join(dirname(fileURLToPath(import.meta.url)), "package.json"),
