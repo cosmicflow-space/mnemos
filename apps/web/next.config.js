@@ -18,6 +18,7 @@ const nextConfig = {
     "@mnemos/plugin-loader-pdf",
     "@mnemos/plugin-loader-docx",
     "@mnemos/plugin-loader-xlsx",
+    "@mnemos/plugin-loader-ocr",
     "@mnemos/plugin-loader-markdown",
     "@mnemos/plugin-loader-plaintext",
     "@mnemos/plugin-loader-web",
@@ -40,6 +41,7 @@ const nextConfig = {
     "pdf-parse",
     "mammoth",
     "exceljs",
+    "tesseract.js",
     "sharp",
   ],
   webpack: (config, { isServer }) => {
@@ -63,6 +65,7 @@ const nextConfig = {
         "pdf-parse",
         "mammoth",
         "exceljs",
+        "tesseract.js",
       ];
       const existing = Array.isArray(config.externals) ? config.externals : [config.externals].filter(Boolean);
       config.externals = [
