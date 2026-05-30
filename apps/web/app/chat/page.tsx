@@ -141,6 +141,12 @@ export default function ChatPage() {
   const [model, setModel] = useState<string>("");
   const [usageTotals, setUsageTotals] = useState<UsageTotal[]>([]);
   const [input, setInput] = useState("");
+  // Shell-style input recall: submitted queries, navigated with ↑/↓.
+  const [inputHistory, setInputHistory] = useState<string[]>([]);
+  const [historyIdx, setHistoryIdx] = useState<number | null>(null);
+  // The unsent draft, stashed when history navigation starts and restored when
+  // the user steps back past the newest entry.
+  const draftRef = useRef("");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [credPrompt, setCredPrompt] = useState<MissingCredential | null>(null);
@@ -361,6 +367,9 @@ export default function ChatPage() {
     const q = input.trim();
     if (!q || streaming) return;
 
+    // Record for ↑ recall (skip consecutive duplicates) and reset navigation.
+    setInputHistory((h) => (h[h.length - 1] === q ? h : [...h, q]));
+    setHistoryIdx(null);
     setError(null);
     setCredPrompt(null);
     setInput("");
@@ -537,8 +546,56 @@ export default function ChatPage() {
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    const ta = e.currentTarget;
+
+    // During IME composition, let the browser/IME own every key (↑/↓ pick
+    // candidates, Enter commits) — none of our shortcuts should fire.
+    if (e.nativeEvent.isComposing) return;
+
+    // Ctrl+C clears the input (terminal-style) — but only with no selection, so
+    // copying selected text still works. (Cmd+C on macOS is left untouched.)
+    if (e.ctrlKey && !e.metaKey && (e.key === "c" || e.key === "C")) {
+      if (ta.selectionStart === ta.selectionEnd) {
+        e.preventDefault();
+        setInput("");
+        setHistoryIdx(null);
+      }
+      return;
+    }
+
+    // ↑ recalls previous submitted inputs — only when the cursor is at the very
+    // start, so editing a multi-line draft still moves the caret normally.
+    if (
+      e.key === "ArrowUp" &&
+      ta.selectionStart === 0 &&
+      ta.selectionEnd === 0 &&
+      inputHistory.length > 0
+    ) {
+      e.preventDefault();
+      // Starting navigation — stash the unsent draft so ↓ can restore it.
+      if (historyIdx === null) draftRef.current = input;
+      const next =
+        historyIdx === null ? inputHistory.length - 1 : Math.max(0, historyIdx - 1);
+      setHistoryIdx(next);
+      setInput(inputHistory[next] ?? "");
+      return;
+    }
+
+    // ↓ steps forward through recalled inputs, restoring the draft at the end.
+    if (e.key === "ArrowDown" && historyIdx !== null) {
+      e.preventDefault();
+      const next = historyIdx + 1;
+      if (next >= inputHistory.length) {
+        setHistoryIdx(null);
+        setInput(draftRef.current);
+      } else {
+        setHistoryIdx(next);
+        setInput(inputHistory[next] ?? "");
+      }
+      return;
+    }
+
     // Standard chat affordance: Enter sends, Shift+Enter newlines.
-    // Cmd/Ctrl+Enter also send for power users who learn it elsewhere.
     if (e.key === "Enter" && !e.shiftKey) {
       // IME composition: don't send while user is mid-composition (e.g. CJK input)
       if (e.nativeEvent.isComposing) return;
@@ -781,7 +838,11 @@ export default function ChatPage() {
           <div className="flex gap-2 items-end">
             <textarea
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value);
+                // Typing ends history navigation — this is a fresh draft now.
+                setHistoryIdx(null);
+              }}
               onKeyDown={onKeyDown}
               placeholder={streaming ? "Streaming…" : "Ask anything about your sources…"}
               disabled={streaming}
@@ -797,6 +858,9 @@ export default function ChatPage() {
             >
               {streaming ? "…" : "⏎"}
             </button>
+          </div>
+          <div className="mt-1 text-[10px] text-muted/70">
+            ⏎ send · ⇧⏎ newline · ↑ history · ⌃C clear
           </div>
         </form>
       </section>
