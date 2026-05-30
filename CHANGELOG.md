@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-29
+
+### Added
+- **Shell-style chat input** (#7): **↑/↓** recalls previously submitted queries (caret-at-start gated, so multi-line editing is unaffected; your unsent draft is preserved and restored); **Ctrl+C** clears the input (copy still works with a selection). IME composition defers to the browser. A subtle hint line shows the shortcuts.
+
+### Fixed
+- **Detect newly-installed local models** (#6): the AI Model dialog now re-fetches the provider/model list on open and offers a **"↻ Detect new"** button — so a model pulled mid-session (e.g. `ollama pull gemma3`) appears without reloading. (Ollama models were always queried live; the UI had cached the list at page load.)
+
 ## [0.3.0] - 2026-05-29
 
 ### Added
