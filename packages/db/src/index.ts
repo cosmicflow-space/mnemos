@@ -36,6 +36,8 @@ export {
   // Chunks + vectors
   insertChunk,
   vecSearch,
+  getChunksByIds,
+  type ChunkDetail,
   chunkCountBySource,
   countChunksForFile,
   ingestStatsBySource,
