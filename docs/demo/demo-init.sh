@@ -12,7 +12,7 @@ alias git=true
 # Any other `node` invocation falls through to the real node binary.
 node() {
   if [ "$1" = "setup.mjs" ]; then
-    bash /Users/sammuthu/Projects/mnemos/docs/demo/mock-setup.sh
+    bash "$(dirname "${BASH_SOURCE[0]}")/mock-setup.sh"
   else
     command node "$@"
   fi

@@ -21,7 +21,7 @@ Set LineHeight 1.2
 
 # Hidden setup: source the stub shim + cd to a fresh workspace dir.
 Hide
-Type "source /Users/sammuthu/Projects/mnemos/docs/demo/demo-init.sh"
+Type "source docs/demo/demo-init.sh"
 Enter
 Type "cd /tmp && rm -rf mnemos-demo && mkdir -p mnemos-demo/mnemos && cd mnemos-demo && clear"
 Enter

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **PDF ingestion in `next dev`.** `pdf-parse` is externalized in `next.config` and pulled through a `webpackIgnore`'d, string-built `require`, so it must resolve from `apps/web`'s own `node_modules` at runtime. In a production `standalone` build the dependency trace copies it in, but `next dev` has no trace — so PDFs silently failed to ingest in dev (`load-error`) while passing in production. Fixed by declaring `pdf-parse` as a direct dependency of `@mnemos/web` (mirroring `@xenova/transformers`). Added a regression guard (`apps/web/loader-externals.test.ts`) asserting the `webpackIgnore`'d loader deps resolve from `apps/web`.
+
+### Added
+- **`MNEMOS_PORT` override (cross-platform).** `pnpm dev`/`pnpm start` now honor `MNEMOS_PORT` (default `3030`), matching the long-documented override. Combined with `MNEMOS_STATE_DIR`, this lets a personal vault and a dev/test instance run side by side on separate ports and separate SQLite state. Port/host resolution moved out of POSIX shell parameter expansion into a small Node launcher (`apps/web/scripts/run.mjs`), so the override (and `MNEMOS_BIND`, including the `lan` alias) works on Windows `cmd.exe` too — not just POSIX shells.
+- **Public demo corpus** (`docs/demo/corpus/`): a small, PII-free fictional product knowledge base (Markdown spec + plaintext FAQ + generated PDF report) that exercises all three loaders and produces cross-document cited answers — used for screenshots and the hero GIF.
+
+### Changed
+- **Refreshed hero GIF and screenshots** to the v0.9 single-pane UI. New composite hero (`docs/demo/hero.gif`, desktop + phone "ask from your phone" beat; the 23 MB terminal install GIF is archived). README's screenshot table now shows the current chat/model/sources/citations panes captured against the demo corpus (neutral paths, no real data).
+
+### Docs
+- `AGENTS.md` Map now documents the `instrumentation.ts` background services (source watcher + Telegram poller) and the Telegram remote-channel subsystem.
+
 ## [0.9.0] - 2026-05-30
 
 ### Added

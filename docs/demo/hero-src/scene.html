@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<style>
+  :root{
+    --bg0:#080b16; --bg1:#0d1326; --ink:#e8edf7; --muted:#8a96b3;
+    --cyan:#22d3ee; --indigo:#6366f1; --tg:#2aabee; --tgbubble:#1c2333;
+    --line:rgba(120,140,200,.16);
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-font-smoothing:antialiased;}
+  html,body{width:1200px;height:630px;overflow:hidden;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(900px 500px at 18% -10%, rgba(99,102,241,.20), transparent 60%),
+      radial-gradient(800px 520px at 100% 110%, rgba(34,211,238,.16), transparent 55%),
+      linear-gradient(160deg,var(--bg0),var(--bg1));
+    position:relative;
+  }
+  /* header */
+  .hdr{position:absolute;top:26px;left:40px;display:flex;align-items:center;gap:14px;}
+  .logo{font-size:30px;font-weight:800;letter-spacing:.5px;
+    background:linear-gradient(90deg,#fbbf24,#22d3ee);-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .tag{color:var(--muted);font-size:15px;font-weight:500;border-left:1px solid var(--line);padding-left:14px;}
+  .tag b{color:#cdd6ea;font-weight:600;}
+
+  .stage{position:absolute;top:92px;left:40px;right:40px;bottom:78px;display:flex;gap:34px;align-items:stretch;}
+
+  /* browser frame */
+  .browser{flex:1 1 64%;border-radius:14px;overflow:hidden;border:1px solid var(--line);
+    background:#0b1020;box-shadow:0 30px 70px -30px rgba(0,0,0,.8), 0 0 0 1px rgba(99,102,241,.08);
+    display:flex;flex-direction:column;}
+  .bbar{height:38px;flex:0 0 38px;display:flex;align-items:center;gap:8px;padding:0 14px;background:#11182c;border-bottom:1px solid var(--line);}
+  .dot{width:11px;height:11px;border-radius:50%;}
+  .url{margin-left:14px;font-size:12px;color:#9fb0d6;background:#0a0f1f;border:1px solid var(--line);
+    border-radius:7px;padding:5px 12px;flex:1;max-width:330px;}
+  .url b{color:#22d3ee;font-weight:600;}
+  .shot{flex:1;background:#0a0f1f;overflow:hidden;}
+  .shot img{width:100%;display:block;}
+
+  /* phone */
+  .phonewrap{flex:0 0 300px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;}
+  .badge{margin-bottom:14px;font-size:12.5px;font-weight:600;color:#0a0f1f;background:linear-gradient(90deg,#22d3ee,#6366f1);
+    padding:5px 13px;border-radius:999px;box-shadow:0 8px 22px -8px rgba(34,211,238,.7);white-space:nowrap;}
+  .phone{width:272px;height:454px;border-radius:34px;background:#05070e;padding:11px;
+    border:1px solid rgba(120,140,200,.22);box-shadow:0 32px 70px -26px rgba(0,0,0,.85), 0 0 0 7px #0b0f1c;position:relative;}
+  .pscreen{width:100%;height:100%;border-radius:24px;overflow:hidden;background:#0a1018;display:flex;flex-direction:column;}
+  .ptop{flex:0 0 52px;background:linear-gradient(180deg,#10243a,#0d1b2c);display:flex;align-items:center;gap:9px;padding:0 14px;border-bottom:1px solid rgba(120,140,200,.12);}
+  .pav{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#22d3ee,#6366f1);display:flex;align-items:center;justify-content:center;font-size:15px;}
+  .pname{font-size:13.5px;font-weight:700;}
+  .pstat{font-size:10.5px;color:#5fd0a0;}
+  .chat{flex:1;padding:14px 12px;display:flex;flex-direction:column;gap:9px;
+    background:radial-gradient(120% 80% at 50% 0%, #0e1726, #0a1018);}
+  .row{display:flex;}
+  .row.me{justify-content:flex-end;}
+  .bub{max-width:84%;font-size:11.8px;line-height:1.45;padding:8px 11px;border-radius:14px;opacity:0;transform:translateY(8px);transition:opacity .01s, transform .01s;}
+  .me .bub{background:linear-gradient(135deg,#2aabee,#1f87d6);color:#fff;border-bottom-right-radius:5px;}
+  .bot .bub{background:var(--tgbubble);color:#dde6f6;border:1px solid rgba(120,140,200,.16);border-bottom-left-radius:5px;}
+  .show .bub{opacity:1;transform:translateY(0);}
+  .cite{display:inline-block;font-size:10px;font-weight:700;color:#22d3ee;background:rgba(34,211,238,.12);
+    border:1px solid rgba(34,211,238,.32);border-radius:6px;padding:0 5px;margin:0 1px;}
+  .src{margin-top:6px;font-size:9.7px;color:#7e8db0;}
+  .src span{color:#aab8d8;}
+  .typing{display:none;align-items:center;gap:4px;background:var(--tgbubble);border:1px solid rgba(120,140,200,.16);
+    padding:9px 12px;border-radius:14px;border-bottom-left-radius:5px;}
+  .typing i{width:6px;height:6px;border-radius:50%;background:#6b7aa0;display:inline-block;animation:bl 1s infinite;}
+  .typing i:nth-child(2){animation-delay:.15s} .typing i:nth-child(3){animation-delay:.3s}
+  @keyframes bl{0%,60%,100%{opacity:.3}30%{opacity:1}}
+  .show-typing .typing{display:inline-flex;}
+
+  /* caption */
+  .cap{position:absolute;bottom:26px;left:40px;right:40px;text-align:center;font-size:16px;color:#aeb9d6;font-weight:500;letter-spacing:.2px;}
+  .cap b{color:#fff;font-weight:700;}
+  .cap .pill{color:#22d3ee;}
+</style>
+</head>
+<body>
+  <div class="hdr">
+    <span class="logo">🧠 Mnemos</span>
+    <span class="tag">Personal RAG · <b>local-first</b> · drop a folder, ask a question</span>
+  </div>
+
+  <div class="stage">
+    <div class="browser">
+      <div class="bbar">
+        <span class="dot" style="background:#ff5f56"></span>
+        <span class="dot" style="background:#ffbd2e"></span>
+        <span class="dot" style="background:#27c93f"></span>
+        <span class="url">127.0.0.1:3030/<b>chat</b></span>
+      </div>
+      <div class="shot"><img src="laptop.png" alt="Mnemos chat"/></div>
+    </div>
+
+    <div class="phonewrap">
+      <div class="badge">📲 …or ask from your phone</div>
+      <div class="phone">
+        <div class="pscreen">
+          <div class="ptop">
+            <div class="pav">🧠</div>
+            <div><div class="pname">Mnemos</div><div class="pstat">bot · online</div></div>
+          </div>
+          <div class="chat" id="chat">
+            <div class="row me" id="m1"><div class="bub">How long to brew a shot — and did it pass the cold-weather test?</div></div>
+            <div class="row bot" id="typing"><div class="typing"><i></i><i></i><i></i></div></div>
+            <div class="row bot" id="m2"><div class="bub">
+              Brews a full double shot in <b>28&nbsp;s</b> <span class="cite">spec</span>.<br/>
+              Yes — passed the cold-weather test: <b>92&nbsp;°C in 4&nbsp;m&nbsp;35&nbsp;s at −3&nbsp;°C</b> <span class="cite">report</span>.
+              <div class="src">cited from <span>aurora-one-product-spec.md</span> + <span>field-test-report.pdf</span></div>
+            </div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cap" id="cap"><b>Grounded answers, cited to your own files.</b></div>
+
+<script>
+  function setStep(n){
+    var chat=document.getElementById('chat'), cap=document.getElementById('cap');
+    var m1=document.getElementById('m1'), m2=document.getElementById('m2');
+    chat.classList.remove('show-typing'); m1.classList.remove('show'); m2.classList.remove('show');
+    if(n>=1){ m1.classList.add('show'); }
+    if(n===2){ chat.classList.add('show-typing'); }
+    if(n>=3){ m2.classList.add('show'); }
+    var caps={
+      0:'<b>One brain.</b> On your desk and in your pocket.',
+      1:'Ask in plain English — from anywhere.',
+      2:'Retrieving from <span class="pill">your</span> documents…',
+      3:'<b>100% local</b> · <span class="pill">cited</span> from your own files · <b>ask from your phone</b>'
+    };
+    cap.innerHTML = caps[n] || caps[3];
+  }
+  setStep(0);
+  window.setStep = setStep;
+</script>
+</body>
+</html>
