@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.6.0] - 2026-05-30
+## [0.7.0] - 2026-05-30
+
+### Added
+- **Single-file sources**: register one individual file as a source, not just a folder. Paste an absolute path in **Sources** and Mnemos **auto-detects** whether it's a file or a folder — "drop a file" and "drop a folder" both work from one input. A single explicitly-chosen file bypasses the soft noise-filters (logs/lockfiles/hidden) since the choice is deliberate, while the **security hard-lock** (`.env`, `*.pem`, `id_rsa*`) still always applies. New `file` source kind; the Sources list shows each entry's kind.
 
 ### Added
 - **Per-file metadata chunks**: every ingested file now carries one extra retrievable chunk describing its path, size (human + raw bytes), last-modified date, and type. Metadata questions like *"how big is resume.pdf"* or *"when was notes.md modified"* now retrieve reliably even when no content chunk ranks high — the metadata sentence embeds next to the question itself, not buried in a chunk header. Re-scanning an existing source **backfills** metadata chunks for files indexed before this feature, without re-embedding their content.

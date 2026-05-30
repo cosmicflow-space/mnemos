@@ -1,6 +1,6 @@
 {
   "name": "mnemos-monorepo",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "Personal RAG. Local-first. Drop a folder, ask a question.",
   "homepage": "https://github.com/cosmicflow-space/mnemos",
