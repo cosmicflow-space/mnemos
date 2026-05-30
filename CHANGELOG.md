@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-05-30
+
 ### Fixed
 - **Filename-mention questions now return file *contents*, not just metadata.** A file's synthetic metadata chunk (path/size/type) is a strong lexical match for questions that name the file ("VIN in ipostal?") but holds no answer, so at scale it could out-rank and bury the file's own content. Retrieval now co-retrieves a file's content chunks when it surfaced only via its metadata chunk, spliced adjacent and bounded by a fixed budget. (#17)
 
@@ -227,7 +229,8 @@ Roughly 90 seconds from clone to first answer on a typical laptop.
 
 <!-- Version links: each header above is a GitHub compare view of that release's diff.
      [Unreleased] is a live diff of everything on `main` since the latest tag. -->
-[Unreleased]: https://github.com/cosmicflow-space/mnemos/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/cosmicflow-space/mnemos/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.5.0...v0.8.0
