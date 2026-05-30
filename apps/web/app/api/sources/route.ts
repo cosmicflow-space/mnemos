@@ -14,6 +14,7 @@ import {
   DEFAULT_WATCH_INTERVAL_MS,
 } from "@mnemos/db";
 import { getDb } from "@/lib/runtime";
+import { clearIngestStatus } from "@/lib/ingest-status";
 
 export const runtime = "nodejs";
 
@@ -222,7 +223,12 @@ export async function DELETE(req: Request) {
 
   try {
     const db = getDb();
-    const result = removeSource(db, expandHome(parsed.data.path));
+    const expanded = expandHome(parsed.data.path);
+    // Resolve the id first so we can evict any live ingest status — otherwise a
+    // removed source in an error/running state would ghost in /api/ingest/status.
+    const existing = getSourceByPath(db, expanded);
+    const result = removeSource(db, expanded);
+    if (existing) clearIngestStatus(existing.id);
     return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json(

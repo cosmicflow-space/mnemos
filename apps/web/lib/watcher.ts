@@ -20,6 +20,7 @@ import {
   releaseIngest,
 } from "@mnemos/db";
 import { getDb, getRegistry, getDefaultEmbedder } from "./runtime";
+import { applyIngestProgress } from "./ingest-status";
 
 let started = false;
 let ticking = false;
@@ -71,7 +72,9 @@ async function tick(): Promise<void> {
       const token = tryClaimIngest(db, source.id);
       if (token === null) continue;
       try {
-        const res = await ingestFolder(db, registry, embedder, source, {});
+        const res = await ingestFolder(db, registry, embedder, source, {
+          onProgress: (p) => applyIngestProgress(source.id, source.path, p),
+        });
         // Back off the cadence only on success — a failed scan stays due and
         // retries next tick rather than going quiet for a full interval.
         touchSourceScanned(db, source.id);
@@ -82,10 +85,10 @@ async function tick(): Promise<void> {
           );
         }
       } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        applyIngestProgress(source.id, source.path, { phase: "error", message });
         // eslint-disable-next-line no-console
-        console.warn(
-          `[mnemos/watcher] re-scan failed for ${source.path}: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        console.warn(`[mnemos/watcher] re-scan failed for ${source.path}: ${message}`);
       } finally {
         releaseIngest(db, source.id, token);
       }
