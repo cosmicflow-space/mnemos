@@ -20,7 +20,8 @@ import {
   releaseIngest,
 } from "@mnemos/db";
 import { getDb, getRegistry, getDefaultEmbedder } from "./runtime";
-import { applyIngestProgress } from "./ingest-status";
+import { applyIngestProgress, markIngestPaused } from "./ingest-status";
+import { registerIngestController, unregisterIngestController } from "./ingest-control";
 
 let started = false;
 let ticking = false;
@@ -71,18 +72,29 @@ async function tick(): Promise<void> {
       // server processes — all of which respect the same lease.
       const token = tryClaimIngest(db, source.id);
       if (token === null) continue;
+      // Register an abort handle so a background re-scan is pausable too.
+      const abort = new AbortController();
+      registerIngestController(source.id, abort);
       try {
         const res = await ingestFolder(db, registry, embedder, source, {
-          onProgress: (p) => applyIngestProgress(source.id, source.path, p),
+          signal: abort.signal,
+          onProgress: (p) => {
+            if (abort.signal.aborted && p.phase === "done") return;
+            applyIngestProgress(source.id, source.path, p);
+          },
         });
-        // Back off the cadence only on success — a failed scan stays due and
-        // retries next tick rather than going quiet for a full interval.
-        touchSourceScanned(db, source.id);
-        if (res.filesProcessed > 0 || res.chunksCreated > 0) {
-          // eslint-disable-next-line no-console
-          console.log(
-            `[mnemos/watcher] ${source.path}: ${res.filesProcessed} files, ${res.chunksCreated} chunks`,
-          );
+        if (abort.signal.aborted) {
+          markIngestPaused(source.id);
+        } else {
+          // Back off the cadence only on success — a failed scan stays due and
+          // retries next tick rather than going quiet for a full interval.
+          touchSourceScanned(db, source.id);
+          if (res.filesProcessed > 0 || res.chunksCreated > 0) {
+            // eslint-disable-next-line no-console
+            console.log(
+              `[mnemos/watcher] ${source.path}: ${res.filesProcessed} files, ${res.chunksCreated} chunks`,
+            );
+          }
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -90,6 +102,7 @@ async function tick(): Promise<void> {
         // eslint-disable-next-line no-console
         console.warn(`[mnemos/watcher] re-scan failed for ${source.path}: ${message}`);
       } finally {
+        unregisterIngestController(source.id);
         releaseIngest(db, source.id, token);
       }
     }
