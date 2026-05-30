@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-05-30
+
+### Changed
+- **Docs: regenerated the hero GIF and all screenshots for the v0.12 brand.** The README hero (`docs/demo/hero.gif`) and all six screenshots were recaptured against the demo corpus showing the new logo mark + two-tone neuron wordmark — neutral `/tmp/aurora-demo` paths, no real data. README H1 emoji dropped and the status badge bumped v0.9 → v0.12. No code/behavior change.
+
 ## [0.12.1] - 2026-05-30
 
 ### Changed
@@ -247,7 +252,8 @@ Roughly 90 seconds from clone to first answer on a typical laptop.
 
 <!-- Version links: each header above is a GitHub compare view of that release's diff.
      [Unreleased] is a live diff of everything on `main` since the latest tag. -->
-[Unreleased]: https://github.com/cosmicflow-space/mnemos/compare/v0.12.1...HEAD
+[Unreleased]: https://github.com/cosmicflow-space/mnemos/compare/v0.12.2...HEAD
+[0.12.2]: https://github.com/cosmicflow-space/mnemos/compare/v0.12.1...v0.12.2
 [0.12.1]: https://github.com/cosmicflow-space/mnemos/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.10.0...v0.11.0
