@@ -4,11 +4,11 @@
 
 -- Registered sources (the scope authorization primitive).
 -- A source is anything Mnemos has been granted permission to index:
--- a local folder path, a URL prefix, an email mailbox (v0.2), etc.
+-- a local folder path, a single local file, a URL prefix, an email mailbox, etc.
 CREATE TABLE IF NOT EXISTS source (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   path        TEXT NOT NULL UNIQUE,
-  kind        TEXT NOT NULL DEFAULT 'folder',  -- 'folder' | 'url' | 'mailbox' (v0.2+)
+  kind        TEXT NOT NULL DEFAULT 'folder',  -- 'folder' | 'file' | 'url' | 'mailbox' (v0.2+)
   scope       TEXT NOT NULL DEFAULT 'read-only',
   created_at  INTEGER NOT NULL,
   updated_at  INTEGER NOT NULL

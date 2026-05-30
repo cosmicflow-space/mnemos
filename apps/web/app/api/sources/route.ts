@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { resolve } from "node:path";
 import { homedir } from "node:os";
+import { stat } from "node:fs/promises";
 import {
   addSource,
   listSources,
@@ -15,8 +16,13 @@ export const runtime = "nodejs";
 
 const AddRequest = z.object({
   path: z.string().min(1),
-  kind: z.enum(["folder", "url", "mailbox"]).optional().default("folder"),
+  kind: z.enum(["folder", "file", "url", "mailbox"]).optional().default("folder"),
 });
+
+/** Local kinds are filesystem paths we expand `~` for; url/mailbox are opaque. */
+function isLocalKind(kind: string): boolean {
+  return kind === "folder" || kind === "file";
+}
 
 const RemoveRequest = z.object({
   path: z.string().min(1),
@@ -68,9 +74,10 @@ export async function GET() {
 
 /**
  * POST /api/sources
- * Body: { path: string, kind?: 'folder' | 'url' | 'mailbox' }
+ * Body: { path: string, kind?: 'folder' | 'file' | 'url' | 'mailbox' }
  * Registers a new source for later ingestion. Idempotent: re-registering
- * an existing path updates its `updated_at` and returns the same row.
+ * an existing path updates its `updated_at` and returns the same row. A local
+ * path defaulting to "folder" is auto-detected as "file" when it points at one.
  */
 export async function POST(req: Request) {
   let body: unknown;
@@ -88,14 +95,27 @@ export async function POST(req: Request) {
     );
   }
 
-  const absolutePath =
-    parsed.data.kind === "folder"
-      ? expandHome(parsed.data.path)
-      : parsed.data.path;
+  const requestedKind = parsed.data.kind;
+  const absolutePath = isLocalKind(requestedKind)
+    ? expandHome(parsed.data.path)
+    : parsed.data.path;
+
+  // Frictionless: when the caller didn't distinguish (the default "folder"),
+  // detect whether the path is actually a single file and register it as such,
+  // so "drop a file" and "drop a folder" both Just Work from one input. An
+  // explicit "file"/"url"/"mailbox" is honored as-is.
+  let kind = requestedKind;
+  if (requestedKind === "folder") {
+    try {
+      if ((await stat(absolutePath)).isFile()) kind = "file";
+    } catch {
+      // Path doesn't exist yet / unreadable — keep "folder"; ingest will report.
+    }
+  }
 
   try {
     const db = getDb();
-    const source = addSource(db, absolutePath, parsed.data.kind);
+    const source = addSource(db, absolutePath, kind);
     return NextResponse.json({ source });
   } catch (err) {
     return NextResponse.json(
