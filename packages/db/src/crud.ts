@@ -264,6 +264,27 @@ export function countChunksForFile(db: MnemosDb, fileId: number): number {
   return row?.n ?? 0;
 }
 
+/** The file's metadata chunk text (ordinal -1), or undefined if none exists.
+ * Returning the text — not just existence — lets ingest detect when the chunk
+ * is stale (e.g. mtime changed) and refresh it, while no-op'ing when unchanged. */
+export function getMetadataChunkText(db: MnemosDb, fileId: number): string | undefined {
+  const row = prepared(db)(
+    `SELECT text FROM chunk WHERE file_id = ? AND ordinal = -1 LIMIT 1`,
+  ).get(fileId) as { text: string } | undefined;
+  return row?.text;
+}
+
+/** Delete a file's metadata chunk (ordinal -1) and its vector row. Used to
+ * replace a stale metadata chunk before inserting a refreshed one. */
+export function deleteMetadataChunk(db: MnemosDb, fileId: number): void {
+  db.transaction(() => {
+    prepared(db)(
+      `DELETE FROM vec_chunk WHERE chunk_id IN (SELECT id FROM chunk WHERE file_id = ? AND ordinal = -1)`,
+    ).run(fileId);
+    prepared(db)(`DELETE FROM chunk WHERE file_id = ? AND ordinal = -1`).run(fileId);
+  })();
+}
+
 /** Delete chunks belonging to a file before re-ingesting changed content. */
 export function purgeFileChunks(db: MnemosDb, fileId: number): { chunksPurged: number } {
   return db.transaction(() => {
