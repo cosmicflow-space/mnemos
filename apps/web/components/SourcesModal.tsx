@@ -72,6 +72,11 @@ export function SourcesModal({
     Record<number, { state: string; filesDone: number; filesTotal: number }>
   >({});
   const [anyRunning, setAnyRunning] = useState(false);
+  // Set when an add would contain existing source(s); offers "Add anyway".
+  const [containsWarning, setContainsWarning] = useState<{
+    path: string;
+    children: string[];
+  } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -189,19 +194,51 @@ export function SourcesModal({
     return paused;
   }
 
-  async function addAndIngest() {
+  async function addAndIngest(addAnyway = false) {
     const p = path.trim();
     if (!p || busy) return;
     setBusy(true);
     setErr(null);
+    setContainsWarning(null);
     setStatus("Registering source…");
     try {
       const addRes = await fetch("/api/sources", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ path: p, watchIntervalMs: addInterval }),
+        body: JSON.stringify({ path: p, watchIntervalMs: addInterval, addAnyway }),
       });
       if (!addRes.ok) throw new Error((await addRes.text()) || "add failed");
+      const data = (await addRes.json()) as {
+        outcome?: string;
+        parentPath?: string;
+        childPaths?: string[];
+      };
+
+      if (data.outcome === "inside" && data.parentPath) {
+        // Folder is inside an existing source → don't duplicate it. Refresh the
+        // parent (incremental) so the subtree is indexed under it. One source.
+        setStatus(`Inside ${data.parentPath} — refreshing it to include this folder…`);
+        setPath("");
+        const paused = await ingestPath(data.parentPath);
+        setStatus(
+          paused
+            ? "Paused — resume any time from the list below."
+            : `Done — refreshed ${data.parentPath} (it now includes this folder).`,
+        );
+        await refresh();
+        onChanged();
+        return;
+      }
+
+      if (data.outcome === "contains" && data.childPaths) {
+        // New folder contains existing source(s) — adding it would duplicate them.
+        // Surface the choice rather than silently double-ingesting.
+        setContainsWarning({ path: p, children: data.childPaths });
+        setStatus(null);
+        return;
+      }
+
+      // outcome "added": ingest the brand-new source.
       const paused = await ingestPath(p);
       setStatus(paused ? "Paused — resume any time from the list below." : "Done.");
       setPath("");
@@ -322,6 +359,30 @@ export function SourcesModal({
       </label>
       {status && <p className="text-xs text-cyan-300 mb-2">{status}</p>}
       {err && <p className="text-xs text-red-400 mb-2">{err}</p>}
+      {containsWarning && (
+        <div className="mb-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+          <p className="mb-1.5">
+            This folder contains {containsWarning.children.length} existing source
+            {containsWarning.children.length > 1 ? "s" : ""} (
+            <span className="font-mono">{containsWarning.children.join(", ")}</span>). Adding it
+            would index those files twice. Remove the smaller source(s) first, or add anyway.
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => void addAndIngest(true)}
+              className="text-amber-300 hover:text-amber-200 underline"
+            >
+              Add anyway
+            </button>
+            <button
+              onClick={() => setContainsWarning(null)}
+              className="text-muted hover:text-fg"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="mt-3 border-t border-line pt-3">
         <div className="flex items-center justify-between mb-2">

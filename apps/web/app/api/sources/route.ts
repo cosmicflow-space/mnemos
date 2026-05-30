@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { resolve } from "node:path";
 import { homedir } from "node:os";
-import { stat } from "node:fs/promises";
+import { stat, realpath } from "node:fs/promises";
+import { classifyContainment, type SourceEntry } from "@/lib/path-containment";
 import {
   addSource,
   listSources,
@@ -32,6 +33,9 @@ const AddRequest = z.object({
   path: z.string().min(1),
   kind: z.enum(["folder", "file", "url", "mailbox"]).optional().default("folder"),
   watchIntervalMs: watchIntervalSchema.optional().default(DEFAULT_WATCH_INTERVAL_MS),
+  // Override the overlap guard: register even if this path is inside / contains
+  // an existing source (caller acknowledged the duplication).
+  addAnyway: z.boolean().optional().default(false),
 });
 
 const PatchRequest = z.object({
@@ -144,8 +148,29 @@ export async function POST(req: Request) {
 
   try {
     const db = getDb();
+
+    // Overlap guard: keep registered sources non-overlapping so the same files
+    // aren't double-ingested under two sources. Skipped for opaque url/mailbox
+    // kinds and when the caller explicitly opted in via addAnyway. Compared on
+    // realpaths with a path-boundary check (see lib/path-containment).
+    if (isLocalKind(kind) && !parsed.data.addAnyway) {
+      const newReal = await realpath(absolutePath).catch(() => absolutePath);
+      const existing: SourceEntry[] = await Promise.all(
+        listSources(db)
+          .filter((s) => isLocalKind(s.kind))
+          .map(async (s) => ({ path: s.path, real: await realpath(s.path).catch(() => s.path) })),
+      );
+      const containment = classifyContainment(newReal, existing);
+      if (containment.kind === "inside") {
+        return NextResponse.json({ outcome: "inside", parentPath: containment.parentPath });
+      }
+      if (containment.kind === "contains") {
+        return NextResponse.json({ outcome: "contains", childPaths: containment.childPaths });
+      }
+    }
+
     const source = addSource(db, absolutePath, kind, parsed.data.watchIntervalMs);
-    return NextResponse.json({ source });
+    return NextResponse.json({ outcome: "added", source });
   } catch (err) {
     return NextResponse.json(
       {
