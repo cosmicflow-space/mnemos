@@ -22,6 +22,7 @@ import {
   searchVerifiedAnswers,
   getChunksByIds,
   getContentChunksForFile,
+  getCorpusStats,
   type MnemosDb,
   type SearchHit,
 } from "@mnemos/db";
@@ -204,7 +205,26 @@ export async function* runQuery(
   }
 
   // 4. Assemble prompt
-  const { messages } = assemblePrompt(opts.query, hits, memory, verifiedAnswer);
+  // Whole-index totals (COUNT-based, not derived from `hits`) so "how many
+  // files/documents do I have" is answered from the truth instead of from the
+  // top-K that happened to match this query.
+  const stats = getCorpusStats(db);
+  const typeSummary = stats.byType
+    .slice(0, 6)
+    .map((t) => `${t.fileCount} ${t.loader}`)
+    .join(", ");
+  const sourceSummary = stats.sources
+    .slice(0, 5)
+    .map((s) => `${s.path} (${s.fileCount} files)`)
+    .join("; ");
+  const corpusFacts =
+    `${stats.totalFiles} files, ${stats.totalChunks} chunks across ${stats.sources.length} source(s).` +
+    (typeSummary ? ` By file type: ${typeSummary}.` : "") +
+    (sourceSummary
+      ? ` Sources: ${sourceSummary}${stats.sources.length > 5 ? ", …" : ""}.`
+      : "");
+
+  const { messages } = assemblePrompt(opts.query, hits, memory, verifiedAnswer, corpusFacts);
 
   // Persist user message before streaming, so a crash mid-stream still leaves
   // the question in history.

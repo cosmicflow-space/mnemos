@@ -22,6 +22,7 @@ import {
   upsertFile,
   insertChunk,
   getContentChunksForFile,
+  getCorpusStats,
   listSources,
   getSourceByPath,
   removeSource,
@@ -451,6 +452,28 @@ describe("co-retrieval: getContentChunksForFile", () => {
   it("returns nothing for a metadata-only file (no content chunks)", () => {
     const fileId = seedFile("empty.txt", []);
     expect(getContentChunksForFile(db, fileId, 3, 0.1)).toHaveLength(0);
+  });
+
+  it("getCorpusStats reports whole-index totals, not a retrieved subset", () => {
+    const vec = new Array(384).fill(0);
+    const s1 = addSource(db, "/tmp/stats-s1");
+    const f1 = upsertFile(db, { sourceId: s1.id, path: "a.md", contentHash: "1", sizeBytes: 1, mtime: 1, loader: "markdown" }).fileId;
+    const f2 = upsertFile(db, { sourceId: s1.id, path: "b.txt", contentHash: "2", sizeBytes: 1, mtime: 1, loader: "plaintext" }).fileId;
+    const s2 = addSource(db, "/tmp/stats-s2");
+    const f3 = upsertFile(db, { sourceId: s2.id, path: "c.md", contentHash: "3", sizeBytes: 1, mtime: 1, loader: "markdown" }).fileId;
+    insertChunk(db, { fileId: f1, ordinal: -1, text: "m", startOffset: 0, endOffset: 0, embedding: vec });
+    insertChunk(db, { fileId: f1, ordinal: 0, text: "x", startOffset: 0, endOffset: 1, embedding: vec });
+    insertChunk(db, { fileId: f2, ordinal: 0, text: "y", startOffset: 0, endOffset: 1, embedding: vec });
+    insertChunk(db, { fileId: f3, ordinal: 0, text: "z", startOffset: 0, endOffset: 1, embedding: vec });
+
+    const stats = getCorpusStats(db);
+    expect(stats.totalFiles).toBe(3);
+    expect(stats.totalChunks).toBe(4); // 3 content + 1 metadata, matching the Sources panel's count
+    expect(stats.byType.find((t) => t.loader === "markdown")?.fileCount).toBe(2);
+    expect(stats.byType.find((t) => t.loader === "plaintext")?.fileCount).toBe(1);
+    const s1stats = stats.sources.find((s) => s.path === "/tmp/stats-s1");
+    expect(s1stats?.fileCount).toBe(2);
+    expect(s1stats?.chunkCount).toBe(3);
   });
 });
 

@@ -29,7 +29,9 @@ Each chunk header lists the source file path, when it was last modified, and the
 
 You can quote short passages from the context verbatim. Prefer direct quotes over paraphrase when the original wording is precise (file paths, code, numbers, names).
 
-If multiple chunks contradict each other, surface the contradiction rather than picking one silently.`;
+If multiple chunks contradict each other, surface the contradiction rather than picking one silently.
+
+A "Library Overview" (exact totals: files, chunks, file types, and sources) may precede the retrieved context. For counting or inventory questions — "how many files/documents do I have", "what types", "which folders/sources" — answer from the Library Overview's exact totals, NOT by counting the retrieved chunks (those are only the top matches for this query, not your whole library).`;
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;
@@ -53,6 +55,7 @@ export function assemblePrompt(
   retrievedChunks: SearchHit[],
   conversationMemory: ChatMessage[],
   verifiedAnswer?: { question: string; answer: string },
+  corpusFacts?: string,
 ): AssembledPrompt {
   const citationMap = new Map<number, SearchHit>();
   const contextLines: string[] = [];
@@ -84,8 +87,12 @@ export function assemblePrompt(
     ? `== Verified Answer (the user previously confirmed this for a closely-matching question) ==\nQ: ${verifiedAnswer.question}\nA: ${verifiedAnswer.answer}\n\nTreat this as authoritative for the matching fact. Still cross-check the retrieved context and cite sources.\n\n`
     : "";
 
+  const libraryBlock = corpusFacts
+    ? `== Library Overview (exact, whole-index totals) ==\n${corpusFacts}\n\n`
+    : "";
+
   const messages: ChatMessage[] = [
-    { role: "system", content: `${SYSTEM_PROMPT}\n\n${verifiedBlock}${contextBlock}` },
+    { role: "system", content: `${SYSTEM_PROMPT}\n\n${libraryBlock}${verifiedBlock}${contextBlock}` },
     // Only past turns from this session (skip the current user turn — added below)
     ...conversationMemory.filter((m) => m.role !== "system"),
     { role: "user", content: userQuery },
