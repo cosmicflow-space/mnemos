@@ -9,8 +9,7 @@ import {
 import { getDb, getRegistry, getDefaultEmbedder } from "@/lib/runtime";
 import { applyIngestProgress, markIngestPaused } from "@/lib/ingest-status";
 import { registerIngestController, unregisterIngestController } from "@/lib/ingest-control";
-import { resolve } from "node:path";
-import { homedir } from "node:os";
+import { normalizeUserPath } from "@/lib/user-path";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,13 +32,6 @@ const IngestRequest = z.object({
     })
     .optional(),
 });
-
-function expandHome(p: string): string {
-  if (p.startsWith("~/") || p === "~") {
-    return resolve(p.replace(/^~/, homedir()));
-  }
-  return resolve(p);
-}
 
 /**
  * POST /api/ingest
@@ -71,7 +63,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const absolutePath = expandHome(parsed.data.path);
+  const absolutePath = normalizeUserPath(parsed.data.path);
   const db = getDb();
   const source = getSourceByPath(db, absolutePath);
   if (!source) {

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Pasted quoted paths no longer corrupt a source.** macOS Finder's "Copy as Pathname" wraps paths containing spaces or special characters (e.g. iCloud's `~/Library/Mobile Documents/com~apple~CloudDocs/…`) in single quotes. Pasting that verbatim into Add Source stored the path *with* the quotes — the leading quote made it relative, so it resolved under the server's cwd to a path that doesn't exist, and the source silently ingested nothing. Path ingress (`POST /api/sources`, `PATCH`, `DELETE`, `POST /api/ingest`) now strips one layer of matching surrounding quotes before expanding `~` and resolving, via a shared `normalizeUserPath` helper (replaces the duplicated `expandHome`). Covered by `apps/web/user-path.test.ts`.
+
 ## [0.11.0] - 2026-05-30
 
 ### Fixed
