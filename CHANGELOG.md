@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-05-30
+
+### Changed
+- **Brand refresh.** The logo mark is bolder and tighter — thicker strokes and a cropped viewBox so it holds up at small sizes (header, favicon) instead of floating in padding. The wordmark is now a shared `Wordmark` component with a two-tone treatment — cyan "Mnem" + amber "s" with the "o" rendered as a neuron glyph (cyan ring, amber core, synapse dots) echoing the logo palette and the memory motif. Header and landing hero now render the identical component (previously the header was plain white and the hero used a different gradient), so the brand can't drift; the favicon and OG/Twitter/apple-icon all share the updated `logo.svg`.
+
 ## [0.12.0] - 2026-05-30
 
 ### Added
@@ -242,7 +247,8 @@ Roughly 90 seconds from clone to first answer on a typical laptop.
 
 <!-- Version links: each header above is a GitHub compare view of that release's diff.
      [Unreleased] is a live diff of everything on `main` since the latest tag. -->
-[Unreleased]: https://github.com/cosmicflow-space/mnemos/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/cosmicflow-space/mnemos/compare/v0.12.1...HEAD
+[0.12.1]: https://github.com/cosmicflow-space/mnemos/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.9.0...v0.10.0
