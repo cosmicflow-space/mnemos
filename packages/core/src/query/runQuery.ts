@@ -38,6 +38,11 @@ export type QueryEvent =
         filePath: string;
         sourcePath: string;
         snippet: string;
+        /** Full chunk text — this is exactly what is assembled into the prompt
+         * and sent to the model. Surfaced so the UI can show "what was sent". */
+        text: string;
+        /** Source file modification time (epoch ms) for the sources panel. */
+        fileMtime: number;
         startOffset: number;
         endOffset: number;
         distance: number;
@@ -115,6 +120,8 @@ export async function* runQuery(
       filePath: h.filePath,
       sourcePath: h.sourcePath,
       snippet: h.text.length > 200 ? `${h.text.slice(0, 200)}…` : h.text,
+      text: h.text,
+      fileMtime: h.fileMtime,
       startOffset: h.startOffset,
       endOffset: h.endOffset,
       distance: h.distance,

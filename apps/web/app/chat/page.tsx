@@ -3,6 +3,7 @@
 import {
   useState,
   useEffect,
+  useMemo,
   useRef,
   useCallback,
   type FormEvent,
@@ -12,6 +13,7 @@ import Link from "next/link";
 import Image from "next/image";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Modal } from "@/components/Modal";
 import { SettingsMenu } from "@/components/SettingsMenu";
 import { ModelSettingsModal } from "@/components/ModelSettingsModal";
 import { SourcesModal } from "@/components/SourcesModal";
@@ -59,9 +61,23 @@ type Hit = {
   filePath: string;
   sourcePath: string;
   snippet: string;
+  /** Full chunk text — what was actually sent to the model. */
+  text?: string;
+  /** Source file modification time (epoch ms). */
+  fileMtime?: number;
   startOffset: number;
   endOffset: number;
   distance: number;
+};
+
+/** Flattened chunk used by the transparency panels — works for both live hits
+ * and citations resolved from history (the latter has no query-time distance). */
+type SourceChunk = {
+  filePath: string;
+  sourcePath: string;
+  text?: string;
+  fileMtime?: number;
+  distance?: number;
 };
 
 type ChatProviderInfo = {
@@ -94,8 +110,11 @@ type MissingCredential = {
 type LiveMessage = {
   role: "user" | "assistant";
   content: string;
-  /** Hits attached to assistant messages once the 'retrieved' event arrives. */
+  /** Hits attached to assistant messages once the 'retrieved' event arrives
+   * (live turns). Reloaded turns carry `citations` instead, resolved on demand. */
   hits?: Hit[];
+  /** Stored citation chunk-IDs for reloaded messages (no live hits). */
+  citations?: number[];
   /** Provider id used for the response (assistant messages only). */
   provider?: string;
   /** Actual model that produced the response — populated from the 'done' event. */
@@ -285,6 +304,7 @@ export default function ChatPage() {
             model: m.model ?? undefined,
             tokensIn: m.tokensIn,
             tokensOut: m.tokensOut,
+            citations: m.citations ?? undefined,
           })),
         );
       } catch {
@@ -1097,6 +1117,12 @@ function MessageBubble({
 }) {
   const isUser = message.role === "user";
   const [copied, setCopied] = useState(false);
+  const [panel, setPanel] = useState<"sources" | "audit" | null>(null);
+  const [chunks, setChunks] = useState<SourceChunk[] | null>(null);
+  const [loadingChunks, setLoadingChunks] = useState(false);
+
+  const hasSources =
+    (message.hits?.length ?? 0) > 0 || (message.citations?.length ?? 0) > 0;
 
   function copyToClipboard() {
     if (!message.content) return;
@@ -1104,6 +1130,41 @@ function MessageBubble({
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     });
+  }
+
+  // Resolve the chunks behind this answer. Live turns already carry full hits;
+  // reloaded turns resolve their stored citation IDs on demand via /api/chunks.
+  async function openPanel(which: "sources" | "audit") {
+    setPanel(which);
+    if (chunks) return;
+    if (message.hits && message.hits.length > 0) {
+      setChunks(
+        message.hits.map((h) => ({
+          filePath: h.filePath,
+          sourcePath: h.sourcePath,
+          text: h.text ?? h.snippet,
+          fileMtime: h.fileMtime,
+          distance: h.distance,
+        })),
+      );
+      return;
+    }
+    if (message.citations && message.citations.length > 0) {
+      setLoadingChunks(true);
+      try {
+        const r = await fetch(`/api/chunks?ids=${message.citations.join(",")}`, {
+          cache: "no-store",
+        });
+        if (r.ok) {
+          const d = (await r.json()) as { chunks: SourceChunk[] };
+          setChunks(d.chunks);
+        }
+      } catch {
+        // silent — panel shows an empty state
+      } finally {
+        setLoadingChunks(false);
+      }
+    }
   }
 
   return (
@@ -1136,7 +1197,28 @@ function MessageBubble({
         )}
         {!isUser && !message.streaming && message.content && (
           <div className="flex items-center justify-between mt-2 text-xs text-muted gap-3">
-            <span className="truncate">{formatMessageMetrics(message, providers)}</span>
+            <span className="flex items-center gap-2 min-w-0">
+              <span className="truncate">{formatMessageMetrics(message, providers)}</span>
+              {hasSources && (
+                <>
+                  <span aria-hidden>·</span>
+                  <button
+                    onClick={() => void openPanel("sources")}
+                    className="text-cyan-400 hover:text-cyan-300 shrink-0"
+                    title="Files this answer drew from"
+                  >
+                    Sources
+                  </button>
+                  <button
+                    onClick={() => void openPanel("audit")}
+                    className="text-cyan-400 hover:text-cyan-300 shrink-0"
+                    title="Exactly what was sent to the model"
+                  >
+                    Data sent
+                  </button>
+                </>
+              )}
+            </span>
             <button
               onClick={copyToClipboard}
               className="opacity-0 group-hover:opacity-100 transition rounded border border-line hover:border-cyan-700 bg-surface hover:bg-app px-2 py-0.5 text-[11px] text-muted hover:text-fg shrink-0"
@@ -1146,8 +1228,183 @@ function MessageBubble({
             </button>
           </div>
         )}
+        {panel === "sources" && (
+          <SourcesPanel
+            chunks={chunks}
+            loading={loadingChunks}
+            onClose={() => setPanel(null)}
+          />
+        )}
+        {panel === "audit" && (
+          <DataSentPanel
+            chunks={chunks}
+            loading={loadingChunks}
+            provider={message.provider}
+            model={message.model ?? null}
+            tokensIn={message.tokensIn ?? null}
+            onClose={() => setPanel(null)}
+          />
+        )}
       </div>
     </div>
+  );
+}
+
+/** Absolute file path = registered source folder + the file's relative path. */
+function absPath(c: SourceChunk): string {
+  return `${c.sourcePath.replace(/\/+$/, "")}/${c.filePath}`;
+}
+
+function formatMtime(ms?: number): string | null {
+  if (!ms) return null;
+  return new Date(ms).toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** "Sources" panel: the files this answer drew from, with copyable absolute
+ * paths + modified date + chunk count (and relevance on live turns). */
+function SourcesPanel({
+  chunks,
+  loading,
+  onClose,
+}: {
+  chunks: SourceChunk[] | null;
+  loading: boolean;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState<string | null>(null);
+  const files = useMemo(() => {
+    const map = new Map<
+      string,
+      { path: string; mtime?: number; count: number; bestDistance?: number }
+    >();
+    for (const c of chunks ?? []) {
+      const p = absPath(c);
+      const e = map.get(p);
+      if (e) {
+        e.count += 1;
+        if (c.distance != null && (e.bestDistance == null || c.distance < e.bestDistance))
+          e.bestDistance = c.distance;
+      } else {
+        map.set(p, { path: p, mtime: c.fileMtime, count: 1, bestDistance: c.distance });
+      }
+    }
+    return [...map.values()];
+  }, [chunks]);
+
+  function copyPath(p: string) {
+    void navigator.clipboard.writeText(p).then(() => {
+      setCopied(p);
+      setTimeout(() => setCopied((cur) => (cur === p ? null : cur)), 1500);
+    });
+  }
+
+  return (
+    <Modal title="Sources" onClose={onClose} maxWidth="max-w-2xl">
+      <p className="text-xs text-muted mb-3">
+        Files this answer drew from. Click a path to copy it.
+      </p>
+      {loading ? (
+        <p className="text-xs text-muted">Loading…</p>
+      ) : files.length === 0 ? (
+        <p className="text-xs text-muted">No sources for this answer.</p>
+      ) : (
+        <ul className="space-y-2">
+          {files.map((f) => (
+            <li key={f.path} className="rounded-md border border-line bg-surface px-3 py-2">
+              <button
+                onClick={() => copyPath(f.path)}
+                title="Click to copy path"
+                className="block w-full text-left font-mono text-xs text-fg break-all hover:text-cyan-300 transition"
+              >
+                {f.path}
+              </button>
+              <div className="text-[11px] text-muted mt-1">
+                {copied === f.path ? "✓ copied · " : ""}
+                {f.count} chunk{f.count > 1 ? "s" : ""}
+                {formatMtime(f.mtime) ? ` · modified ${formatMtime(f.mtime)}` : ""}
+                {f.bestDistance != null
+                  ? ` · relevance ${(1 - f.bestDistance).toFixed(2)}`
+                  : ""}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Modal>
+  );
+}
+
+/** "Data sent" panel: the privacy audit — exactly which chunks went to the
+ * model (never raw files), framed local vs external. */
+function DataSentPanel({
+  chunks,
+  loading,
+  provider,
+  model,
+  tokensIn,
+  onClose,
+}: {
+  chunks: SourceChunk[] | null;
+  loading: boolean;
+  provider?: string;
+  model: string | null;
+  tokensIn: number | null;
+  onClose: () => void;
+}) {
+  const isLocal = provider === "ollama" || provider === "local";
+  const list = chunks ?? [];
+  return (
+    <Modal title="What was sent" onClose={onClose} maxWidth="max-w-2xl">
+      <div
+        className={`mb-3 rounded-md border px-3 py-2 text-xs leading-relaxed ${
+          isLocal
+            ? "border-emerald-600/40 bg-emerald-500/10"
+            : "border-cyan-700/40 bg-cyan-500/10"
+        }`}
+      >
+        {isLocal ? (
+          <>
+            🟢 <span className="font-medium">100% local.</span> This ran on{" "}
+            <span className="font-mono">{provider}</span>
+            {model ? ` (${model})` : ""} — nothing left your machine. The chunks
+            below were the context used.
+          </>
+        ) : (
+          <>
+            📤 Sent to <span className="font-medium">{provider}</span>
+            {model ? ` (${model})` : ""}. Only the retrieved chunks below were
+            sent — <span className="font-medium">never your raw files</span>.
+            {typeof tokensIn === "number" && tokensIn > 0
+              ? ` ~${tokensIn} input tokens.`
+              : ""}
+          </>
+        )}
+      </div>
+      {loading ? (
+        <p className="text-xs text-muted">Loading…</p>
+      ) : list.length === 0 ? (
+        <p className="text-xs text-muted">No chunks were retrieved for this answer.</p>
+      ) : (
+        <ul className="space-y-2">
+          {list.map((c, i) => (
+            <li key={i} className="rounded-md border border-line bg-surface px-3 py-2">
+              <div className="font-mono text-[11px] text-muted mb-1 break-all">
+                [{i + 1}] {absPath(c)}
+              </div>
+              <div className="text-xs text-fg/90 whitespace-pre-wrap max-h-44 overflow-y-auto">
+                {c.text ?? "(text unavailable)"}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Modal>
   );
 }
 
