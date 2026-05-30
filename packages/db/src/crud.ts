@@ -490,6 +490,39 @@ export function getContentChunksForFile(
   ).all(inheritedDistance, fileId, limit) as SearchHit[];
 }
 
+export type CorpusStats = {
+  totalFiles: number;
+  totalChunks: number;
+  byType: Array<{ loader: string; fileCount: number }>;
+  sources: Array<{ path: string; fileCount: number; chunkCount: number }>;
+};
+
+/**
+ * Aggregate counts over the whole index, computed with COUNT(*) — NOT by
+ * scanning chunks. Lets the query path answer "how many files/documents do I
+ * have?" from the truth rather than from however many chunks happened to be
+ * retrieved (which would just report top-K).
+ */
+export function getCorpusStats(db: MnemosDb): CorpusStats {
+  const q = prepared(db);
+  const totalFiles = (q(`SELECT COUNT(*) AS n FROM file`).get() as { n: number }).n;
+  const totalChunks = (q(`SELECT COUNT(*) AS n FROM chunk`).get() as { n: number }).n;
+  const byType = q(
+    `SELECT loader, COUNT(*) AS fileCount FROM file GROUP BY loader ORDER BY fileCount DESC`,
+  ).all() as Array<{ loader: string; fileCount: number }>;
+  const sources = q(
+    `SELECT s.path AS path,
+            COUNT(DISTINCT f.id) AS fileCount,
+            COUNT(c.id)          AS chunkCount
+       FROM source s
+       LEFT JOIN file  f ON f.source_id = s.id
+       LEFT JOIN chunk c ON c.file_id  = f.id
+      GROUP BY s.id
+      ORDER BY fileCount DESC`,
+  ).all() as Array<{ path: string; fileCount: number; chunkCount: number }>;
+  return { totalFiles, totalChunks, byType, sources };
+}
+
 export type ChunkDetail = {
   chunkId: number;
   filePath: string;
