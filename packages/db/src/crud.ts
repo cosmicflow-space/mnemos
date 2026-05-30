@@ -401,6 +401,9 @@ export function insertChunk(db: MnemosDb, input: InsertChunkInput): number {
 export type SearchHit = {
   chunkId: number;
   fileId: number;
+  /** Chunk position within its file. -1 marks the synthetic per-file metadata
+   * chunk (path/size/mtime/type); 0+ are real content chunks. */
+  ordinal: number;
   filePath: string;
   sourceId: number;
   sourcePath: string;
@@ -428,6 +431,7 @@ export function vecSearch(
     `SELECT
        v.chunk_id     AS chunkId,
        c.file_id      AS fileId,
+       c.ordinal      AS ordinal,
        f.path         AS filePath,
        f.source_id    AS sourceId,
        s.path         AS sourcePath,
@@ -446,6 +450,44 @@ export function vecSearch(
      ORDER BY v.distance`,
   ).all(JSON.stringify(queryEmbedding), k) as SearchHit[];
   return rows;
+}
+
+/**
+ * Content chunks (ordinal >= 0) for one file, in document order, as SearchHits.
+ * Used to "expand" a retrieved per-file metadata chunk into the file's actual
+ * content: the metadata chunk is a strong lexical match for filename-mentioning
+ * questions but holds no answer, so it can out-rank — and crowd out — its own
+ * file's content. `inheritedDistance` (the metadata hit's distance) is stamped
+ * on the returned hits so they sort adjacent to the chunk that pulled them in.
+ */
+export function getContentChunksForFile(
+  db: MnemosDb,
+  fileId: number,
+  limit: number,
+  inheritedDistance: number,
+): SearchHit[] {
+  return prepared(db)(
+    `SELECT
+       c.id           AS chunkId,
+       c.file_id      AS fileId,
+       c.ordinal      AS ordinal,
+       f.path         AS filePath,
+       f.source_id    AS sourceId,
+       s.path         AS sourcePath,
+       c.text         AS text,
+       c.start_offset AS startOffset,
+       c.end_offset   AS endOffset,
+       f.mtime        AS fileMtime,
+       f.loader       AS loader,
+       f.size_bytes   AS fileSizeBytes,
+       ? AS distance
+     FROM chunk c
+     JOIN file  f ON c.file_id  = f.id
+     JOIN source s ON f.source_id = s.id
+     WHERE c.file_id = ? AND c.ordinal >= 0
+     ORDER BY c.ordinal
+     LIMIT ?`,
+  ).all(inheritedDistance, fileId, limit) as SearchHit[];
 }
 
 export type ChunkDetail = {
