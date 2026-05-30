@@ -323,12 +323,15 @@ export async function ingestFolder(
       });
     }
 
-    if (embedFailed) {
-      // Mid-file failure: some chunks may have landed in the DB. Mark the
-      // file 'partial' so the next ingest re-processes it instead of treating
-      // its hash as healthy.
+    if (embedFailed || opts.signal?.aborted) {
+      // Mid-file failure OR a pause/cancel that landed mid-file: some chunks may
+      // have landed in the DB. Mark the file 'partial' so the next ingest (or a
+      // resume) re-processes it instead of treating its hash as healthy — never
+      // flip a half-embedded file to 'complete'.
       setFileIngestStatus(db, upsertResult.fileId, "partial");
-      onProgress({ phase: "file-skipped", filePath: file.relativePath, reason: "load-error", current, total });
+      if (embedFailed) {
+        onProgress({ phase: "file-skipped", filePath: file.relativePath, reason: "load-error", current, total });
+      }
     } else {
       // Add a per-file metadata chunk so questions like "how big is X" or "when
       // was X modified" retrieve reliably even when no content chunk ranks high.

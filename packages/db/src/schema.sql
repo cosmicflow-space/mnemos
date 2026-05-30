@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS source (
   path        TEXT NOT NULL UNIQUE,
   kind        TEXT NOT NULL DEFAULT 'folder',  -- 'folder' | 'file' | 'url' | 'mailbox' (v0.2+)
   scope       TEXT NOT NULL DEFAULT 'read-only',
+  paused      INTEGER NOT NULL DEFAULT 0,       -- user-paused ingestion (durable; watcher skips)
   created_at  INTEGER NOT NULL,
   updated_at  INTEGER NOT NULL,
   -- Auto re-scan cadence (ms). Default 0 = manual only (auto re-scan is opt-in

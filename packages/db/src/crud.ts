@@ -43,10 +43,11 @@ type SourceRow = {
   updated_at: number;
   watch_interval_ms: number;
   last_scanned_at: number | null;
+  paused: number;
 };
 
 const SOURCE_COLS =
-  "id, path, kind, scope, created_at, updated_at, watch_interval_ms, last_scanned_at";
+  "id, path, kind, scope, created_at, updated_at, watch_interval_ms, last_scanned_at, paused";
 
 function rowToSource(r: SourceRow): Source {
   return {
@@ -58,6 +59,7 @@ function rowToSource(r: SourceRow): Source {
     updatedAt: r.updated_at,
     watchIntervalMs: r.watch_interval_ms,
     lastScannedAt: r.last_scanned_at,
+    paused: r.paused === 1,
   };
 }
 
@@ -103,6 +105,14 @@ export function setSourceWatchInterval(
   prepared(db)(
     `UPDATE source SET watch_interval_ms = ?, updated_at = ? WHERE id = ?`,
   ).run(watchIntervalMs, Date.now(), sourceId);
+}
+
+/** Persist a source's paused state. Durable so a pause survives a restart and
+ * the watcher's `listDueSources` skips it (it filters `paused = 0`). */
+export function setSourcePaused(db: MnemosDb, sourceId: number, paused: boolean): void {
+  prepared(db)(
+    `UPDATE source SET paused = ?, updated_at = ? WHERE id = ?`,
+  ).run(paused ? 1 : 0, Date.now(), sourceId);
 }
 
 /** Record that a source was just scanned (auto or manual), backing off the
@@ -154,6 +164,7 @@ export function listDueSources(db: MnemosDb, now: number = Date.now()): Source[]
   const rows = prepared(db)(
     `SELECT ${SOURCE_COLS} FROM source
       WHERE kind IN ('folder', 'file')
+        AND paused = 0
         AND watch_interval_ms > 0
         AND (last_scanned_at IS NULL OR ? - last_scanned_at >= watch_interval_ms)
       ORDER BY path`,

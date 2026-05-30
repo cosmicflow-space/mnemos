@@ -127,6 +127,13 @@ export function clearIngestStatus(sourceId: number): void {
   registry.delete(sourceId);
 }
 
+/** Flip a running source to paused, preserving its progress (filesDone/Total).
+ * No-op if there's no live entry. Called when an ingest is aborted by the user. */
+export function markIngestPaused(sourceId: number): void {
+  const s = registry.get(sourceId);
+  if (s) registry.set(sourceId, { ...s, state: "paused", updatedAt: now() });
+}
+
 // Matches the DB ingest-lease stale window (STALE_INGEST_MS). Generous on
 // purpose: a slow single-file run (e.g. Whisper on one big audio file) may emit
 // no intra-file progress for a while, so we must not drop a legitimately-active

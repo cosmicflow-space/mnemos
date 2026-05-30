@@ -11,6 +11,9 @@ export type Source = {
   watchIntervalMs: number;
   /** Epoch ms of the last scan (auto or manual). Null until first scanned. */
   lastScannedAt: number | null;
+  /** User paused this source's ingestion. Persisted so a pause survives a
+   * restart and the background watcher won't auto-resume it. */
+  paused: boolean;
 };
 
 export type IngestStatus = "pending" | "partial" | "complete" | "failed";
