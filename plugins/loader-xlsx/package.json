@@ -7,7 +7,7 @@
   "main": "./src/index.ts",
   "scripts": { "typecheck": "tsc --noEmit" },
   "dependencies": {
-    "xlsx": "^0.18.5",
+    "exceljs": "^4.4.0",
     "@mnemos/plugin-sdk": "workspace:*"
   },
   "devDependencies": {

@@ -39,7 +39,7 @@ const nextConfig = {
     "onnxruntime-node",
     "pdf-parse",
     "mammoth",
-    "xlsx",
+    "exceljs",
     "sharp",
   ],
   webpack: (config, { isServer }) => {
@@ -62,7 +62,7 @@ const nextConfig = {
         "@xenova/transformers",
         "pdf-parse",
         "mammoth",
-        "xlsx",
+        "exceljs",
       ];
       const existing = Array.isArray(config.externals) ? config.externals : [config.externals].filter(Boolean);
       config.externals = [
