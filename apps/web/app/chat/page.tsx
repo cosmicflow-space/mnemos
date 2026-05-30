@@ -18,6 +18,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { SettingsMenu } from "@/components/SettingsMenu";
 import { ModelSettingsModal } from "@/components/ModelSettingsModal";
 import { SourcesModal } from "@/components/SourcesModal";
+import { Wordmark } from "@/components/Wordmark";
 import { VerifiedAnswersModal } from "@/components/VerifiedAnswersModal";
 import { TelegramSettingsModal } from "@/components/TelegramSettingsModal";
 
@@ -722,8 +723,8 @@ export default function ChatPage() {
       {/* Sidebar */}
       <aside className="border-r border-line bg-surface flex flex-col">
         <div className="px-4 py-3.5 border-b border-line flex items-center gap-2">
-          <Image src="/logo.svg" alt="" width={20} height={20} unoptimized priority />
-          <span className="text-sm font-semibold text-fg">Mnemos</span>
+          <Image src="/logo.svg" alt="" width={28} height={28} unoptimized priority />
+          <Wordmark className="text-sm font-semibold" />
         </div>
         <div className="px-4 py-2 text-xs uppercase tracking-wider text-muted">
           History

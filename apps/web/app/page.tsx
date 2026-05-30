@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { Wordmark } from "@/components/Wordmark";
 
 export default function HomePage() {
   return (
@@ -13,8 +14,8 @@ export default function HomePage() {
           unoptimized
           className="mx-auto"
         />
-        <h1 className="text-5xl font-bold tracking-tight bg-gradient-to-r from-cyan-400 via-amber-400 to-cyan-400 bg-clip-text text-transparent">
-          Mnemos
+        <h1 className="text-5xl font-bold flex justify-center">
+          <Wordmark />
         </h1>
         <p className="text-xl text-gray-300">
           Personal RAG. Local-first. Drop a folder, ask a question.
