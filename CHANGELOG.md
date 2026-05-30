@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-05-30
+
 ### Fixed
 - **PDF ingestion in `next dev`.** `pdf-parse` is externalized in `next.config` and pulled through a `webpackIgnore`'d, string-built `require`, so it must resolve from `apps/web`'s own `node_modules` at runtime. In a production `standalone` build the dependency trace copies it in, but `next dev` has no trace — so PDFs silently failed to ingest in dev (`load-error`) while passing in production. Fixed by declaring `pdf-parse` as a direct dependency of `@mnemos/web` (mirroring `@xenova/transformers`). Added a regression guard (`apps/web/loader-externals.test.ts`) asserting the `webpackIgnore`'d loader deps resolve from `apps/web`.
 
