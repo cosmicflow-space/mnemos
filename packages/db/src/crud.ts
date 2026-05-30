@@ -367,6 +367,42 @@ export function vecSearch(
   return rows;
 }
 
+export type ChunkDetail = {
+  chunkId: number;
+  filePath: string;
+  sourcePath: string;
+  text: string;
+  startOffset: number;
+  endOffset: number;
+  fileMtime: number;
+};
+
+/** Resolve chunk IDs (e.g. a chat message's stored citations) back to file +
+ * location + text + mtime — powers the response-transparency panels (Sources /
+ * Data sent) for chats reloaded from history. Returned in the order requested;
+ * IDs that no longer exist (purged source) are dropped. */
+export function getChunksByIds(db: MnemosDb, ids: number[]): ChunkDetail[] {
+  if (ids.length === 0) return [];
+  const placeholders = ids.map(() => "?").join(", ");
+  const rows = prepared(db)(
+    `SELECT c.id          AS chunkId,
+            f.path        AS filePath,
+            s.path        AS sourcePath,
+            c.text        AS text,
+            c.start_offset AS startOffset,
+            c.end_offset   AS endOffset,
+            f.mtime       AS fileMtime
+       FROM chunk c
+       JOIN file f   ON c.file_id   = f.id
+       JOIN source s ON f.source_id = s.id
+      WHERE c.id IN (${placeholders})`,
+  ).all(...ids) as ChunkDetail[];
+  const byId = new Map(rows.map((r) => [r.chunkId, r]));
+  return ids
+    .map((id) => byId.get(id))
+    .filter((r): r is ChunkDetail => Boolean(r));
+}
+
 /** Count chunks per source (UI status indicator). */
 export function chunkCountBySource(db: MnemosDb): Map<number, number> {
   const rows = prepared(db)(
