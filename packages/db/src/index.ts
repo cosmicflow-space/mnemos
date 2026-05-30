@@ -45,6 +45,7 @@ export {
   // Chunks + vectors
   insertChunk,
   vecSearch,
+  getContentChunksForFile,
   getChunksByIds,
   type ChunkDetail,
   // Verified answers
