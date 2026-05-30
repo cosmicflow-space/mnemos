@@ -29,6 +29,7 @@
     "@mnemos/plugin-loader-pdf": "workspace:*",
     "@mnemos/plugin-loader-docx": "workspace:*",
     "@mnemos/plugin-loader-xlsx": "workspace:*",
+    "@mnemos/plugin-loader-ocr": "workspace:*",
     "@mnemos/plugin-loader-markdown": "workspace:*",
     "@mnemos/plugin-loader-plaintext": "workspace:*",
     "@mnemos/plugin-loader-web": "workspace:*",

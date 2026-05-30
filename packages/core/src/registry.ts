@@ -25,6 +25,7 @@ import llamaCppPlugin from "@mnemos/plugin-llama-cpp";
 import loaderPdfPlugin from "@mnemos/plugin-loader-pdf";
 import loaderDocxPlugin from "@mnemos/plugin-loader-docx";
 import loaderXlsxPlugin from "@mnemos/plugin-loader-xlsx";
+import loaderOcrPlugin from "@mnemos/plugin-loader-ocr";
 import loaderMarkdownPlugin from "@mnemos/plugin-loader-markdown";
 import loaderPlaintextPlugin from "@mnemos/plugin-loader-plaintext";
 import loaderWebPlugin from "@mnemos/plugin-loader-web";
@@ -41,6 +42,7 @@ const BUNDLED_PLUGINS: readonly Plugin[] = [
   loaderPdfPlugin,
   loaderDocxPlugin,
   loaderXlsxPlugin,
+  loaderOcrPlugin,
   loaderMarkdownPlugin,
   loaderPlaintextPlugin,
   loaderWebPlugin,

@@ -61,3 +61,6 @@ pnpm-debug.log*
 # Local dev-tooling artifacts (Claude Code, AI partner reviews, etc.)
 # The repo-root AGENTS.md / CLAUDE.md symlink is the tracked agent-collab surface.
 .claude/
+
+# tesseract.js OCR trained-data (downloaded at runtime; cached under ~/.mnemos/ocr-cache)
+*.traineddata

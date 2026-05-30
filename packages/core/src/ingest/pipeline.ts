@@ -65,6 +65,10 @@ export type IngestFolderOptions = {
   signal?: AbortSignal;
   /** User-chosen filters from the scan-result UI. */
   filters?: IngestFilters;
+  /** Re-attempt files previously marked `failed` even if unchanged. Set by
+   * user-initiated runs (manual re-scan / resume); the background watcher leaves
+   * it off so a poison/oversized/offline file isn't re-burned every tick. */
+  retryFailed?: boolean;
 };
 
 function humanSize(bytes: number): string {
@@ -209,10 +213,20 @@ export async function ingestFolder(
       loader: loaderId,
     });
 
+    // A previously-failed file (load-error) is skipped on AUTO re-scans so a
+    // poison / oversized / offline-OCR file isn't re-attempted (and re-burned)
+    // every watcher tick. A user-initiated run (retryFailed) re-attempts it, as
+    // does any content change (hash differs → not skipped here).
+    if (!upsertResult.changed && upsertResult.ingestStatus === "failed" && !opts.retryFailed) {
+      filesSkipped += 1;
+      onProgress({ phase: "file-skipped", filePath: file.relativePath, reason: "load-error", current, total });
+      continue;
+    }
+
     // Skip only when the file is genuinely unchanged AND was previously
-    // ingested to completion. Pending/partial/failed states force a re-process
-    // even when the hash hasn't moved — this is the atomic-ingest guarantee
-    // that prevents mid-file crashes from leaving permanently corrupt indexes.
+    // ingested to completion. Pending/partial states force a re-process even
+    // when the hash hasn't moved — this is the atomic-ingest guarantee that
+    // prevents mid-file crashes from leaving permanently corrupt indexes.
     if (!upsertResult.changed && upsertResult.ingestStatus === "complete") {
       // Backfill the metadata chunk for files ingested before this feature
       // existed. upsertMetadataChunk no-ops if one is already present, so this
@@ -246,6 +260,10 @@ export async function ingestFolder(
         filePath: file.relativePath,
         message: `load failed: ${err instanceof Error ? err.message : String(err)}`,
       });
+      // Mark failed so an AUTO re-scan won't re-attempt (and re-burn on) this
+      // file every tick; a user-initiated run (retryFailed) or a content change
+      // re-attempts it.
+      setFileIngestStatus(db, upsertResult.fileId, "failed");
       onProgress({ phase: "file-skipped", filePath: file.relativePath, reason: "load-error", current, total });
       continue;
     }
