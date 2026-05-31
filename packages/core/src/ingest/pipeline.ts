@@ -31,9 +31,9 @@ import { getDocumentLoader, type PluginRegistry } from "../registry";
 
 export type IngestProgress =
   | { phase: "scan-start"; rootPath: string }
-  | { phase: "scan-complete"; totalFiles: number; supportedFiles: number }
+  | { phase: "scan-complete"; totalFiles: number; supportedFiles: number; estimatedChunks: number; estimatedSeconds: number }
   | { phase: "file-start"; filePath: string; current: number; total: number }
-  | { phase: "file-skipped"; filePath: string; reason: "unchanged" | "load-error"; current: number; total: number }
+  | { phase: "file-skipped"; filePath: string; reason: "unchanged" | "load-error" | "deferred"; current: number; total: number }
   | { phase: "file-chunked"; filePath: string; chunkCount: number; current: number; total: number }
   | { phase: "file-embedded"; filePath: string; chunkCount: number; current: number; total: number }
   | { phase: "file-complete"; filePath: string; chunkCount: number; current: number; total: number }
@@ -46,6 +46,31 @@ export type IngestResult = {
   durationMs: number;
   errors: Array<{ filePath: string; message: string }>;
 };
+
+/**
+ * Rough pre-ingest estimate (chunk count + seconds) from scanned files, so the UI
+ * can show "~14k chunks · ~30 min" before committing. Bytes→chunks ratios are
+ * per-type approximations — PDF/office text is a fraction of file bytes, images
+ * OCR to roughly one chunk — and the embed rate is a conservative local-CPU
+ * constant. Approximate by design: a planning signal, not a promise.
+ */
+export function estimateIngest(
+  files: Array<{ sizeBytes: number; classification: { kind: string } }>,
+): { chunks: number; seconds: number } {
+  const CHUNK_BYTES = 700; // ~ chunker output size for plain text
+  const EMBED_PER_SEC = 8; // conservative local-CPU embed throughput
+  let chunks = 0;
+  for (const f of files) {
+    if (f.classification.kind === "image") {
+      chunks += 2; // OCR ≈ 1 content chunk + 1 metadata chunk
+      continue;
+    }
+    const ratio =
+      f.classification.kind === "pdf" ? 0.35 : f.classification.kind === "docx" || f.classification.kind === "xlsx" ? 0.4 : 1;
+    chunks += Math.max(1, Math.ceil((f.sizeBytes * ratio) / CHUNK_BYTES)) + 1; // +1 metadata chunk
+  }
+  return { chunks, seconds: Math.ceil(chunks / EMBED_PER_SEC) };
+}
 
 export type IngestFilters = {
   /** Labels (from Classification.label) to skip for this ingest. */
@@ -69,6 +94,13 @@ export type IngestFolderOptions = {
    * Default 0. Override with the `MNEMOS_INGEST_THROTTLE_MS` env var.
    */
   embedThrottleMs?: number;
+  /**
+   * Defer files larger than this many bytes — they're skipped in THIS run (with a
+   * `file-skipped`/`deferred` event) so small files index fast. The caller then
+   * kicks a background run with no limit to pick up the large ones (hash-skipping
+   * the small ones already done). Undefined = no deferral.
+   */
+  deferOverBytes?: number;
   /** Progress callback. Called on every phase change. */
   onProgress?: (progress: IngestProgress) => void;
   /** Abort signal for cancellation. */
@@ -165,7 +197,7 @@ export async function ingestFolder(
   // shouldExclude(relativePath, overrides) re-evaluates whether to keep them
   // given the user's per-tier opt-ins. Hard-locked security files were never
   // in scan.files in the first place.
-  const supported = scan.files.filter((f) => {
+  const candidates = scan.files.filter((f) => {
     if (f.classification.category !== "supported") return false;
     if (excludeLabels.has(f.classification.label)) return false;
     if (!includeLargeFiles && f.sizeBytes > LARGE_FILE_BYTES) return false;
@@ -175,11 +207,39 @@ export async function ingestFolder(
     return shouldExclude(f.relativePath, filters.includeOverrides) === null;
   });
 
+  // Defer files over the threshold to a later background run (the caller kicks it
+  // with no limit, hash-skipping these small ones). `supported` is what we index
+  // now; deferred large files are reported as skipped so the UI can say so.
+  const deferOverBytes = opts.deferOverBytes;
+  const supported =
+    deferOverBytes != null ? candidates.filter((f) => f.sizeBytes <= deferOverBytes) : candidates;
+
+  // Ingest smallest-first so quick wins are queryable in seconds instead of being
+  // blocked behind a 50-page PDF. Pure ordering — doesn't change what gets indexed.
+  supported.sort((a, b) => a.sizeBytes - b.sizeBytes);
+
+  const estimate = estimateIngest(supported);
   onProgress({
     phase: "scan-complete",
     totalFiles: scan.files.length,
     supportedFiles: supported.length,
+    estimatedChunks: estimate.chunks,
+    estimatedSeconds: estimate.seconds,
   });
+
+  if (deferOverBytes != null) {
+    for (const f of candidates) {
+      if (f.sizeBytes > deferOverBytes) {
+        onProgress({
+          phase: "file-skipped",
+          filePath: f.relativePath,
+          reason: "deferred",
+          current: 0,
+          total: supported.length,
+        });
+      }
+    }
+  }
 
   const errors: Array<{ filePath: string; message: string }> = [];
   let filesProcessed = 0;

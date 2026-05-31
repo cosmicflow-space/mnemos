@@ -1,7 +1,37 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Modal } from "@/components/Modal";
+import type { RankedModel, SpeedTier, QualityTier } from "@/lib/model-ranking";
+
+const SPEED_BADGE: Record<SpeedTier, { icon: string; label: string; cls: string }> = {
+  fast: { icon: "⚡", label: "Fast", cls: "text-emerald-400" },
+  moderate: { icon: "〰", label: "Moderate", cls: "text-amber-400" },
+  slow: { icon: "🐢", label: "Slow on CPU", cls: "text-rose-400" },
+};
+
+// Short, honest accuracy hint. "strong" is the unremarkable good case (no note).
+const QUALITY_NOTE: Partial<Record<QualityTier, string>> = {
+  fair: "decent",
+  basic: "lightweight — may be shallow",
+  code: "code-focused — mixed for prose",
+  reasoning: "reasoning model — thorough but slow",
+};
+
+function sizeLabel(bytes: number | null): string {
+  if (bytes == null) return "";
+  const gb = bytes / 1e9;
+  return gb >= 1 ? `${gb.toFixed(1)} GB` : `${Math.round(bytes / 1e6)} MB`;
+}
+
+function modelMeta(m: RankedModel): string {
+  const parts: string[] = [];
+  if (m.paramsB != null) parts.push(`${m.paramsB}B`);
+  const sz = sizeLabel(m.sizeBytes);
+  if (sz) parts.push(sz);
+  if (m.quant) parts.push(m.quant);
+  return parts.join(" · ");
+}
 
 /** A credential the scanner found on disk. Values are never returned by the
  * scan — only locations + an `importable` flag. OAuth/subscription tokens are
@@ -82,6 +112,49 @@ export function ModelSettingsModal({
   const [err, setErr] = useState<string | null>(null);
   const [scan, setScan] = useState<DetectedCredential[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  // Ranked local models (balanced-first) with per-model perf — only for Ollama.
+  const [ranked, setRanked] = useState<RankedModel[]>([]);
+  const [machine, setMachine] = useState<{ note: string } | null>(null);
+  const [modelDocsUrl, setModelDocsUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const fetchRanked = useCallback(async (prov: string) => {
+    if (prov !== "ollama") {
+      setRanked([]);
+      setMachine(null);
+      return;
+    }
+    try {
+      const r = await fetch("/api/models/ranked?provider=ollama", { cache: "no-store" });
+      if (r.ok) {
+        const d = (await r.json()) as {
+          ranked?: RankedModel[];
+          machine?: { note: string };
+          docsUrl?: string;
+        };
+        setRanked(d.ranked ?? []);
+        setMachine(d.machine ?? null);
+        setModelDocsUrl(d.docsUrl ?? null);
+      }
+    } catch {
+      // ignore — fall back to the plain dropdown
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchRanked(provider);
+  }, [provider, fetchRanked]);
+
+  // Default to the best INSTALLED model when nothing valid is selected (never an
+  // uninstalled curated suggestion — you can't run what you don't have).
+  useEffect(() => {
+    const installedRanked = ranked.filter((m) => m.installed);
+    if (provider === "ollama" && installedRanked.length > 0 && (!selModel || !installedRanked.some((m) => m.id === selModel))) {
+      const rec = installedRanked.find((m) => m.recommended) ?? installedRanked[0];
+      if (rec) setSelModel(rec.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ranked, provider]);
 
   // Re-detect on open so the model list reflects anything installed since the
   // chat page first loaded (e.g. `ollama pull gemma3` while the app was running).
@@ -95,6 +168,7 @@ export function ModelSettingsModal({
     setRefreshing(true);
     try {
       await onProvidersChanged();
+      await fetchRanked(provider);
     } finally {
       setRefreshing(false);
     }
@@ -253,7 +327,76 @@ export function ModelSettingsModal({
               </button>
             )}
           </div>
-          {models.length > 0 ? (
+          {provider === "ollama" && ranked.length > 0 ? (
+            <div className="space-y-1.5 max-h-80 overflow-y-auto pr-0.5">
+              <p className="text-[11px] text-muted">
+                Ranked fastest + most accurate first. Speed is measured from your own queries once you&apos;ve
+                run a model.
+              </p>
+              <div className="flex items-center justify-between gap-2 text-[11px]">
+                {machine && <span className="text-muted">🖥 {machine.note}</span>}
+                {modelDocsUrl && (
+                  <a href={modelDocsUrl} target="_blank" rel="noreferrer" className="text-cyan-400 hover:text-cyan-300 underline shrink-0">
+                    Browse models →
+                  </a>
+                )}
+              </div>
+              {ranked.map((m) => {
+                const badge = SPEED_BADGE[m.speed];
+                const note = m.installed ? QUALITY_NOTE[m.quality] : m.note;
+                const sel = selModel === m.id;
+                const pull = `ollama pull ${m.id}`;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => {
+                      if (m.installed) {
+                        setSelModel(m.id);
+                      } else {
+                        void navigator.clipboard?.writeText(pull).then(() => {
+                          setCopied(m.id);
+                          setTimeout(() => setCopied((c) => (c === m.id ? null : c)), 1500);
+                        });
+                      }
+                    }}
+                    title={m.installed ? "Use this model" : `Copy: ${pull}`}
+                    className={`w-full text-left rounded-md border px-3 py-2 transition ${
+                      sel
+                        ? "border-cyan-500 bg-cyan-500/10"
+                        : m.installed
+                          ? "border-line bg-surface hover:border-cyan-700"
+                          : "border-dashed border-line/70 bg-surface/40 hover:border-cyan-700"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`text-sm font-medium truncate ${m.installed ? "text-fg" : "text-muted"}`}>
+                        {m.id}
+                      </span>
+                      {m.recommended && (
+                        <span className="text-[10px] font-semibold text-cyan-300 shrink-0">★ recommended</span>
+                      )}
+                      {!m.installed && (
+                        <span className="text-[10px] text-muted shrink-0">{copied === m.id ? "copied!" : "not installed"}</span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted">
+                      {modelMeta(m) && <span className="font-mono">{modelMeta(m)}</span>}
+                      <span className={badge.cls}>
+                        {badge.icon} {badge.label}
+                      </span>
+                      {m.installed ? (
+                        <span>{m.tokPerSec != null ? `~${Math.round(m.tokPerSec)} tok/s` : "speed not measured yet"}</span>
+                      ) : (
+                        <span className="font-mono text-cyan-400/80">⤓ {pull}</span>
+                      )}
+                      {note && <span>· {note}</span>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : models.length > 0 ? (
             <select
               id="model-sel"
               value={selModel}

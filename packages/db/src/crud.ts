@@ -1016,6 +1016,48 @@ export function getUsageTotals(db: MnemosDb): UsageTotal[] {
   }));
 }
 
+export type ModelLatencyStat = {
+  provider: string | null;
+  model: string | null;
+  /** Measured generation speed: sum(tokens_out) / sum(latency seconds). */
+  tokensPerSec: number | null;
+  avgLatencyMs: number | null;
+  samples: number;
+};
+
+/** Measured per-model performance from recorded assistant messages — powers the
+ * model picker's "on your machine" speed numbers. Only rows with a latency and a
+ * positive output-token count contribute, so a model the user hasn't really run
+ * yields no stat. */
+export function getModelLatencyStats(db: MnemosDb): ModelLatencyStat[] {
+  const rows = prepared(db)(
+    `SELECT provider, model,
+            SUM(tokens_out)  AS tout,
+            SUM(latency_ms)  AS lat,
+            AVG(latency_ms)  AS avglat,
+            COUNT(*)         AS n
+       FROM chat_message
+      WHERE role = 'assistant'
+        AND latency_ms IS NOT NULL AND latency_ms > 0
+        AND tokens_out IS NOT NULL AND tokens_out > 0
+      GROUP BY provider, model`,
+  ).all() as Array<{
+    provider: string | null;
+    model: string | null;
+    tout: number;
+    lat: number;
+    avglat: number;
+    n: number;
+  }>;
+  return rows.map((r) => ({
+    provider: r.provider,
+    model: r.model,
+    tokensPerSec: r.lat > 0 ? (r.tout / (r.lat / 1000)) : null,
+    avgLatencyMs: r.avglat ?? null,
+    samples: r.n,
+  }));
+}
+
 // ============================================================================
 // Audit
 // ============================================================================

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Model picker that ranks for you — no more trial-and-error.** Selecting Ollama now shows models **ranked balanced-first** (speed × accuracy), each row with params · size · quant · a Fast/Moderate/Slow badge · **measured tokens/sec from your own past queries** · a ★ on the recommended pick. Accuracy is a curated heuristic (3–8B instruct = strong; coder = mixed for prose; reasoning = thorough-but-slow; tiny = shallow); speed is real once you've run a model. It also **recommends strong models you don't have yet** (shown with `⤓ ollama pull <id>`), tailors guidance to your machine (RAM + Apple Silicon/arch → a size band), and links to the model library — so new users get pointed at good choices instead of guessing. Powered by `GET /api/models/ranked` + per-model latency stats from the audit log.
+
+### Changed
+- **Smart-auto ingestion.** Before indexing, Mnemos now shows a plain-language estimate ("Indexing N files · ~X chunks · ~Y min") and ingests **smallest-first** so quick answers appear in seconds instead of being blocked behind a giant PDF. A **"Index large files (>10 MB) in the background"** toggle indexes small files now and hands the big ones to a background run (non-blocking, thanks to worker-thread embedding) — small files stay queryable while the rest catch up.
+
 ## [0.13.0] - 2026-05-30
 
 ### Changed

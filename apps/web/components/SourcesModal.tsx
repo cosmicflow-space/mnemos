@@ -19,6 +19,7 @@ type SourceRow = {
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
+const DEFER_OVER_BYTES = 10 * 1024 * 1024; // 10 MB — files above this defer to background
 
 // Auto re-scan cadence choices. Daily is the default; "Manual only" (0) opts a
 // source out of background re-scans entirely.
@@ -67,6 +68,8 @@ export function SourcesModal({
   const [picking, setPicking] = useState(false);
   // New sources default to manual re-scan (0) — opt into a cadence per folder.
   const [addInterval, setAddInterval] = useState<number>(0);
+  // Defer files > 10 MB to a background run so small files index fast first.
+  const [deferLarge, setDeferLarge] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -156,13 +159,13 @@ export function SourcesModal({
   // Ingest a path, draining the SSE progress stream. Unchanged files are skipped
   // server-side (incremental), so re-running is cheap. Throws on error.
   // Returns true if the run was paused (terminal 'paused' phase) rather than completed.
-  async function ingestPath(p: string): Promise<boolean> {
+  async function ingestPath(p: string, deferOverBytes?: number): Promise<boolean> {
     setStatus("Ingesting… (reading, chunking, embedding)");
     let paused = false;
     const ingRes = await fetch("/api/ingest", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: p }),
+      body: JSON.stringify(deferOverBytes ? { path: p, deferOverBytes } : { path: p }),
     });
     if (!ingRes.ok || !ingRes.body) throw new Error((await ingRes.text()) || "ingest failed");
 
@@ -178,7 +181,15 @@ export function SourcesModal({
       for (const b of blocks) {
         const line = b.trim();
         if (!line.startsWith("data: ")) continue;
-        let ev: { phase?: string; message?: string; files?: number; chunks?: number };
+        let ev: {
+          phase?: string;
+          message?: string;
+          files?: number;
+          chunks?: number;
+          supportedFiles?: number;
+          estimatedChunks?: number;
+          estimatedSeconds?: number;
+        };
         try {
           ev = JSON.parse(line.slice(6));
         } catch {
@@ -187,6 +198,12 @@ export function SourcesModal({
         if (ev.phase === "error") throw new Error(ev.message ?? "ingest error");
         if (ev.phase === "paused") {
           paused = true;
+        } else if (ev.phase === "scan-complete") {
+          const secs = ev.estimatedSeconds ?? 0;
+          const eta = secs < 60 ? "under a minute" : `~${Math.round(secs / 60)} min`;
+          setStatus(
+            `Indexing ${ev.supportedFiles ?? 0} files · ~${(ev.estimatedChunks ?? 0).toLocaleString()} chunks · ${eta} — smallest first, so answers start appearing right away.`,
+          );
         } else if (typeof ev.files === "number" || typeof ev.chunks === "number") {
           setStatus(`Ingesting… ${ev.files ?? 0} files, ${ev.chunks ?? 0} chunks`);
         } else if (ev.phase) {
@@ -238,7 +255,7 @@ export function SourcesModal({
         // parent (incremental) so the subtree is indexed under it. One source.
         setStatus(`Inside ${data.parentPath} — refreshing it to include this folder…`);
         setPath("");
-        const paused = await ingestPath(data.parentPath);
+        const paused = await ingestPath(data.parentPath, deferLarge ? DEFER_OVER_BYTES : undefined);
         setStatus(
           paused
             ? "Paused — resume any time from the list below."
@@ -258,7 +275,7 @@ export function SourcesModal({
       }
 
       // outcome "added": ingest the brand-new source.
-      const paused = await ingestPath(p);
+      const paused = await ingestPath(p, deferLarge ? DEFER_OVER_BYTES : undefined);
       setStatus(paused ? "Paused — resume any time from the list below." : "Done.");
       setPath("");
       await refresh();
@@ -399,6 +416,18 @@ export function SourcesModal({
         <span className="text-muted/70">
           incremental — only changed files re-embed
         </span>
+      </label>
+
+      <label className="flex items-center gap-2 mb-2 text-[11px] text-muted cursor-pointer">
+        <input
+          type="checkbox"
+          checked={deferLarge}
+          onChange={(e) => setDeferLarge(e.target.checked)}
+          disabled={busy}
+          className="accent-cyan-500"
+        />
+        <span>Index large files (&gt; 10 MB) in the background</span>
+        <span className="text-muted/70">small files first; big ones keep going after</span>
       </label>
       {status && <p className="text-xs text-cyan-300 mb-2">{status}</p>}
       {err && <p className="text-xs text-red-400 mb-2">{err}</p>}
