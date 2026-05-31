@@ -28,6 +28,7 @@ export async function GET() {
           contextWindow: number;
           inputCostPer1M: number | null;
           outputCostPer1M: number | null;
+          pricedAsOf: string | null;
         }> = [];
         try {
           models = (await p.listModels()).map((m) => ({
@@ -36,6 +37,7 @@ export async function GET() {
             contextWindow: m.contextWindow,
             inputCostPer1M: m.inputCostPer1M ?? null,
             outputCostPer1M: m.outputCostPer1M ?? null,
+            pricedAsOf: m.pricedAsOf ?? null,
           }));
         } catch {
           models = [];

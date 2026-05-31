@@ -52,6 +52,9 @@ export type ModelInfo = {
   contextWindow: number;
   inputCostPer1M?: number;
   outputCostPer1M?: number;
+  /** ISO date the pricing above was last set, e.g. "2026-05-30". Providers change
+   * rates, so the UI surfaces this so a stale price is obvious. */
+  pricedAsOf?: string;
 };
 
 export type CredentialField = {

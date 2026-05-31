@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Frontier models show dated pricing in the picker.** Anthropic/OpenAI models now render as detail rows (context window + `$in / $out per 1M`) with a **"Pricing as of <date>"** stamp — the same details-forward treatment local models get, but for cost, so a stale rate is obvious (providers change pricing). Carried via a new optional `pricedAsOf` on `ModelInfo`.
+- Refreshed the model-picker and Sources screenshots to the v0.14 UI (ranked local models, dated frontier pricing, smallest-first + defer-large).
+
 ## [0.14.0] - 2026-05-30
 
 ### Added

@@ -60,14 +60,14 @@ Prefer Docker? `docker compose up -d`. Prefer manual? `pnpm install && pnpm dev`
       <p align="center"><sub><strong>1. Ask</strong> — one chat pane, no chrome. Answers stream in with inline numbered citations, a metrics line (provider · model · tokens · duration), and inline actions to inspect <em>Sources</em>, see exactly what was sent to the model (<em>Data sent</em>), and mark an answer <em>✓ verified</em>. This answer fuses facts from a Markdown spec and a PDF report.</sub></p>
     </td>
     <td width="50%">
-      <img src="docs/screenshots/03-ai-model-local.png" alt="Mnemos AI model picker — local Ollama default, frontier providers opt-in" />
-      <p align="center"><sub><strong>2. Pick your model</strong> — local Ollama is the default (green = ready, no key, free). Anthropic Claude and OpenAI are opt-in and stay locked until you add a key. Privacy is the default, not a setting.</sub></p>
+      <img src="docs/screenshots/03-ai-model-local.png" alt="Mnemos AI model picker — Ollama models ranked by speed and accuracy, frontier providers with dated pricing" />
+      <p align="center"><sub><strong>2. Pick your model</strong> — local Ollama models are <strong>ranked for your machine</strong> (fastest + most accurate first), with measured tok/s from your own queries and a ★ recommended default. It even suggests strong models you haven't installed (with <code>ollama pull</code>). Cloud providers stay locked until you add a key — and show <strong>dated pricing</strong> so a stale rate is obvious. Privacy is the default, not a setting.</sub></p>
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <img src="docs/screenshots/05-sources-manage.png" alt="Mnemos sources — register a folder or single file, read-only" />
-      <p align="center"><sub><strong>3. Add a source</strong> — paste an absolute path to a folder or a single file. Mnemos is read-only over what you register; it chunks and embeds locally (BGE-small), shows chunk/file counts, and offers per-source incremental re-scan.</sub></p>
+      <img src="docs/screenshots/05-sources-manage.png" alt="Mnemos sources — Browse or paste a folder/file, read-only, with smallest-first indexing and a defer-large toggle" />
+      <p align="center"><sub><strong>3. Add a source</strong> — <strong>Browse</strong> to a folder/file (or paste a path; it's validated). Read-only. Mnemos shows an estimate, then indexes <strong>smallest-first</strong> so answers appear in seconds — and can <strong>defer large files to a background pass</strong>. Chunked + embedded locally (BGE-small), with per-source incremental re-scan.</sub></p>
     </td>
     <td width="50%">
       <img src="docs/screenshots/06-citations-multiformat.png" alt="Mnemos citations — the exact source chunks an answer drew from" />
