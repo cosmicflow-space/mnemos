@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-05-31
+
+### Docs
+- **README synced to reality.** The hand-written Status, Roadmap ("Shipped since v0.1"), feature-tree, and "Directions we're exploring" sections had frozen at v0.9 even though the CHANGELOG tracked every release — so the README under-stated what ships today. Status now reads v0.14; the roadmap lists v0.10–v0.14 (pausable ingestion, Word/Excel/image-OCR, folder picker, worker-thread embedding, ranked model picker, smart-auto ingestion); image-OCR/Word/Excel moved out of "exploring" (they shipped in v0.12); the plugin tree now lists `loader-docx`/`loader-xlsx`/`loader-ocr`. `AGENTS.md`'s bundled-loader list updated to match.
+- **Stale "lands in v0.2" promises de-versioned across docs and code.** Pinning a future feature to a hard version number guaranteed it would read as nonsense once that version shipped without it (we're at v0.14, so "scheduled for v0.2" pointed at the *past*). Forward-looking notes in `README.md`, `AGENTS.md`, `docs/architecture.md`, `evals/README.md`, `setup.mjs`, and several plugin/source comments now describe *state* ("planned", "not yet wired") instead of a version. Fixed two now-false code comments in `classify.ts` ("images need OCR which lands in v0.2" — OCR shipped in v0.12) and corrected `docs/architecture.md` drift (API layer is Next.js App Router, not "Hono routes"; "explicit source registration", not "folder-pairing").
+- **Audit doc corrected:** provider-reported token counts are already captured per query (`tokens_in`/`tokens_out`); only the exact request payload remains a future goal — the docs had listed both as not-yet-done.
+- **Gemini / `llama.cpp` framing made consistent.** The README listed Gemini (and bundled `llama.cpp`) as usable Tier-2 providers in the intro, Telegram, and tier lists, but both are scaffolded stubs that aren't wired. They are now consistently labeled **planned** wherever they appear (including the architecture tree and the ADC-detection note shown in the credential scanner UI), so a user can't pick a provider that silently does nothing. Behavior unchanged — only displayed copy and comments.
+
 ## [0.14.1] - 2026-05-30
 
 ### Added
@@ -272,7 +280,8 @@ Roughly 90 seconds from clone to first answer on a typical laptop.
 
 <!-- Version links: each header above is a GitHub compare view of that release's diff.
      [Unreleased] is a live diff of everything on `main` since the latest tag. -->
-[Unreleased]: https://github.com/cosmicflow-space/mnemos/compare/v0.14.1...HEAD
+[Unreleased]: https://github.com/cosmicflow-space/mnemos/compare/v0.14.2...HEAD
+[0.14.2]: https://github.com/cosmicflow-space/mnemos/compare/v0.14.1...v0.14.2
 [0.14.1]: https://github.com/cosmicflow-space/mnemos/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.12.2...v0.13.0
