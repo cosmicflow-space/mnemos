@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-05-30
+
 ### Changed
 - **Local embedding now runs on a worker thread — the UI no longer freezes during a large ingest.** Local embedding (ONNX/`@xenova/transformers`) is CPU-bound and was running on the Node main thread, so a big ingest starved the event loop: queries, config save, and even Pause hung for 10–20s+. Embedding is now offloaded to a worker thread (`apps/web/lib/embed-worker.mjs`, same BGE-small model + pooling so vectors are identical), keeping the main thread free. Measured during a live ingest: `/api/sources` and `/api/config` went from 12–20s timeouts to **~25ms**, and Pause now takes effect in ~2s. The worker is shared across bundles (pinned on `globalThis`); set `MNEMOS_EMBED_INLINE=1` to force the old in-process path. Frontier embedders (network I/O) still run inline.
 - **Ingest yields between embed batches** (`setImmediate`, plus an optional `MNEMOS_INGEST_THROTTLE_MS` / `embedThrottleMs` deliberate delay) so API-based embedders don't starve concurrent requests either.
@@ -256,7 +258,8 @@ Roughly 90 seconds from clone to first answer on a typical laptop.
 
 <!-- Version links: each header above is a GitHub compare view of that release's diff.
      [Unreleased] is a live diff of everything on `main` since the latest tag. -->
-[Unreleased]: https://github.com/cosmicflow-space/mnemos/compare/v0.12.2...HEAD
+[Unreleased]: https://github.com/cosmicflow-space/mnemos/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.12.2...v0.13.0
 [0.12.2]: https://github.com/cosmicflow-space/mnemos/compare/v0.12.1...v0.12.2
 [0.12.1]: https://github.com/cosmicflow-space/mnemos/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.11.0...v0.12.0
