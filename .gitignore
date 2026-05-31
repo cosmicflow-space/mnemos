@@ -64,3 +64,6 @@ pnpm-debug.log*
 
 # tesseract.js OCR trained-data (downloaded at runtime; cached under ~/.mnemos/ocr-cache)
 *.traineddata
+
+# Local session-handoff scratch (launch planning) — never commit
+session-continuation.md
