@@ -48,6 +48,7 @@ type ModelInfo = {
   /** USD per 1M tokens. null for local/free providers. */
   inputCostPer1M: number | null;
   outputCostPer1M: number | null;
+  pricedAsOf: string | null;
 };
 
 /** All-time token totals per (provider, model), from /api/usage. */

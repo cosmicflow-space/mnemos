@@ -23,6 +23,10 @@ const credentialSchema: CredentialSchema = {
   ],
 };
 
+// When the prices below were last set. Surfaced in the UI so a stale rate is
+// obvious — providers change pricing; verify before relying on it.
+const PRICED_AS_OF = "2026-05-30";
+
 const KNOWN_MODELS: readonly ModelInfo[] = [
   {
     id: "claude-opus-4-7",
@@ -126,7 +130,7 @@ class AnthropicProvider implements ChatProvider {
   }
 
   async listModels(): Promise<ModelInfo[]> {
-    return [...KNOWN_MODELS];
+    return KNOWN_MODELS.map((m) => ({ ...m, pricedAsOf: PRICED_AS_OF }));
   }
 }
 

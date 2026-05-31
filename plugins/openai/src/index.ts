@@ -35,6 +35,9 @@ const credentialSchema: CredentialSchema = {
 // Costs are USD per 1M tokens (input/output), point-in-time estimates for the
 // UI's cost display — verify against platform.openai.com/pricing. Used only for
 // indicative cost; billing is whatever OpenAI actually charges.
+// When the prices below were last set — surfaced in the UI so a stale rate shows.
+const PRICED_AS_OF = "2026-05-30";
+
 const CHAT_MODELS: readonly ModelInfo[] = [
   { id: "gpt-5.5", displayName: "GPT-5.5", contextWindow: 200000, inputCostPer1M: 1.25, outputCostPer1M: 10.0 },
   { id: "gpt-5.4", displayName: "GPT-5.4", contextWindow: 200000, inputCostPer1M: 1.25, outputCostPer1M: 10.0 },
@@ -117,7 +120,7 @@ class OpenAIChatProvider implements ChatProvider {
   }
 
   async listModels(): Promise<ModelInfo[]> {
-    return [...CHAT_MODELS];
+    return CHAT_MODELS.map((m) => ({ ...m, pricedAsOf: PRICED_AS_OF }));
   }
 }
 

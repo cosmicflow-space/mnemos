@@ -47,8 +47,10 @@ type DetectedCredential = {
 type ModelInfo = {
   id: string;
   displayName: string;
+  contextWindow: number;
   inputCostPer1M: number | null;
   outputCostPer1M: number | null;
+  pricedAsOf: string | null;
 };
 
 export type ProviderInfo = {
@@ -71,7 +73,11 @@ function extractUrl(text: string | null): string | null {
 
 function priceLabel(m: ModelInfo): string {
   if (m.inputCostPer1M == null && m.outputCostPer1M == null) return "free (local)";
-  return `$${m.inputCostPer1M ?? "?"}/$${m.outputCostPer1M ?? "?"} per 1M`;
+  return `$${m.inputCostPer1M ?? "?"} in / $${m.outputCostPer1M ?? "?"} out per 1M`;
+}
+
+function ctxLabel(tokens: number): string {
+  return tokens >= 1000 ? `${Math.round(tokens / 1000)}K ctx` : `${tokens} ctx`;
 }
 
 /**
@@ -397,18 +403,35 @@ export function ModelSettingsModal({
               })}
             </div>
           ) : models.length > 0 ? (
-            <select
-              id="model-sel"
-              value={selModel}
-              onChange={(e) => setSelModel(e.target.value)}
-              className="w-full bg-surface border border-line rounded-md px-2 py-2 text-sm text-fg focus:outline-none focus:border-cyan-500"
-            >
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.displayName} · {priceLabel(m)}
-                </option>
-              ))}
-            </select>
+            <div className="space-y-1.5 max-h-80 overflow-y-auto pr-0.5">
+              {(() => {
+                const asOf = models.find((m) => m.pricedAsOf)?.pricedAsOf;
+                return asOf ? (
+                  <p className="text-[11px] text-muted">
+                    💲 Pricing as of {asOf} — providers change rates; verify before relying on it.
+                  </p>
+                ) : null;
+              })()}
+              {models.map((m) => {
+                const sel = selModel === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setSelModel(m.id)}
+                    className={`w-full text-left rounded-md border px-3 py-2 transition ${
+                      sel ? "border-cyan-500 bg-cyan-500/10" : "border-line bg-surface hover:border-cyan-700"
+                    }`}
+                  >
+                    <div className="text-sm text-fg font-medium truncate">{m.displayName}</div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted">
+                      <span className="font-mono">{ctxLabel(m.contextWindow)}</span>
+                      <span>{priceLabel(m)}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           ) : (
             <p className="text-xs text-muted">
               {info.needsKey
