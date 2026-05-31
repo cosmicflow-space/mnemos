@@ -59,6 +59,16 @@ export type IngestFilters = {
 export type IngestFolderOptions = {
   /** Batch size for embedding API calls. Default 32. */
   embedBatchSize?: number;
+  /**
+   * Optional *extra* fixed delay (ms) after each embed batch. After every batch
+   * the pipeline always yields one event-loop turn (`setImmediate`) so pending
+   * API requests (queries, config save, pause) get serviced before the next
+   * batch — adaptive by nature: it costs ~nothing when the queue is empty and
+   * lets real requests through when it isn't. This option adds a *deliberate*
+   * sleep on top (to throttle CPU, e.g. background ingest while you work).
+   * Default 0. Override with the `MNEMOS_INGEST_THROTTLE_MS` env var.
+   */
+  embedThrottleMs?: number;
   /** Progress callback. Called on every phase change. */
   onProgress?: (progress: IngestProgress) => void;
   /** Abort signal for cancellation. */
@@ -139,6 +149,8 @@ export async function ingestFolder(
 ): Promise<IngestResult> {
   const start = Date.now();
   const batchSize = opts.embedBatchSize ?? 32;
+  const envThrottle = Number(process.env.MNEMOS_INGEST_THROTTLE_MS);
+  const throttleMs = opts.embedThrottleMs ?? (Number.isFinite(envThrottle) ? envThrottle : 0);
   const onProgress = opts.onProgress ?? (() => {});
 
   const filters = opts.filters ?? {};
@@ -339,6 +351,13 @@ export async function ingestFolder(
         current,
         total,
       });
+      // Hand the event loop a turn between batches: setImmediate lets the poll
+      // phase drain any pending I/O (queued API requests) before we resume, so a
+      // large file's embed can't starve queries/config/pause. It's adaptive —
+      // ~free when nothing is queued, yields when something is. throttleMs adds
+      // an optional deliberate sleep on top for CPU throttling.
+      await new Promise((r) => setImmediate(r));
+      if (throttleMs > 0) await new Promise((r) => setTimeout(r, throttleMs));
     }
 
     if (embedFailed || opts.signal?.aborted) {
