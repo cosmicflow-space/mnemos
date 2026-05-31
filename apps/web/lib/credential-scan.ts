@@ -98,15 +98,15 @@ const FILE_SPECS: FileSpec[] = [
     path: join(HOME, ".config", "openai", "auth.json"),
     importable: true,
   },
-  // Google Cloud ADC — detected for transparency, but not importable in v0.1
-  // because the proper Vertex AI auth path isn't wired yet. The generic JSON
-  // importer would otherwise treat the OAuth access_token in the ADC file as
-  // a Gemini API key, which is incorrect. Vertex AI wiring lands in v0.2.
+  // Google Cloud ADC — detected for transparency, but not importable because
+  // the proper Vertex AI auth path isn't wired yet. The generic JSON importer
+  // would otherwise treat the OAuth access_token in the ADC file as a Gemini
+  // API key, which is incorrect. Vertex AI wiring is planned.
   {
     provider: "gemini",
     path: join(HOME, ".config", "gcloud", "application_default_credentials.json"),
     importable: false,
-    note: "Google Cloud Application Default Credentials detected. Mnemos v0.1 does not yet wire Vertex AI auth (the proper consumer for ADC). Paste a Gemini API key from aistudio.google.com instead; Vertex AI / ADC support is planned for v0.2.",
+    note: "Google Cloud Application Default Credentials detected. Mnemos does not yet wire Vertex AI auth (the proper consumer for ADC). Paste a Gemini API key from aistudio.google.com instead; Vertex AI / ADC support is planned.",
   },
 ];
 
@@ -125,8 +125,8 @@ const RC_FILES = [
 // docs accept either GEMINI_API_KEY or GOOGLE_API_KEY. The import path
 // reconstructs the env var from provider ID via ENV_VAR_MAP_INVERSE (which is
 // 1:1), so detecting GOOGLE_API_KEY would produce a "Use this" button that
-// then looks up the wrong env var name. v0.2 will propagate envVar through
-// ImportRequest so we can re-add GOOGLE_API_KEY detection cleanly.
+// then looks up the wrong env var name. A future change will propagate envVar
+// through ImportRequest so we can re-add GOOGLE_API_KEY detection cleanly.
 const ENV_VAR_MAP: Record<string, ProviderId> = {
   ANTHROPIC_API_KEY: "anthropic",
   OPENAI_API_KEY: "openai",

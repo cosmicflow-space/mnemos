@@ -4,8 +4,8 @@ import type { Plugin, DocumentLoader, LoadedDoc } from "@mnemos/plugin-sdk";
 /**
  * Strip leading YAML frontmatter and return the body plus parsed frontmatter
  * as metadata. Frontmatter parsing is intentionally simple — key: value lines
- * only, no nested structures. For richer parsing, users can install a real
- * frontmatter plugin in v0.2+.
+ * only, no nested structures. For richer parsing, a future version could add a
+ * real frontmatter parser.
  */
 function splitFrontmatter(text: string): {
   body: string;

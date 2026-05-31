@@ -38,7 +38,7 @@ const HARD_FALLBACK_CHAT_MODEL = "llama3.2";
 // Default to all-minilm (384 dim native) so it matches Mnemos's standard schema.
 // Users can override via credentials.embeddingModel; if they pick a model with
 // non-384 native dim, the schema still expects 384 so they'll need to handle
-// truncation themselves until v0.2 multi-dim support lands.
+// truncation themselves until multi-dim support lands.
 const DEFAULT_EMBED_MODEL = "all-minilm";
 const MNEMOS_EMBEDDING_DIM = 384;
 

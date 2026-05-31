@@ -17,7 +17,7 @@ const ScanRequest = z.object({
  * Powers the "Browse → Scan" preview UX. Cheap enough to run on every change.
  *
  * Returns a summary the UI uses to show "Found 24 PDFs, 50 markdown files,
- * 14 plaintext, 8 source files. 20 images recognized (OCR coming in v0.2)."
+ * 14 plaintext, 8 source files, 20 images (OCR'd to text)."
  */
 export async function POST(req: Request) {
   let body: unknown;

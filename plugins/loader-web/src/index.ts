@@ -5,8 +5,8 @@ import type { Plugin, DocumentLoader, LoadedDoc } from "@mnemos/plugin-sdk";
  * Uses native fetch (Node 22+) + a minimal HTML-to-text extractor.
  *
  * Sources of kind 'url' (registered via `mnemos source add` with kind=url)
- * use this loader. v0.1 supports single-page fetches; multi-page crawling
- * lands in v0.2.
+ * use this loader. Single-page fetches are supported today; multi-page
+ * crawling is a future goal.
  */
 
 const loader: DocumentLoader = {
@@ -41,8 +41,8 @@ const loader: DocumentLoader = {
 };
 
 /** Bare-bones HTML→text extractor. Drops script/style, collapses whitespace.
- * For richer extraction (article-only via readability), v0.2 can add a real
- * dependency like @mozilla/readability. */
+ * For richer extraction (article-only via readability), a future version can
+ * add a real dependency like @mozilla/readability. */
 function htmlToText(html: string): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")

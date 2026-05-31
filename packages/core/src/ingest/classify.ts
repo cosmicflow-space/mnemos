@@ -5,7 +5,7 @@
  * Categories:
  *   - supported   → has a real loader, will be ingested
  *   - deferred    → recognized type, will be supported in a later release
- *                   (e.g. images need OCR which lands in v0.2). Surfaced in
+ *                   (e.g. audio/video need local speech-to-text). Surfaced in
  *                   scan UI so the user sees "we know about these" rather than
  *                   "these are garbage."
  *   - unsupported → not recognized; will be ignored entirely
@@ -36,12 +36,12 @@ export type Classification = {
   loaderId?: string;
   /** Human-readable label for UI display ("PDFs", "markdown files", ...). */
   label: string;
-  /** Optional note shown in scan UI (e.g. "OCR support coming in v0.2"). */
+  /** Optional note shown in scan UI (e.g. "audio transcription not yet supported"). */
   note?: string;
 };
 
 const EXT_TO_CLASSIFICATION: Record<string, Classification> = {
-  // Supported — fully ingested in v0.1
+  // Supported — fully ingested
   ".pdf": { kind: "pdf", category: "supported", loaderId: "pdf", label: "PDFs" },
   ".docx": { kind: "docx", category: "supported", loaderId: "docx", label: "Word documents" },
   ".xlsx": { kind: "xlsx", category: "supported", loaderId: "xlsx", label: "spreadsheets" },
@@ -79,7 +79,7 @@ const EXT_TO_CLASSIFICATION: Record<string, Classification> = {
   ".html": { kind: "code", category: "supported", loaderId: "code", label: "source code" },
   ".css": { kind: "code", category: "supported", loaderId: "code", label: "source code" },
 
-  // Deferred — recognized but skipped in v0.1
+  // Deferred — recognized but not yet ingested
   ".jpg": { kind: "image", category: "supported", loaderId: "ocr", label: "images" },
   ".jpeg": { kind: "image", category: "supported", loaderId: "ocr", label: "images" },
   ".png": { kind: "image", category: "supported", loaderId: "ocr", label: "images" },
@@ -89,8 +89,8 @@ const EXT_TO_CLASSIFICATION: Record<string, Classification> = {
   ".webp": { kind: "image", category: "supported", loaderId: "ocr", label: "images" },
   ".gif": { kind: "image", category: "deferred", label: "images", note: "static-image OCR is supported; animated GIFs aren't OCR'd reliably" },
   ".heic": { kind: "image", category: "deferred", label: "images", note: "HEIC OCR coming later (needs HEIF decode)" },
-  ".eml": { kind: "email", category: "deferred", label: "email messages", note: "Email ingestion in v0.2" },
-  ".mbox": { kind: "email", category: "deferred", label: "email mailboxes", note: "Email ingestion in v0.2" },
+  ".eml": { kind: "email", category: "deferred", label: "email messages", note: "Email ingestion not yet supported" },
+  ".mbox": { kind: "email", category: "deferred", label: "email mailboxes", note: "Email ingestion not yet supported" },
   ".mp3": { kind: "audio", category: "deferred", label: "audio files", note: "Transcript support in v0.3" },
   ".m4a": { kind: "audio", category: "deferred", label: "audio files", note: "Transcript support in v0.3" },
   ".wav": { kind: "audio", category: "deferred", label: "audio files", note: "Transcript support in v0.3" },

@@ -23,7 +23,7 @@ Telegraph style — root rules only. No scoped `AGENTS.md` files exist yet; if o
 - SQLite + sqlite-vec: `packages/db/` (`schema.sql` is the source of truth; `crud.ts` is the typed access layer)
 - Plugin SDK barrel (the only surface plugins can import): `packages/plugin-sdk/` — single `src/index.ts`
 - CLI: `packages/cli/` — **v0.1 scaffold only**; commands print help or exit 1 (not yet wired)
-- Bundled plugins: `plugins/*/` (chat: anthropic/openai/gemini/ollama/llama-cpp; embed: embed-local; loaders: pdf/markdown/plaintext/web/code)
+- Bundled plugins: `plugins/*/` (chat: anthropic/openai/gemini/ollama/llama-cpp; embed: embed-local; loaders: pdf/docx/xlsx/ocr/markdown/plaintext/web/code)
 - Spec docs: `docs/` (`architecture.md`); synthetic eval fixtures + demo corpus: `evals/`
 
 ## Architecture invariants
@@ -34,9 +34,9 @@ Telegraph style — root rules only. No scoped `AGENTS.md` files exist yet; if o
 - **No drag-and-drop UI.** Opinionated single-pane chat with folders + inspector. If you're tempted to add a flow builder, reject and document.
 - **Single SQLite file holds everything.** Chunks, vectors (via sqlite-vec), credentials (encrypted), chat history, audit. No separate stores.
 - **Read-only by default.** Mnemos never writes to user folders. Period.
-- **Frontier LLMs only see retrieved chunks.** Never raw documents. Audit log records provider, model, retrieved chunk IDs, prompt-size estimate, and latency per query. Exact payload + provider-reported token counts is a v0.2 goal.
-- **Bundled plugins register statically.** Adding one = add a static import to the `BUNDLED_PLUGINS` array in `packages/core/src/registry.ts`. Dynamic `mnemos-plugin-*` discovery is v0.2.
-- **Embedding dimension is a cross-file contract.** `MNEMOS_EMBEDDING_DIM` (registry.ts) must equal the `vec_chunk` dimension in `packages/db/src/schema.sql` (384 in v0.1). Change one, change both, or vectors mismatch silently.
+- **Frontier LLMs only see retrieved chunks.** Never raw documents. Audit log records provider, model, retrieved chunk IDs, prompt-size estimate, latency, and provider-reported token counts per query. Capturing the exact payload is a future goal.
+- **Bundled plugins register statically.** Adding one = add a static import to the `BUNDLED_PLUGINS` array in `packages/core/src/registry.ts`. Dynamic `mnemos-plugin-*` discovery is a future goal.
+- **Embedding dimension is a cross-file contract.** `MNEMOS_EMBEDDING_DIM` (registry.ts) must equal the `vec_chunk` dimension in `packages/db/src/schema.sql` (384 today). Change one, change both, or vectors mismatch silently.
 
 ## Trust model
 
@@ -86,8 +86,8 @@ Telegraph style — root rules only. No scoped `AGENTS.md` files exist yet; if o
 ├── encryption.key       # chmod 600, AES-GCM key
 ├── mnemos.db            # SQLite + sqlite-vec — includes audit_event table
 ├── credentials/         # Reserved
-├── plugins/             # Reserved (v0.2+)
-└── workspace/           # Reserved
+├── plugins/             # Reserved (future external-plugin dir)
+└── workspace/           # Reserved (future)
 
 Audit log lives in the `audit_event` table inside `mnemos.db` (not a separate `audit.log` file). Inspect via the `/api/audit` route or by querying the table directly.
 ```

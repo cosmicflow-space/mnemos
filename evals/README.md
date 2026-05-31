@@ -25,7 +25,7 @@ evals/
 │       ├── meeting-2026-04-10.md   # Synthetic Q2 planning meeting notes
 │       ├── recipe-pasta.md         # Synthetic recipe — ingredients with quantities
 │       └── expense-q1.md           # Synthetic expense report — line items + totals
-└── (future: specs/, golden/, run.ts — eval framework lands in v0.2)
+└── (future: specs/, golden/, run.ts — eval framework planned)
 ```
 
 ## Demo questions these fixtures answer
@@ -43,10 +43,10 @@ end-to-end RAG behavior. Questions paired with expected behavior:
 | "How much pasta for the weeknight recipe?" | `recipe-pasta.md` | 400 g |
 | "What is the next meeting date?" | `meeting-2026-04-10.md` | April 24, 2026 |
 
-## Future: full eval framework (v0.2)
+## Future: full eval framework
 
 The fixtures are a stepping stone toward a proper eval framework that runs
-in CI. Design (deferred — landing in v0.2):
+in CI. Design (deferred — planned):
 
 - `specs/retrieval.eval.ts` — verify retrieval returns chunks from the
   expected file(s)
@@ -58,7 +58,7 @@ in CI. Design (deferred — landing in v0.2):
 - `run.ts` — boots a fresh isolated mnemos state dir, ingests fixtures,
   runs each spec, reports pass/fail
 
-This README documents the design. The runner ships in v0.2.
+This README documents the design. The runner is planned.
 
 ## Updating fixtures
 

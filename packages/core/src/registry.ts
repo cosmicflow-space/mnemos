@@ -1,8 +1,8 @@
 /**
  * Plugin registry.
  *
- * v0.1 uses static imports of bundled plugins. v0.2 adds dynamic discovery of
- * `mnemos-plugin-*` npm packages.
+ * Bundled plugins are registered via static imports. Dynamic discovery of
+ * `mnemos-plugin-*` npm packages is a future goal.
  *
  * Validation enforces the SDK contract: manifest.apiVersion === '0.1', no
  * duplicate provider IDs, no missing required fields.

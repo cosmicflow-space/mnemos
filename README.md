@@ -13,7 +13,7 @@
 
 Mnemos is a personal RAG (retrieval-augmented generation) system that defaults to **100% local** — embeddings on your machine, chat on your machine, zero external inference calls. Drop a folder of documents, ask questions in plain English, get answers with citations to your own files. The audit log captures every query for transparency; in the default install, **query audit events record the local chat provider (`ollama`)** and **ingest events stay local but don't carry a provider field** — no external-provider call is ever recorded.
 
-If you choose to add a frontier LLM (Anthropic Claude, OpenAI, Gemini), mnemos sends only the retrieved chunks — never raw files — and the audit log records the provider, model, retrieved chunk IDs, prompt-token estimate, and latency for each external request. Plugins are opt-in, not required. **Personal RAG means personal RAG. Privacy is the default.**
+If you choose to add a frontier LLM (Anthropic Claude or OpenAI today; Gemini planned), mnemos sends only the retrieved chunks — never raw files — and the audit log records the provider, model, retrieved chunk IDs, prompt-token estimate, and latency for each external request. Plugins are opt-in, not required. **Personal RAG means personal RAG. Privacy is the default.**
 
 Built from scratch in TypeScript + Next.js. Opinionated single-pane UI — no drag-and-drop canvas, one strong default per pipeline stage, plug your own providers via a versioned SDK.
 
@@ -83,7 +83,7 @@ Your personal RAG runs on your computer — but you don't have to be *at* your c
 - **No public server, nothing exposed.** Mnemos *reaches out* to Telegram (long polling), so it works behind your home NAT with no port-forwarding, no tunnel, no public IP — the same outbound-only posture as everything else.
 - **Private by default.** The bot answers **only you**. You pair your phone once with a single-use code from the UI; any other chat is ignored. Direct messages only — never groups.
 - **Your documents stay home.** Only the question and answer pass through Telegram (and whichever model you've configured). Files never leave the machine.
-- **Uses your configured model.** Local Ollama by default, or Claude/GPT/Gemini if you've set one — the bot mirrors your choice.
+- **Uses your configured model.** Local Ollama by default, or Claude/GPT if you've set one (Gemini planned) — the bot mirrors your choice.
 
 Set it up in **Settings → 📲 Telegram** (there's a built-in [step-by-step guide](apps/web/app/telegram-guide/page.tsx) for anyone new to Telegram bots). The catch, by design: your computer must be awake with Mnemos running for the bot to reply.
 
@@ -101,20 +101,20 @@ Set it up in **Settings → 📲 Telegram** (there's a built-in [step-by-step gu
 
 ### Tier 1 — Fully local (default)
 - **Embeddings**: BGE-small via ONNX, on your machine (first use downloads ~120 MB of model weights from Hugging Face once; cached thereafter — see [Offline note](#offline-note) below)
-- **Chat**: Ollama (v0.1) or bundled `llama.cpp` (v0.2) — on your machine
+- **Chat**: Ollama on your machine (bundled `llama.cpp` is planned)
 - **Network (after first-run model fetch)**: zero external inference calls. No chunks of your data leave the machine.
 - **Auth**: none — no API keys, no OAuth
 - **Best for**: sensitive data, offline use, full sovereignty
 
 The default install IS this tier. `node setup.mjs` defaults to Ollama (the recommended option, no API key); the `/api/query` route defaults to `providerId: "ollama"` if callers omit it.
 
-<a id="offline-note"></a>**Offline note**: BGE-small (the bundled embedding model) is fetched from Hugging Face on first ingestion, then cached locally. After that one-time fetch the install is fully offline-capable for ingest+local-chat. v0.2 will explore vendoring the model with the install for true zero-network first-run.
+<a id="offline-note"></a>**Offline note**: BGE-small (the bundled embedding model) is fetched from Hugging Face on first ingestion, then cached locally. After that one-time fetch the install is fully offline-capable for ingest+local-chat. A future release may explore vendoring the model with the install for true zero-network first-run.
 
 ### Tier 2 — Hybrid (opt-in, per-question or per-session)
 - **Embeddings**: local default (or external if you switch)
-- **Chat**: Claude / GPT / Gemini — you pick, you provide auth
+- **Chat**: Claude or GPT — you pick, you provide auth (Gemini planned)
 - **Network**: only retrieved chunks (~500–2k tokens) cross the boundary. Never raw files. Never your full corpus.
-- **Audit**: provider, model, retrieved chunk IDs, prompt-size estimate, latency. Exact payload + provider-reported token counts is a v0.2 goal.
+- **Audit**: provider, model, retrieved chunk IDs, prompt-size estimate, latency, and provider-reported token counts. Capturing the exact request payload is a future goal.
 - **Best for**: frontier-model quality, when you've consciously chosen to share retrieved chunks
 
 The chat UI lets you switch the model per question.
@@ -130,18 +130,18 @@ Train a small open model on your own corpus. Stays on your machine. Becomes spec
 |---|---|---|
 | **Anthropic Claude** | API key only | Anthropic [explicitly prohibits](https://code.claude.com/docs/en/legal-and-compliance) third-party reuse of OAuth tokens from Claude apps. Mnemos detects `~/.claude/.credentials.json` but refuses to import it. |
 | **OpenAI / Codex** | API key only | The first-party `codex` CLI supports OAuth, but OpenAI does not document third-party reuse. Mnemos detects `~/.codex/auth.json` but refuses to import it. |
-| **Google Gemini** | API key only (in v0.1) | Mnemos v0.1 accepts Gemini API keys only. Google's platform supports both OAuth (via user-created OAuth client + `gcloud auth application-default login --client-id-file=client_secret.json`) and ADC via Vertex AI — both are tracked for v0.2+ but not yet wired in mnemos. |
+| **Google Gemini** | API key only (planned) | Gemini support is planned — the provider is scaffolded but not yet wired; when it lands, Mnemos will accept a Gemini API key. Google's platform also supports OAuth (via user-created OAuth client + `gcloud auth application-default login --client-id-file=client_secret.json`) and ADC via Vertex AI — both tracked but not yet wired. |
 | **Ollama** | No auth needed | Local daemon, fully sovereign. |
-| **llama.cpp** (v0.2) | No auth needed | Bundled, no daemon, no network. |
+| **llama.cpp** (planned) | No auth needed | Bundled, no daemon, no network. |
 
 ## What Mnemos is
 
 - **Local-first**: SQLite + sqlite-vec, single file at `~/.mnemos/mnemos.db`. No separate vector database.
 - **Private by default**: Bundled local embeddings (BGE-small ONNX) + local chat (Ollama) means RAG runs without any external inference service. Zero API keys, zero external inference calls, zero data egress after the BGE-small weights are cached on first ingestion ([Offline note](#offline-note) above). External LLM plugins are opt-in if you want frontier-model quality.
 - **Single user**: One person, one machine. Loopback bind by default; LAN binding requires explicit opt-in and bearer-token auth.
-- **Pluggable providers** (v0.1 wired): Anthropic, OpenAI, Ollama for chat. Local BGE-small + OpenAI + Ollama for embeddings. Add your own via the plugin SDK. Gemini and bundled `llama.cpp` providers are stubs scheduled for v0.2.
+- **Pluggable providers** (wired today): Anthropic, OpenAI, Ollama for chat. Local BGE-small + OpenAI + Ollama for embeddings. Add your own via the plugin SDK. Gemini and bundled `llama.cpp` providers are scaffolded stubs — planned, not yet wired.
 - **Read-only**: Mnemos never modifies your files. Source access is opt-in per folder.
-- **Auditable**: Every `query` event is recorded with chat-provider, model, retrieved chunk IDs, prompt-size estimate, and latency. Every `ingest` event is recorded without a `provider` field (ingest is locked to the local embedder in v0.1). In Tier 1 (local default), `query` events show `provider: "ollama"` (or another local provider) — no external-provider call is ever recorded. Visible in the UI. (v0.2 goal: capture exact request payloads + provider-reported token counts for external calls; add explicit `external: boolean` flag.)
+- **Auditable**: Every `query` event is recorded with chat-provider, model, retrieved chunk IDs, prompt-size estimate, latency, and provider-reported token counts. Every `ingest` event is recorded without a `provider` field (ingest is currently locked to the local embedder). In Tier 1 (local default), `query` events show `provider: "ollama"` (or another local provider) — no external-provider call is ever recorded. Visible in the UI. (Future goals: capture exact request payloads for external calls; add an explicit `external: boolean` flag.)
 - **Safe defaults**: Auto-excludes credentials (`.env`, `*.pem`, `id_rsa*`) and noise (logs, lockfiles, minified bundles). Security excludes are hard-locked even against explicit user opt-in.
 - **Citations**: Every answer references the source files, last-modified date, file type, and exact byte range.
 - **Folders or single files**: Register a whole folder *or* one individual file. Mnemos auto-detects which — and the credential hard-lock holds either way (a file under `~/.aws/`, or a symlink to `~/.env`, is still refused).
@@ -159,7 +159,7 @@ Train a small open model on your own corpus. Stays on your machine. Becomes spec
 
 ## Status
 
-Active development — **v0.9**. The core (local-first RAG, audit, atomic ingestion, cross-OS install) has been stable since v0.1; releases since then have added single-file sources, per-file metadata, automatic re-scan, verified-answer memory, and the Telegram remote channel. Track every release in [CHANGELOG.md](CHANGELOG.md).
+Active development — **v0.14**. The core (local-first RAG, audit, atomic ingestion, cross-OS install) has been stable since v0.1; releases since then have added single-file sources, per-file metadata, automatic re-scan, verified-answer memory, the Telegram remote channel, Word/Excel/image-OCR ingestion, a server-powered folder picker, pausable/resumable ingestion, worker-thread embedding (no UI freeze during ingest), and a model picker that ranks your local models by measured speed + accuracy. Track every release in [CHANGELOG.md](CHANGELOG.md).
 
 ## Architecture
 
@@ -177,10 +177,13 @@ mnemos/
     ├── embed-local/       # EmbeddingProvider (bundled, default — BGE-small via ONNX)
     ├── anthropic/         # ChatProvider (Claude)
     ├── openai/            # ChatProvider + EmbeddingProvider
-    ├── gemini/            # ChatProvider
+    ├── gemini/            # ChatProvider (stub — planned)
     ├── ollama/            # ChatProvider + EmbeddingProvider (host-local)
-    ├── llama-cpp/         # ChatProvider + EmbeddingProvider (bundled local)
-    ├── loader-pdf/        # DocumentLoader
+    ├── llama-cpp/         # ChatProvider + EmbeddingProvider (stub — planned)
+    ├── loader-pdf/        # DocumentLoader (PDF)
+    ├── loader-docx/       # DocumentLoader (Word, via mammoth)
+    ├── loader-xlsx/       # DocumentLoader (Excel, per-sheet to CSV-style text)
+    ├── loader-ocr/        # DocumentLoader (image OCR via tesseract.js)
     ├── loader-markdown/   # DocumentLoader
     ├── loader-plaintext/  # DocumentLoader
     ├── loader-web/        # DocumentLoader for URLs
@@ -198,7 +201,7 @@ Mnemos uses a **single-user trust model** — one person on one machine, not a m
 - Installed plugins are part of the trusted base (documented)
 - Source access requires explicit registration (`mnemos source add <path>`)
 - Frontier LLMs (Tier 2 only) see only retrieved chunks, never raw files
-- The audit log captures provider, model, retrieved chunk IDs, prompt-size estimate, and latency for every query — local and external. Exact payload + provider-reported token counts for external calls are a v0.2 goal.
+- The audit log captures provider, model, retrieved chunk IDs, prompt-size estimate, latency, and provider-reported token counts for every query — local and external. Capturing the exact request payload for external calls is a future goal.
 - Audit data lives in the `audit_event` table inside `~/.mnemos/mnemos.db`. Inspect via `/api/audit` or by querying the SQLite table directly. There is **no** separate `audit.log` file.
 
 ## Your first 90 seconds
@@ -217,17 +220,22 @@ That's it. End-to-end on a fresh laptop: usually under 90 seconds for the instal
 
 ## Roadmap
 
-**Shipped since v0.1:**
+**Shipped since v0.1** (every release is in [CHANGELOG.md](CHANGELOG.md)):
 - **v0.5** — verified-answer memory
 - **v0.6** — per-file metadata chunks
 - **v0.7** — single-file sources + hardened credential guardrail
 - **v0.8** — automatic per-source re-scan (concurrency-safe)
 - **v0.9** — **Telegram remote channel** (ask your RAG from your phone), model selection persisted server-side
+- **v0.10** — `MNEMOS_PORT` override (run a personal vault and a dev instance side by side), PDF-ingest-in-dev fix, public PII-free demo corpus
+- **v0.11** — **pausable / resumable ingestion** with a live status ring, source-containment guard, filename-mention content retrieval, count/inventory answers from exact totals
+- **v0.12** — **more formats: Word (.docx), Excel (.xlsx), and image OCR** (.png/.jpg/.tif/…); a **server-powered folder/file picker** for Add Source; quoted-path fix; credential hard-lock hardening (`.ssh/`/`.gnupg/` + realpath-canonicalized roots); brand refresh (bolder logo + two-tone neuron wordmark)
+- **v0.13** — **worker-thread embedding** — the UI no longer freezes during a large ingest (12–20s hangs → ~25ms)
+- **v0.14** — **a model picker that ranks for you** (local models ordered by speed × accuracy with measured tok/s from your own queries, a ★ recommendation, machine-aware guidance + `ollama pull` suggestions; frontier models show dated pricing) and **smart-auto ingestion** (pre-ingest estimate, smallest-first, defer-large-to-background)
 
 **Foundations (v0.1–v0.4):** single-folder RAG, BYO API key, audit log, atomic ingestion, smart-default file exclusions, credential auto-detection, bearer-token auth (loopback bypass), cross-OS install via `setup.mjs`, in-chat onboarding, per-model cost tracking, rich Markdown output, light/dark theme.
 
 **Directions we're exploring** *(ideas, not promises — community input very welcome):*
-- **More file types** beyond text & PDF — images (OCR for text-in-images, or vision-model description) and audio/video (local speech-to-text). Today these are detected and politely deferred rather than ingested.
+- **Even more file types** — audio/video (local speech-to-text), HEIC, scanned-PDF OCR (needs a PDF→raster step), and vision-model *description* of images (beyond today's text-OCR). Word, Excel, and image text-OCR already ship (v0.12). Recognized-but-not-yet-ingested types (HEIC, audio, video, email) are surfaced in the scan UI as politely deferred rather than silently ignored.
 - **Better answers** — cross-encoder reranking of retrieved chunks; Gemini + bundled `llama.cpp` providers fully wired.
 - **Easier installs** — npm global install, native macOS/Linux installers.
 - **More places to ask from** — WhatsApp (pending a local-first-friendly API path), email ingestion.

@@ -209,7 +209,7 @@ export function scanProviderKeys() {
   for (const s of [
     { file: path.join(HOME, '.claude', '.credentials.json'), note: 'Claude Code OAuth — Anthropic prohibits third-party reuse. Create an API key at console.anthropic.com.' },
     { file: path.join(HOME, '.codex', 'auth.json'), note: 'OpenAI codex CLI OAuth — first-party only. Create an API key at platform.openai.com.' },
-    { file: path.join(HOME, '.config', 'gcloud', 'application_default_credentials.json'), note: 'Google ADC — Vertex AI not wired in v0.1. Use a Gemini API key from aistudio.google.com.' },
+    { file: path.join(HOME, '.config', 'gcloud', 'application_default_credentials.json'), note: 'Google ADC — Vertex AI not wired. Use a Gemini API key from aistudio.google.com.' },
   ]) {
     if (fs.existsSync(s.file)) oauthOnly.push({ location: relHome(s.file), note: s.note });
   }
@@ -271,7 +271,7 @@ async function configureProvider(rl) {
   console.log(`    ${bold('1')}) ollama      local daemon on :11434          ${green('no key · fully local · recommended')}`);
   console.log(`    ${bold('2')}) anthropic   Claude (Sonnet 4.6, Opus 4.7)   ${tag('anthropic', 'needs ANTHROPIC_API_KEY')}`);
   console.log(`    ${bold('3')}) openai      GPT-4o / o-series                ${tag('openai', 'needs OPENAI_API_KEY')}`);
-  console.log(dim(`    (gemini + bundled local llama.cpp are stubs in v0.1 — landing in v0.2)`));
+  console.log(dim(`    (gemini + bundled local llama.cpp are stubs — not yet wired)`));
   const choices = { 1: 'ollama', 2: 'anthropic', 3: 'openai' };
   let provider = '';
   while (!provider) {
