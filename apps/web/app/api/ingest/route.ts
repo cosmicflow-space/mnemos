@@ -9,6 +9,7 @@ import {
 import { getDb, getRegistry, getDefaultEmbedder } from "@/lib/runtime";
 import { applyIngestProgress, markIngestPaused } from "@/lib/ingest-status";
 import { registerIngestController, unregisterIngestController } from "@/lib/ingest-control";
+import { runSourceIngestInBackground } from "@/lib/ingest-runner";
 import { normalizeUserPath } from "@/lib/user-path";
 
 export const runtime = "nodejs";
@@ -31,6 +32,9 @@ const IngestRequest = z.object({
       includeLargeFiles: z.boolean().optional(),
     })
     .optional(),
+  /** Defer files larger than this many bytes to a background run (smallest-first
+   * foreground now; the big ones index off the streamed connection after). */
+  deferOverBytes: z.number().int().positive().optional(),
 });
 
 /**
@@ -115,6 +119,7 @@ export async function POST(req: Request) {
       // Register an abort handle so POST /api/ingest/pause can stop this run.
       const abort = new AbortController();
       registerIngestController(source.id, abort);
+      let kickBackground = false;
       try {
         await ingestFolder(db, registry, embedder, source, {
           signal: abort.signal,
@@ -130,6 +135,7 @@ export async function POST(req: Request) {
             applyIngestProgress(source.id, source.path, progress);
           },
           filters: parsed.data.filters,
+          deferOverBytes: parsed.data.deferOverBytes,
         });
         if (abort.signal.aborted) {
           markIngestPaused(source.id);
@@ -137,6 +143,9 @@ export async function POST(req: Request) {
         } else {
           // Manual scan resets the auto re-scan cadence for this source.
           touchSourceScanned(db, source.id);
+          // If large files were deferred, hand them to a background run (no limit,
+          // hash-skips the small ones just done) once we release the lease below.
+          if (parsed.data.deferOverBytes != null) kickBackground = true;
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -146,6 +155,8 @@ export async function POST(req: Request) {
         unregisterIngestController(source.id, abort);
         releaseIngest(db, source.id, token);
         controller.close();
+        // Fire-and-forget: lease is now free, so the background run can claim it.
+        if (kickBackground) void runSourceIngestInBackground(source.id);
       }
     },
   });
