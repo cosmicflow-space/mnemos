@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-05-30
+
 ### Added
 - **Model picker that ranks for you — no more trial-and-error.** Selecting Ollama now shows models **ranked balanced-first** (speed × accuracy), each row with params · size · quant · a Fast/Moderate/Slow badge · **measured tokens/sec from your own past queries** · a ★ on the recommended pick. Accuracy is a curated heuristic (3–8B instruct = strong; coder = mixed for prose; reasoning = thorough-but-slow; tiny = shallow); speed is real once you've run a model. It also **recommends strong models you don't have yet** (shown with `⤓ ollama pull <id>`), tailors guidance to your machine (RAM + Apple Silicon/arch → a size band), and links to the model library — so new users get pointed at good choices instead of guessing. Powered by `GET /api/models/ranked` + per-model latency stats from the audit log.
 
@@ -264,7 +266,8 @@ Roughly 90 seconds from clone to first answer on a typical laptop.
 
 <!-- Version links: each header above is a GitHub compare view of that release's diff.
      [Unreleased] is a live diff of everything on `main` since the latest tag. -->
-[Unreleased]: https://github.com/cosmicflow-space/mnemos/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/cosmicflow-space/mnemos/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.12.2...v0.13.0
 [0.12.2]: https://github.com/cosmicflow-space/mnemos/compare/v0.12.1...v0.12.2
 [0.12.1]: https://github.com/cosmicflow-space/mnemos/compare/v0.12.0...v0.12.1
