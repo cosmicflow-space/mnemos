@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-05-30
+
 ### Added
 - **Frontier models show dated pricing in the picker.** Anthropic/OpenAI models now render as detail rows (context window + `$in / $out per 1M`) with a **"Pricing as of <date>"** stamp — the same details-forward treatment local models get, but for cost, so a stale rate is obvious (providers change pricing). Carried via a new optional `pricedAsOf` on `ModelInfo`.
 - Refreshed the model-picker and Sources screenshots to the v0.14 UI (ranked local models, dated frontier pricing, smallest-first + defer-large).
@@ -270,7 +272,8 @@ Roughly 90 seconds from clone to first answer on a typical laptop.
 
 <!-- Version links: each header above is a GitHub compare view of that release's diff.
      [Unreleased] is a live diff of everything on `main` since the latest tag. -->
-[Unreleased]: https://github.com/cosmicflow-space/mnemos/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/cosmicflow-space/mnemos/compare/v0.14.1...HEAD
+[0.14.1]: https://github.com/cosmicflow-space/mnemos/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.12.2...v0.13.0
 [0.12.2]: https://github.com/cosmicflow-space/mnemos/compare/v0.12.1...v0.12.2
