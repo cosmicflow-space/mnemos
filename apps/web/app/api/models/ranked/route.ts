@@ -82,7 +82,11 @@ export async function GET(req: Request) {
   let tokPerSec = new Map<string, number>();
   try {
     for (const s of getModelLatencyStats(getDb())) {
-      if (s.model && s.tokensPerSec != null) tokPerSec.set(s.model, s.tokensPerSec);
+      // Only Ollama-provider rows — another provider with the same model id must
+      // not contaminate local speed numbers (which drive ranking + the default).
+      if (s.provider === "ollama" && s.model && s.tokensPerSec != null) {
+        tokPerSec.set(s.model, s.tokensPerSec);
+      }
     }
   } catch {
     tokPerSec = new Map();

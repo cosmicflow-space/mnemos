@@ -156,7 +156,17 @@ export async function POST(req: Request) {
         releaseIngest(db, source.id, token);
         controller.close();
         // Fire-and-forget: lease is now free, so the background run can claim it.
-        if (kickBackground) void runSourceIngestInBackground(source.id);
+        // Carry the user's filters through; log (don't silently drop) if it can't
+        // start — e.g. a pause landed in the handoff window, or the watcher claimed it.
+        if (kickBackground) {
+          void runSourceIngestInBackground(source.id, parsed.data.filters).then((ok) => {
+            if (!ok) {
+              console.warn(
+                `[mnemos/ingest] deferred large-file background run did not start for source ${source.id} (paused or already ingesting)`,
+              );
+            }
+          });
+        }
       }
     },
   });
