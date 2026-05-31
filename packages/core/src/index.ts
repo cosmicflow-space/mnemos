@@ -63,6 +63,7 @@ export {
 } from "./ingest/exclude";
 export {
   ingestFolder,
+  estimateIngest,
   type IngestResult,
   type IngestProgress,
   type IngestFolderOptions,

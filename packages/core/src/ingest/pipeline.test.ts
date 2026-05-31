@@ -18,7 +18,27 @@ import { tmpdir } from "node:os";
 
 import { openDb, type MnemosDb, addSource } from "@mnemos/db";
 import type { EmbeddingProvider } from "@mnemos/plugin-sdk";
-import { loadBundledPlugins, ingestFolder, scanFolder, MNEMOS_EMBEDDING_DIM } from "../index";
+import { loadBundledPlugins, ingestFolder, scanFolder, estimateIngest, MNEMOS_EMBEDDING_DIM } from "../index";
+
+describe("estimateIngest", () => {
+  const f = (sizeBytes: number, kind: string) => ({ sizeBytes, classification: { kind } });
+  it("estimates ~2 chunks per image (OCR), not bytes-proportional", () => {
+    const est = estimateIngest([f(5_000_000, "image"), f(2_000_000, "image")]);
+    expect(est.chunks).toBe(4); // 2 each, regardless of (large) byte size
+  });
+  it("scales text-file chunk count with size and derives seconds", () => {
+    const small = estimateIngest([f(700, "plaintext")]);
+    const big = estimateIngest([f(70_000, "markdown")]);
+    expect(big.chunks).toBeGreaterThan(small.chunks);
+    expect(big.seconds).toBe(Math.ceil(big.chunks / 8));
+  });
+  it("discounts PDF/office bytes (text < file bytes)", () => {
+    // same byte size: a PDF yields fewer estimated chunks than plain text
+    expect(estimateIngest([f(100_000, "pdf")]).chunks).toBeLessThan(
+      estimateIngest([f(100_000, "plaintext")]).chunks,
+    );
+  });
+});
 
 // Deterministic constant vector — retrieval ranking is irrelevant here; we only
 // assert chunk rows exist. Unit-norm so sqlite-vec is happy.

@@ -1,4 +1,4 @@
-import { ingestFolder } from "@mnemos/core";
+import { ingestFolder, type IngestFolderOptions } from "@mnemos/core";
 import { listSources, tryClaimIngest, releaseIngest, touchSourceScanned } from "@mnemos/db";
 import { getDb, getRegistry, getDefaultEmbedder } from "./runtime";
 import { applyIngestProgress, markIngestPaused } from "./ingest-status";
@@ -10,13 +10,24 @@ import { registerIngestController, unregisterIngestController } from "./ingest-c
  * endpoint — resume is just a re-run, which incrementally skips files already
  * `complete` and reprocesses `pending`/`partial` ones.
  *
- * Returns false if the source is unknown, no embedder is ready, or a run is
- * already in flight (lease held). Fire-and-forget: the ingest itself is detached.
+ * Returns false if the source is unknown, paused, no embedder is ready, or a run
+ * is already in flight (lease held). Fire-and-forget: the ingest itself is detached.
+ *
+ * `filters` carries the originating request's exclusions through to this run (e.g.
+ * the defer-large handoff must apply the same excludeLabels/overrides the user
+ * chose, not re-include everything).
  */
-export async function runSourceIngestInBackground(sourceId: number): Promise<boolean> {
+export async function runSourceIngestInBackground(
+  sourceId: number,
+  filters?: IngestFolderOptions["filters"],
+): Promise<boolean> {
   const db = getDb();
   const source = listSources(db).find((s) => s.id === sourceId);
   if (!source) return false;
+  // Honor the durable pause flag: a pause may have landed in the window between a
+  // foreground run releasing its lease and this handoff claiming it. Refuse to
+  // start so we don't violate the pause contract (the watcher also skips paused).
+  if (source.paused) return false;
 
   let embedder;
   try {
@@ -37,6 +48,7 @@ export async function runSourceIngestInBackground(sourceId: number): Promise<boo
         signal: controller.signal,
         // Resume is user-initiated → re-attempt files previously marked failed.
         retryFailed: true,
+        filters,
         onProgress: (p) => {
           // When aborted, drop the trailing 'done' so the status entry survives
           // as 'paused' (with its progress) instead of being cleared to idle.

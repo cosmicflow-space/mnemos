@@ -79,6 +79,8 @@ export {
   getRecentMessages,
   getUsageTotals,
   type UsageTotal,
+  getModelLatencyStats,
+  type ModelLatencyStat,
   // Audit
   appendAudit,
   listAuditEvents,
