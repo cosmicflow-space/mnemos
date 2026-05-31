@@ -17,6 +17,7 @@ import {
 } from "@mnemos/core";
 import { openDb, type MnemosDb } from "@mnemos/db";
 import type { EmbeddingProvider } from "@mnemos/plugin-sdk";
+import { createWorkerEmbedder, terminateWorkerEmbedder } from "./worker-embedder";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { mkdirSync } from "node:fs";
@@ -74,9 +75,18 @@ export async function getDefaultEmbedder(): Promise<EmbeddingProvider> {
     if (id === "ollama" && process.env.OLLAMA_BASE_URL) {
       credentials.baseURL = process.env.OLLAMA_BASE_URL;
     }
-    await provider.initialize(credentials);
-    cachedEmbedder = provider;
-    return provider;
+    // Local embedding is CPU-bound and blocks the event loop when run inline,
+    // starving the API during a large ingest. Offload it to a worker thread so
+    // the main thread stays responsive. Frontier embedders are network I/O —
+    // they don't block — so they run inline as before. Escape hatch:
+    // MNEMOS_EMBED_INLINE=1 forces the in-process provider.
+    const embedder =
+      id === "embed-local" && process.env.MNEMOS_EMBED_INLINE !== "1"
+        ? createWorkerEmbedder(provider.credentialSchema)
+        : provider;
+    await embedder.initialize(credentials);
+    cachedEmbedder = embedder;
+    return embedder;
   })();
 
   return cachedEmbedderInit;
@@ -89,4 +99,5 @@ export function __resetRuntimeForTests(): void {
   cachedRegistry = null;
   cachedEmbedder = null;
   cachedEmbedderInit = null;
+  terminateWorkerEmbedder(); // tear down the globalThis-pinned worker too
 }
