@@ -17,7 +17,7 @@ import {
 } from "@mnemos/core";
 import { openDb, type MnemosDb } from "@mnemos/db";
 import type { EmbeddingProvider } from "@mnemos/plugin-sdk";
-import { createWorkerEmbedder } from "./worker-embedder";
+import { createWorkerEmbedder, terminateWorkerEmbedder } from "./worker-embedder";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { mkdirSync } from "node:fs";
@@ -99,4 +99,5 @@ export function __resetRuntimeForTests(): void {
   cachedRegistry = null;
   cachedEmbedder = null;
   cachedEmbedderInit = null;
+  terminateWorkerEmbedder(); // tear down the globalThis-pinned worker too
 }

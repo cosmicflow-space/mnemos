@@ -19,7 +19,13 @@ const DEFAULT_MODEL = "Xenova/bge-small-en-v1.5";
 const DIMENSIONS = 384;
 
 type Pending = { resolve: (v: number[][]) => void; reject: (e: Error) => void };
-type WorkerState = { worker: Worker; pending: Map<number, Pending>; seq: number };
+type WorkerState = {
+  worker: Worker;
+  pending: Map<number, Pending>;
+  seq: number;
+  model: string;
+  cacheDir: string | undefined;
+};
 
 const GLOBAL_KEY = "__mnemos_embed_worker__";
 function globalSlot(): { state?: WorkerState } {
@@ -40,7 +46,7 @@ function workerPath(): string {
 
 function spawn(model: string, cacheDir: string | undefined): WorkerState {
   const worker = new Worker(workerPath(), { workerData: { model, cacheDir } });
-  const state: WorkerState = { worker, pending: new Map(), seq: 0 };
+  const state: WorkerState = { worker, pending: new Map(), seq: 0, model, cacheDir };
   worker.on("message", (m: { id: number; vectors?: number[][]; error?: string }) => {
     const p = state.pending.get(m.id);
     if (!p) return;
@@ -54,11 +60,24 @@ function spawn(model: string, cacheDir: string | undefined): WorkerState {
     if (globalSlot().state === state) globalSlot().state = undefined;
   };
   worker.on("error", failAll);
+  // Always settle outstanding promises on exit — a clean (code 0) exit with work
+  // in flight would otherwise leave callers hanging forever.
   worker.on("exit", (code) => {
-    if (code !== 0) failAll(new Error(`embed worker exited (code ${code})`));
+    if (state.pending.size > 0) failAll(new Error(`embed worker exited (code ${code}) mid-batch`));
     else if (globalSlot().state === state) globalSlot().state = undefined;
   });
   return state;
+}
+
+/** Terminate the shared worker (test reset / shutdown). */
+export function terminateWorkerEmbedder(): void {
+  const slot = globalSlot();
+  const state = slot.state;
+  slot.state = undefined;
+  if (!state) return;
+  for (const p of state.pending.values()) p.reject(new Error("embed worker terminated"));
+  state.pending.clear();
+  void state.worker.terminate();
 }
 
 export function createWorkerEmbedder(credentialSchema: CredentialSchema): EmbeddingProvider {
@@ -67,6 +86,12 @@ export function createWorkerEmbedder(credentialSchema: CredentialSchema): Embedd
 
   function ensure(): WorkerState {
     const slot = globalSlot();
+    // Respawn if the shared worker was started with a different model/cache than
+    // this provider was configured with (e.g. a settings change), so we never
+    // silently embed with the wrong model.
+    if (slot.state && (slot.state.model !== model || slot.state.cacheDir !== cacheDir)) {
+      terminateWorkerEmbedder();
+    }
     if (!slot.state) slot.state = spawn(model, cacheDir);
     return slot.state;
   }

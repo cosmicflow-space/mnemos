@@ -2,6 +2,12 @@
 const nextConfig = {
   output: "standalone",
   reactStrictMode: true,
+  // The embedding worker is loaded by worker_threads via a path string, not an
+  // import, so Next's tracer may not copy it into the standalone build. Force it
+  // in so a production build can run ingestion. (dev resolves it from cwd.)
+  outputFileTracingIncludes: {
+    "/**/*": ["./lib/embed-worker.mjs"],
+  },
   // Workspace packages live as TS source and import each other relatively
   // (no build step in dev). transpilePackages tells Next to run them through
   // its bundler instead of trying to import compiled dist/ output.

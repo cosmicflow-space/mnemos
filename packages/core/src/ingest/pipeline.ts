@@ -357,7 +357,11 @@ export async function ingestFolder(
       // ~free when nothing is queued, yields when something is. throttleMs adds
       // an optional deliberate sleep on top for CPU throttling.
       await new Promise((r) => setImmediate(r));
-      if (throttleMs > 0) await new Promise((r) => setTimeout(r, throttleMs));
+      // Skip the deliberate throttle the moment a pause/cancel lands so it doesn't
+      // add to abort latency (the loop's top-of-iteration check then breaks).
+      if (throttleMs > 0 && !opts.signal?.aborted) {
+        await new Promise((r) => setTimeout(r, throttleMs));
+      }
     }
 
     if (embedFailed || opts.signal?.aborted) {
