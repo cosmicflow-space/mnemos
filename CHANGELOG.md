@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-06-01
+
+### Added
+- **Direct-to-model mode — ask the model, not your files.** Prefix any message with `!` (e.g. `!which model am I using?`) to bypass retrieval entirely: no embedding, no vector search, no verified-answer/corpus injection. The model answers from its own knowledge plus the conversation, with a small **session-facts** note (active provider + model) injected so meta-questions like "which model am I using?" are answered truthfully instead of the model guessing its own identity. Plain text still routes through RAG; `/` stays reserved for commands. The `!` sigil was chosen because it's **inert in Telegram** (unlike `/`, `#`, `@`, which Telegram turns into commands/hashtags/mentions), so it behaves identically in the web app and on the phone. Detection lives in the core pipeline (`runQuery`), so both channels share one implementation. Answers are labeled **"Direct · files not searched"** (web) / "🧠 Direct (no file search)" (Telegram), and the input placeholder + Telegram `/help` + the Telegram setup guide all surface the feature. Covered by a new test that proves retrieval is skipped (it injects an embedder that throws and asserts the query still succeeds).
+
+### Changed
+- **Audit records direct queries distinctly.** A direct query is logged with `direct: true` and an empty `retrievedChunkIds`, so the audit log can now prove *per query, by inspection* whether your documents were consulted — previously "no sources" was ambiguous (nothing found vs. retrieval skipped). The streaming/persist/audit tail of `runQuery` was extracted into a shared helper so the RAG and direct paths can't drift in how they record usage, citations, or audit data.
+
 ## [0.14.2] - 2026-05-31
 
 ### Docs
@@ -280,7 +288,8 @@ Roughly 90 seconds from clone to first answer on a typical laptop.
 
 <!-- Version links: each header above is a GitHub compare view of that release's diff.
      [Unreleased] is a live diff of everything on `main` since the latest tag. -->
-[Unreleased]: https://github.com/cosmicflow-space/mnemos/compare/v0.14.2...HEAD
+[Unreleased]: https://github.com/cosmicflow-space/mnemos/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.14.2...v0.15.0
 [0.14.2]: https://github.com/cosmicflow-space/mnemos/compare/v0.14.1...v0.14.2
 [0.14.1]: https://github.com/cosmicflow-space/mnemos/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.13.0...v0.14.0
