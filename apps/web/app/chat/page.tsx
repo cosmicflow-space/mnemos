@@ -133,6 +133,8 @@ type LiveMessage = {
   verifiedUsed?: boolean;
   /** True while the response is still streaming. */
   streaming?: boolean;
+  /** True when this was a direct-to-model turn (`!` prefix) — no file search. */
+  direct?: boolean;
 };
 
 const STORAGE_SESSION_KEY = "mnemos.lastSessionId";
@@ -384,11 +386,19 @@ export default function ChatPage() {
 
   async function send(e: FormEvent) {
     e.preventDefault();
-    const q = input.trim();
-    if (!q || streaming) return;
+    const raw = input.trim();
+    if (!raw || streaming) return;
 
-    // Record for ↑ recall (skip consecutive duplicates) and reset navigation.
-    setInputHistory((h) => (h[h.length - 1] === q ? h : [...h, q]));
+    // `!` prefix = direct-to-model: skip retrieval, ask the model straight.
+    // Strip the sigil; the cleaned text is what we send and display. A bare "!"
+    // with no question is ignored.
+    const direct = raw.startsWith("!");
+    const q = direct ? raw.slice(1).trim() : raw;
+    if (!q) return;
+
+    // Record the raw input (with sigil) for ↑ recall so re-running reproduces
+    // the same mode. Skip consecutive duplicates; reset navigation.
+    setInputHistory((h) => (h[h.length - 1] === raw ? h : [...h, raw]));
     setHistoryIdx(null);
     setError(null);
     setCredPrompt(null);
@@ -404,6 +414,7 @@ export default function ChatPage() {
         streaming: true,
         provider: providerId,
         model: model || null,
+        direct,
       },
     ]);
 
@@ -419,6 +430,7 @@ export default function ChatPage() {
           sessionId: sessionId ?? undefined,
           providerId,
           model: model || undefined,
+          direct,
         }),
       });
 
@@ -445,8 +457,10 @@ export default function ChatPage() {
           });
           // Drop the optimistic user+assistant bubbles and put the question
           // back in the box so the user can resend once the key is configured.
+          // Restore the RAW input (with any leading `!`) so a direct question
+          // stays direct on retry instead of silently reverting to RAG.
           setMessages((prev) => prev.slice(0, -2));
-          setInput(q);
+          setInput(raw);
           return;
         }
         throw new Error(text || res.statusText);
@@ -902,7 +916,7 @@ export default function ChatPage() {
                 setHistoryIdx(null);
               }}
               onKeyDown={onKeyDown}
-              placeholder={streaming ? "Streaming…" : "Ask anything about your sources…"}
+              placeholder={streaming ? "Streaming…" : "Ask about your sources… (start with ! to ask the model directly)"}
               disabled={streaming}
               rows={2}
               className="flex-1 bg-app border border-line rounded-md px-3 py-2 text-sm text-fg focus:outline-none focus:border-cyan-500 transition disabled:opacity-50 resize-none"
@@ -1349,6 +1363,14 @@ function MessageBubble({
         {!isUser && !message.streaming && message.content && (
           <div className="flex items-center justify-between mt-2 text-xs text-muted gap-3">
             <span className="flex items-center gap-2 min-w-0">
+              {message.direct && (
+                <span
+                  className="text-amber-400 shrink-0"
+                  title="Direct question to the model — your files were not searched"
+                >
+                  ⚡ Direct · files not searched
+                </span>
+              )}
               {message.verifiedUsed && (
                 <span
                   className="text-emerald-400 shrink-0"

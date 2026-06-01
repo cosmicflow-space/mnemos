@@ -23,6 +23,9 @@ const QueryRequest = z.object({
   model: z.string().optional(),
   temperature: z.number().min(0).max(2).optional(),
   topK: z.number().int().min(1).max(50).optional(),
+  // Direct-to-model mode (the `!` prefix, stripped client-side). Skips
+  // retrieval entirely — answer from the model + conversation, no file search.
+  direct: z.boolean().optional().default(false),
 });
 
 const PROVIDER_CREDENTIAL_ENV: Record<string, (creds: Record<string, string>) => void> = {
@@ -163,17 +166,22 @@ export async function POST(req: Request) {
     );
   }
 
-  let embedder;
-  try {
-    embedder = await getDefaultEmbedder();
-  } catch (err) {
-    return Response.json(
-      {
-        error: "embedder_init_failed",
-        message: err instanceof Error ? err.message : String(err),
-      },
-      { status: 500 },
-    );
+  // Direct mode skips retrieval entirely, so it must NOT require the embedder —
+  // a `!` query should work even when the local embedder is missing or still
+  // warming up. Only initialize it for RAG queries.
+  let embedder: Awaited<ReturnType<typeof getDefaultEmbedder>> | null = null;
+  if (!parsed.data.direct) {
+    try {
+      embedder = await getDefaultEmbedder();
+    } catch (err) {
+      return Response.json(
+        {
+          error: "embedder_init_failed",
+          message: err instanceof Error ? err.message : String(err),
+        },
+        { status: 500 },
+      );
+    }
   }
 
   const encoder = new TextEncoder();
@@ -191,6 +199,7 @@ export async function POST(req: Request) {
           model: parsed.data.model,
           temperature: parsed.data.temperature,
           topK: parsed.data.topK,
+          direct: parsed.data.direct,
         })) {
           send(ev);
         }

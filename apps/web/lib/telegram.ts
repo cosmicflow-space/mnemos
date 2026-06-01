@@ -47,6 +47,8 @@ const IDLE_MS = 5_000;
 
 const HELP =
   "Send me a question and I'll answer from your indexed documents, with sources. " +
+  "Start a message with ! to ask the model directly instead, without searching your files " +
+  "(e.g. !which model am I using?).\n\n" +
   "Commands:\n/new — start a fresh conversation\n/help — this message";
 
 const PRIVACY_NOTE =
@@ -209,6 +211,15 @@ async function handleUpdate(token: string, update: TgUpdate): Promise<void> {
 
 async function answerQuestion(token: string, chatId: number, question: string): Promise<void> {
   const db = getDb();
+  // `!` prefix = direct-to-model (skip file search), matching the web UI. Plain
+  // text stays RAG; `/` stays bot commands. `!` is inert in Telegram (no command
+  // / hashtag / mention parsing), so it behaves identically here and on the web.
+  const direct = question.startsWith("!");
+  const q = direct ? question.slice(1).trim() : question;
+  if (!q) {
+    await tgSend(token, chatId, "Add a question after “!”, e.g. !which model am I using?");
+    return;
+  }
   await tgAction(token, chatId, "typing").catch(() => {});
 
   // Per-chat session for conversation memory.
@@ -246,19 +257,23 @@ async function answerQuestion(token: string, chatId: number, question: string): 
     return;
   }
 
-  let embedder;
-  try {
-    embedder = await getDefaultEmbedder();
-  } catch {
-    await tgSend(token, chatId, "⚠️ The local embedder isn't ready yet — try again shortly.");
-    return;
+  // Direct mode skips retrieval, so it must not require the embedder — a `!`
+  // question should answer even if the local embedder isn't ready.
+  let embedder: Awaited<ReturnType<typeof getDefaultEmbedder>> | null = null;
+  if (!direct) {
+    try {
+      embedder = await getDefaultEmbedder();
+    } catch {
+      await tgSend(token, chatId, "⚠️ The local embedder isn't ready yet — try again shortly.");
+      return;
+    }
   }
 
   const model = getDefaultModel();
   let answer = "";
   const sources: string[] = [];
   try {
-    for await (const ev of runQuery(db, embedder, provider, { query: question, sessionId, model })) {
+    for await (const ev of runQuery(db, embedder, provider, { query: q, sessionId, model, direct })) {
       if (ev.phase === "delta") answer += ev.delta;
       else if (ev.phase === "retrieved") for (const h of ev.hits) sources.push(h.filePath);
       else if (ev.phase === "error") {
@@ -271,20 +286,23 @@ async function answerQuestion(token: string, chatId: number, question: string): 
     return;
   }
 
-  await tgSend(token, chatId, formatAnswer(answer, sources));
+  await tgSend(token, chatId, formatAnswer(answer, sources, direct));
 }
 
 /** Plain-text answer (no parse_mode, so model markdown/code can't break
  * rendering) + a compact, de-duplicated source list. Truncated to Telegram's
  * 4096-char limit; full splitting is a Phase-2 nicety. */
-function formatAnswer(answer: string, sources: string[]): string {
+function formatAnswer(answer: string, sources: string[], direct = false): string {
   const body = answer.trim() || "(no answer produced)";
+  // Direct mode never searches files, so it carries a clear header and no source
+  // list (sources is empty by construction) — mirrors the web "Direct" badge.
+  const header = direct ? "🧠 Direct (no file search)\n\n" : "";
   const unique = [...new Set(sources.map((s) => s.split("/").pop() ?? s))];
   const footer =
-    unique.length > 0
+    !direct && unique.length > 0
       ? `\n\n📎 Sources: ${unique.slice(0, 5).join(", ")}${unique.length > 5 ? ` +${unique.length - 5} more` : ""}`
       : "";
-  let out = body + footer;
+  let out = header + body + footer;
   if (out.length > TG_MSG_LIMIT) {
     out = out.slice(0, TG_MSG_LIMIT - 20).trimEnd() + "\n…(truncated)";
   }

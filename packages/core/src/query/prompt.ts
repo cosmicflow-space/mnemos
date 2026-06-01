@@ -100,3 +100,33 @@ export function assemblePrompt(
 
   return { messages, citationMap };
 }
+
+// Direct-mode system prompt — deliberately omits the RAG "use ONLY the
+// retrieved context" guard, because in direct mode no context is retrieved.
+// The model answers from its own knowledge + the conversation, and is told not
+// to pretend it read the user's files (nothing was retrieved).
+const DIRECT_SYSTEM_PROMPT = `You are the assistant inside Mnemos, a personal, local-first RAG app running on the user's own machine.
+
+This is a DIRECT question to you — the user deliberately chose NOT to search their indexed files for this message (they prefixed it with "!"). Answer from your own general knowledge and the conversation so far. Do not cite or claim to have read the user's documents; none were retrieved for this message. If the question genuinely needs their files, say so and suggest they ask again without the leading "!".`;
+
+/**
+ * Assemble a direct (no-retrieval) prompt. Used when the user opts out of RAG
+ * with the `!` prefix. `sessionFacts` carries the active provider/model so the
+ * model can truthfully answer meta-questions like "which model am I using?"
+ * instead of hallucinating its own identity. No citations.
+ */
+export function assembleDirectPrompt(
+  userQuery: string,
+  conversationMemory: ChatMessage[],
+  sessionFacts?: string,
+): AssembledPrompt {
+  const factsBlock = sessionFacts
+    ? `\n\nCurrent setup (authoritative — use this for questions about how Mnemos is configured right now):\n${sessionFacts}`
+    : "";
+  const messages: ChatMessage[] = [
+    { role: "system", content: `${DIRECT_SYSTEM_PROMPT}${factsBlock}` },
+    ...conversationMemory.filter((m) => m.role !== "system"),
+    { role: "user", content: userQuery },
+  ];
+  return { messages, citationMap: new Map() };
+}

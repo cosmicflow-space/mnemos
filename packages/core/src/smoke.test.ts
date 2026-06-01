@@ -570,3 +570,76 @@ describe("co-retrieval: runQuery splices content next to a metadata-only file hi
     expect(hits![vinIdx - 1]?.text).toContain("metadata for vin.txt");
   });
 });
+
+// Direct-to-model mode (`!` prefix): runQuery must skip embedding + retrieval
+// entirely and answer from the model alone. We prove "no retrieval happened" by
+// passing an embedder that throws — if direct mode touched it, the query would
+// surface an error phase instead of an answer.
+describe("direct mode: runQuery skips retrieval", () => {
+  let tempDir: string;
+  let db: MnemosDb;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "mnemos-direct-"));
+    db = openDb({ path: join(tempDir, "test.db") });
+  });
+  afterEach(() => {
+    db.close();
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  const chat = {
+    id: "ollama",
+    displayName: "Ollama",
+    chat: async function* () {
+      yield { delta: "You're on llama3.2:3b via Ollama." };
+    },
+  } as unknown as ChatProvider;
+
+  it("answers with a NULL embedder; emits empty retrieved set + done with direct:true, no citations", async () => {
+    createSession(db, "s1", "test");
+
+    // Pass `null` for the embedder — the strongest proof direct mode never needs
+    // it (matches the entrypoints, which skip embedder init for `!` queries).
+    const phases: string[] = [];
+    let retrievedHits: unknown[] | undefined;
+    let done:
+      | { direct?: boolean; citationChunkIds?: number[]; provider?: string; model?: string | null }
+      | undefined;
+    for await (const ev of runQuery(db, null, chat, {
+      query: "which model am I using?",
+      sessionId: "s1",
+      model: "llama3.2:3b",
+      direct: true,
+    })) {
+      phases.push(ev.phase);
+      if (ev.phase === "retrieved") retrievedHits = ev.hits;
+      if (ev.phase === "done") done = ev;
+    }
+
+    // No "embed" phase and no "error" → retrieval was skipped, embedder untouched.
+    expect(phases).not.toContain("embed");
+    expect(phases).not.toContain("error");
+    expect(retrievedHits).toEqual([]);
+    expect(done?.direct).toBe(true);
+    expect(done?.citationChunkIds).toEqual([]);
+    expect(done?.provider).toBe("ollama");
+    expect(done?.model).toBe("llama3.2:3b");
+  });
+
+  it("a RAG query with no embedder fails cleanly (guard), instead of crashing", async () => {
+    createSession(db, "s2", "test");
+    const phases: string[] = [];
+    let errored = false;
+    for await (const ev of runQuery(db, null, chat, {
+      query: "summarize my notes",
+      sessionId: "s2",
+      // no `direct` → RAG path, which requires an embedder
+    })) {
+      phases.push(ev.phase);
+      if (ev.phase === "error") errored = true;
+    }
+    expect(errored).toBe(true);
+    expect(phases).not.toContain("done");
+  });
+});

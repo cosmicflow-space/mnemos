@@ -149,6 +149,7 @@ Train a small open model on your own corpus. Stays on your machine. Becomes spec
 - **Incremental & self-updating**: Re-ingest skips unchanged files via content-hash comparison; partial-state ingests recover automatically via the `ingest_status` invariant. Sources can **auto re-scan** on a per-source schedule (manual by default — static archives cost zero background CPU; point a changing folder at a faster cadence from a dropdown). A concurrency-safe lease prevents a manual and a background scan from ever colliding.
 - **Verified-answer memory**: Mark a correct answer as verified, and a closely-matching future question gets that confirmed answer injected into the prompt — so even a small local model nails facts it would otherwise fumble. Strict semantic matching, with lazy invalidation when the underlying files change. ([design notes](docs/design-notes/verified-answer-memory.md))
 - **Ask from anywhere**: Pair a private Telegram bot and query your RAG from your phone — outbound-only, default-deny, your files never leave the machine (see [above](#ask-from-your-phone-telegram)).
+- **Direct-to-model mode**: prefix a message with `!` to bypass retrieval and ask the model straight — for meta questions (*"which model am I using?"*) or general chat that isn't about your files. Works identically in the web app and Telegram; the answer is labeled "Direct · files not searched" and the audit log records it with zero retrieved chunks, so a direct query stays provably distinct from a RAG one.
 
 ## What Mnemos is not
 
@@ -212,7 +213,7 @@ After `node setup.mjs` finishes, open **`http://127.0.0.1:3030`**. It's one page
 
 2. **Settings → Sources.** Paste a folder *or single-file* path (e.g. `~/Documents/notes` or `~/Documents/resume.pdf`). Mnemos detects which it is, then ingests with a live per-file progress indicator — entirely local via BGE-small, no API key. Security-blocked files (`.env`, `*.pem`, `id_rsa*`, anything under `~/.aws/` or `~/.ssh/`) are hard-locked and never indexed. Set a per-source auto re-scan cadence if the folder changes often (default is manual).
 
-3. **Ask.** Type a question in the chat box. Answers stream in with citations to the exact source files; per-answer **Sources** and **Data sent** panels show precisely which files were used and which chunks (if any) left your machine. Mark a great answer **✓ verified** so it's nailed next time.
+3. **Ask.** Type a question in the chat box. Answers stream in with citations to the exact source files; per-answer **Sources** and **Data sent** panels show precisely which files were used and which chunks (if any) left your machine. Mark a great answer **✓ verified** so it's nailed next time. Want to ask the model itself instead of your files — *"which model am I using?"*, or a general question? Start the message with `!` for **direct mode** (no retrieval, no citations); the answer is labeled so you always know your files weren't searched.
 
 4. **Optional — pair Telegram** (Settings → 📲 Telegram) to ask all of the above from your phone.
 

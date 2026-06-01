@@ -169,6 +169,12 @@ export default function TelegramGuidePage() {
               <em>&quot;what are the Land Rover supplies?&quot;</em> — and you&apos;ll get an answer
               with sources, generated on your computer. That&apos;s it. 🎉
             </p>
+            <p className="mt-2">
+              Start a message with <Cmd>!</Cmd> to ask the model{" "}
+              <strong className="text-fg">directly</strong>, without searching your files — handy
+              for questions like <em>&quot;!which model am I using?&quot;</em> or general chat. The
+              reply is labeled so you always know your documents weren&apos;t consulted.
+            </p>
           </Step>
         </ol>
 

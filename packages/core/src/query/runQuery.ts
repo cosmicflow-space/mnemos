@@ -28,9 +28,10 @@ import {
 } from "@mnemos/db";
 import type {
   ChatProvider,
+  ChatMessage,
   EmbeddingProvider,
 } from "@mnemos/plugin-sdk";
-import { assemblePrompt } from "./prompt";
+import { assemblePrompt, assembleDirectPrompt } from "./prompt";
 
 /**
  * Count/inventory intent — questions about the library as a whole rather than
@@ -91,6 +92,8 @@ export type QueryEvent =
       citationChunkIds: number[];
       /** True when a previously-verified answer was injected for this query. */
       verifiedAnswerUsed: boolean;
+      /** True when this was a direct-to-model query (`!` prefix) — no retrieval. */
+      direct: boolean;
     }
   | { phase: "error"; message: string };
 
@@ -103,17 +106,55 @@ export type RunQueryOptions = {
   maxTokens?: number;
   temperature?: number;
   signal?: AbortSignal;
+  /** Direct-to-model mode (`!` prefix): skip embed + retrieval + verified/corpus
+   * injection. The model answers from its own knowledge + conversation memory,
+   * plus a session-facts note. No document content leaves the machine. */
+  direct?: boolean;
 };
 
 export async function* runQuery(
   db: MnemosDb,
-  embedder: EmbeddingProvider,
+  // Null in direct mode: retrieval is skipped, so callers must be able to run a
+  // `!` query even when the embedder is missing or still warming up. The RAG
+  // path guards for non-null below.
+  embedder: EmbeddingProvider | null,
   chat: ChatProvider,
   opts: RunQueryOptions,
 ): AsyncGenerator<QueryEvent, void, unknown> {
   const start = Date.now();
   const topK = opts.topK ?? 8;
   const memoryTurns = opts.maxMemoryTurns ?? 10;
+
+  // Direct-to-model mode: the user opted out of retrieval for this message
+  // (`!` prefix). Skip embed/search/verified/corpus entirely — answer from
+  // conversation memory + a session-facts note. Emits an empty `retrieved` set
+  // so every channel renders "no sources"; the shared tail audits direct:true
+  // with [] chunks, keeping it provably distinct from a RAG query.
+  if (opts.direct) {
+    const memory = getRecentMessages(db, opts.sessionId, memoryTurns).map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+    // `opts.model` is client-provided — sanitize before interpolating into the
+    // system prompt so a crafted model name (newlines / fake instructions) can't
+    // smuggle text into the high-priority block. Provider id/name are static
+    // registry constants. (Found in partner review.)
+    const sessionFacts = `Active chat provider: ${chat.displayName} (id: ${chat.id}). Active model: ${opts.model ? sanitizeForPrompt(opts.model, 80) : "the provider's default"}.`;
+    const { messages } = assembleDirectPrompt(opts.query, memory, sessionFacts);
+    yield { phase: "retrieved", hits: [] };
+    yield* streamAndPersist(db, chat, messages, [], undefined, opts, start);
+    return;
+  }
+
+  // RAG path needs the embedder. Entrypoints only pass null in direct mode
+  // (handled above), but guard so a missing embedder fails cleanly with a hint.
+  if (!embedder) {
+    yield {
+      phase: "error",
+      message: "Embedder unavailable — retrieval can't run. Prefix your message with ! to ask the model directly.",
+    };
+    return;
+  }
 
   yield { phase: "embed", query: opts.query };
 
@@ -251,6 +292,28 @@ export async function* runQuery(
 
   const { messages } = assemblePrompt(opts.query, hits, memory, verifiedAnswer, corpusFacts);
 
+  yield* streamAndPersist(db, chat, messages, hits, verifiedAnswer, opts, start);
+}
+
+/**
+ * Shared tail for both the RAG and direct paths: persist the user turn, stream
+ * the chat provider, persist the assistant turn, append the audit event, and
+ * emit `done`. Keeping this in one place means direct mode and RAG mode can't
+ * drift in how they record token usage, citations, or audit data.
+ *
+ * `hits` is the retrieved set — empty in direct mode, so citationChunkIds and
+ * the audit's retrievedChunkIds are both `[]`. `opts.direct` flows into the
+ * audit + done events so a direct query is provably distinct from a RAG one.
+ */
+async function* streamAndPersist(
+  db: MnemosDb,
+  chat: ChatProvider,
+  messages: ChatMessage[],
+  hits: SearchHit[],
+  verifiedAnswer: { question: string; answer: string } | undefined,
+  opts: RunQueryOptions,
+  start: number,
+): AsyncGenerator<QueryEvent, void, unknown> {
   // Persist user message before streaming, so a crash mid-stream still leaves
   // the question in history.
   appendMessage(db, {
@@ -259,7 +322,6 @@ export async function* runQuery(
     content: opts.query,
   });
 
-  // 5. Stream chat
   let assistantText = "";
   // Provider-reported token usage arrives on the final chunk (see ChatChunk.usage).
   let tokensIn: number | null = null;
@@ -291,7 +353,7 @@ export async function* runQuery(
   const citationChunkIds = hits.map((h) => h.chunkId);
   const durationMs = Date.now() - start;
 
-  // 6. Persist + audit
+  // Persist + audit
   const assistantMessageId = appendMessage(db, {
     sessionId: opts.sessionId,
     role: "assistant",
@@ -313,6 +375,7 @@ export async function* runQuery(
     promptTokens: estimateTokens(messages.map((m) => m.content).join("\n")),
     completionLength: assistantText.length,
     durationMs,
+    direct: opts.direct ?? false,
   });
 
   yield {
@@ -325,6 +388,7 @@ export async function* runQuery(
     durationMs,
     citationChunkIds,
     verifiedAnswerUsed: Boolean(verifiedAnswer),
+    direct: opts.direct ?? false,
   };
 }
 
