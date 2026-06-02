@@ -306,4 +306,4 @@ The CLA on contributions preserves the option to release additional terms (e.g. 
 
 ## Credits
 
-Mnemos is original work, written from scratch in TypeScript. Architectural choices were informed by surveying the broader RAG and personal-knowledge-base ecosystem.
+Mnemos is original work, written from scratch in TypeScript by **Sam Muthu** ([sammuthu.com](https://sammuthu.com)). Architectural choices were informed by surveying the broader RAG and personal-knowledge-base ecosystem.
