@@ -107,6 +107,16 @@ function migrate(db: BetterSqliteDb): void {
     db.exec("ALTER TABLE source ADD COLUMN paused INTEGER NOT NULL DEFAULT 0");
   }
 
+  // m4: chat_message.direct — persist whether a turn skipped retrieval (the `!`
+  // routing family) so the "Direct · files not searched" label survives a
+  // reload. Existing rows default to 0 (RAG), which matches their old behavior.
+  const msgCols = db
+    .prepare("PRAGMA table_info(chat_message)")
+    .all() as Array<{ name: string }>;
+  if (!msgCols.some((c) => c.name === "direct")) {
+    db.exec("ALTER TABLE chat_message ADD COLUMN direct INTEGER NOT NULL DEFAULT 0");
+  }
+
   // m2: backfill session.title from the session's first user message for
   // any pre-existing session that doesn't have a title yet. New sessions get
   // a title server-side at /api/query time; this rescues the legacy ones so

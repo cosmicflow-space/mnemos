@@ -39,6 +39,10 @@ import {
   getDefaultModel,
   credentialsForProvider,
 } from "./config";
+import { parseQueryRoute, isFrontierTier, type RouteTier } from "./query-routing";
+import { resolveFrontierModel } from "./model-routing";
+import { formatTipsText } from "./input-tips";
+import { computeCostReport, formatCostText } from "./cost-stats";
 
 const TG_API = "https://api.telegram.org";
 const TG_MSG_LIMIT = 4096;
@@ -46,10 +50,9 @@ const LONG_POLL_SEC = 30;
 const IDLE_MS = 5_000;
 
 const HELP =
-  "Send me a question and I'll answer from your indexed documents, with sources. " +
-  "Start a message with ! to ask the model directly instead, without searching your files " +
-  "(e.g. !which model am I using?).\n\n" +
-  "Commands:\n/new — start a fresh conversation\n/help — this message";
+  "Send a question and I'll answer from your indexed documents, with sources.\n\n" +
+  formatTipsText() +
+  "\n\nCommands:\n/new — start a fresh conversation\n/tips — show the input shortcuts\n/help — this message";
 
 const PRIVACY_NOTE =
   "ℹ️ Privacy: your documents stay on your computer. Your questions and my " +
@@ -201,6 +204,15 @@ async function handleUpdate(token: string, update: TgUpdate): Promise<void> {
     await tgSend(token, chatId, "🧹 Started a new conversation.");
     return;
   }
+  if (text === "/tips" || text.startsWith("/tips@")) {
+    await tgSend(token, chatId, formatTipsText());
+    return;
+  }
+  if (text === "/cost" || text.startsWith("/cost@")) {
+    const report = await computeCostReport(db, getRegistry());
+    await tgSend(token, chatId, formatCostText(report));
+    return;
+  }
   if (text.startsWith("/")) {
     await tgSend(token, chatId, "Unknown command. Just send a question, or /new to reset.");
     return;
@@ -211,13 +223,13 @@ async function handleUpdate(token: string, update: TgUpdate): Promise<void> {
 
 async function answerQuestion(token: string, chatId: number, question: string): Promise<void> {
   const db = getDb();
-  // `!` prefix = direct-to-model (skip file search), matching the web UI. Plain
-  // text stays RAG; `/` stays bot commands. `!` is inert in Telegram (no command
-  // / hashtag / mention parsing), so it behaves identically here and on the web.
-  const direct = question.startsWith("!");
-  const q = direct ? question.slice(1).trim() : question;
+  // Routing prefix (!, !!, !!!, +, ++) — same parser as the web UI. `!` = skip
+  // files (direct); `+` = use files + frontier; repeats escalate the model tier.
+  // All inert in Telegram, so the syntax is identical to the web app.
+  const route = parseQueryRoute(question);
+  const { direct, tier, q } = route;
   if (!q) {
-    await tgSend(token, chatId, "Add a question after “!”, e.g. !which model am I using?");
+    await tgSend(token, chatId, "Add a question after the prefix, e.g. !which model am I using?");
     return;
   }
   await tgAction(token, chatId, "typing").catch(() => {});
@@ -230,9 +242,30 @@ async function answerQuestion(token: string, chatId: number, question: string): 
     setTelegramChatSession(db, chatId, sessionId);
   }
 
-  // Use the operator's configured provider (default local Ollama).
-  const providerId = getDefaultProviderId();
   const registry = getRegistry();
+
+  // Resolve tier → provider/model. Local tier uses the operator's configured
+  // provider (default local Ollama); frontier tiers route to the cheapest /
+  // flagship configured frontier model. No key → ask the user to add one.
+  let providerId = getDefaultProviderId();
+  let model = getDefaultModel();
+  if (isFrontierTier(tier)) {
+    const { resolved, suggestProviderId } = await resolveFrontierModel(registry, tier);
+    if (!resolved) {
+      const providerName =
+        (suggestProviderId && registry.chatProviders.get(suggestProviderId)?.displayName) ||
+        "a frontier provider";
+      await tgSend(
+        token,
+        chatId,
+        `⚠️ The "${route.sigil}" prefix needs a frontier model. Configure ${providerName} (API key) in Mnemos → Settings → AI Model, or drop the prefix to stay local.`,
+      );
+      return;
+    }
+    providerId = resolved.providerId;
+    model = resolved.model;
+  }
+
   let provider;
   try {
     provider = getChatProvider(registry, providerId);
@@ -269,7 +302,6 @@ async function answerQuestion(token: string, chatId: number, question: string): 
     }
   }
 
-  const model = getDefaultModel();
   let answer = "";
   const sources: string[] = [];
   try {
@@ -286,17 +318,27 @@ async function answerQuestion(token: string, chatId: number, question: string): 
     return;
   }
 
-  await tgSend(token, chatId, formatAnswer(answer, sources, direct));
+  await tgSend(token, chatId, formatAnswer(answer, sources, { direct, tier, model }));
 }
 
 /** Plain-text answer (no parse_mode, so model markdown/code can't break
  * rendering) + a compact, de-duplicated source list. Truncated to Telegram's
- * 4096-char limit; full splitting is a Phase-2 nicety. */
-function formatAnswer(answer: string, sources: string[], direct = false): string {
+ * 4096-char limit; full splitting is a Phase-2 nicety. A header surfaces the
+ * routing mode + (for frontier tiers) the model used, mirroring the web badges. */
+function formatAnswer(
+  answer: string,
+  sources: string[],
+  opts: { direct: boolean; tier: RouteTier; model?: string },
+): string {
   const body = answer.trim() || "(no answer produced)";
-  // Direct mode never searches files, so it carries a clear header and no source
-  // list (sources is empty by construction) — mirrors the web "Direct" badge.
-  const header = direct ? "🧠 Direct (no file search)\n\n" : "";
+  const { direct, tier, model } = opts;
+  const frontier = isFrontierTier(tier);
+  const modelTag = frontier && model ? ` · ${model}` : "";
+  const header = direct
+    ? `🧠 Direct${modelTag} (no file search)\n\n`
+    : frontier
+      ? `☁️ Frontier${modelTag}\n\n`
+      : "";
   const unique = [...new Set(sources.map((s) => s.split("/").pop() ?? s))];
   const footer =
     !direct && unique.length > 0

@@ -315,11 +315,14 @@ async function* streamAndPersist(
   start: number,
 ): AsyncGenerator<QueryEvent, void, unknown> {
   // Persist user message before streaming, so a crash mid-stream still leaves
-  // the question in history.
+  // the question in history. Tag it with `direct` too so the *whole* turn (both
+  // rows) is marked — keeps the column meaningful for export/replay, not just
+  // the assistant row the UI badges.
   appendMessage(db, {
     sessionId: opts.sessionId,
     role: "user",
     content: opts.query,
+    direct: opts.direct ?? false,
   });
 
   let assistantText = "";
@@ -364,6 +367,7 @@ async function* streamAndPersist(
     ...(tokensIn !== null ? { tokensIn } : {}),
     ...(tokensOut !== null ? { tokensOut } : {}),
     latencyMs: durationMs,
+    direct: opts.direct ?? false,
   });
 
   appendAudit(db, "query", {

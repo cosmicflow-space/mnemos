@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node: 22+](https://img.shields.io/badge/Node-22%2B-339933.svg)](https://nodejs.org/)
-[![Status: v0.14](https://img.shields.io/badge/Status-v0.14-cyan.svg)](CHANGELOG.md)
+[![Status: v0.16](https://img.shields.io/badge/Status-v0.16-cyan.svg)](CHANGELOG.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-cyan.svg)](CONTRIBUTING.md)
 
 </div>
@@ -95,6 +95,48 @@ Set it up in **Settings → 📲 Telegram** (there's a built-in [step-by-step gu
 
 > WhatsApp is on the radar but not yet supported — there's no free, local-first-friendly bot API for it the way Telegram offers.
 
+## Smart model routing — switch models with one character
+
+Mnemos's standout feature: **a single leading character on your message decides how it's answered** — whether to search your files, and which model (local or frontier) responds. No menus, no settings detour, no opening the web UI. The exact same syntax works in the web chat *and* the Telegram bot, so you can jump from "free local model" to "Claude flagship" **mid-conversation, from your phone**.
+
+|                            | 🧠 Local (private, free) | ☁️ Frontier cheap | ☁️ Frontier flagship |
+|----------------------------|--------------------------|-------------------|----------------------|
+| **Search my files (RAG)**  | *(no prefix)*            | `+`               | `++`                 |
+| **Skip my files (direct)** | `!`                      | `!!`              | `!!!`                |
+
+Two independent choices, one keystroke each:
+
+- **`!` = talk to the model directly.** Skips retrieval entirely — for meta questions (*"which model am I using?"*) or general knowledge that isn't in your files. No citations, nothing retrieved, nothing about your documents sent anywhere.
+- **`+` = bring a frontier brain to your files.** Full RAG (your documents, cited) but answered by Claude/GPT instead of the local model — for a hard question over your own docs that deserves a stronger model.
+- **Doubling escalates the model.** `!`→local, `!!`→cheapest configured frontier, `!!!`→top frontier; likewise `+`→cheap frontier RAG, `++`→flagship frontier RAG.
+- **No prefix = the default:** your files, answered by your local model — fully private and free.
+
+**From your phone, in plain text** (the `!`/`+` characters are inert in Telegram — no command/hashtag clashes):
+
+```
+!who won the 2024 World Series?              → local model, no file search
+!!summarize the latest breakthroughs in AI   → Claude (cheap), no file search
++what's my deductible in my insurance policy → your files, answered by Claude
+++weigh the tradeoffs in my design doc        → your files, answered by the flagship model
+```
+
+**Direct vs RAG, explicitly:** a *direct* (`!`) query answers from the model's own knowledge — fast, but frozen at the model's training cutoff and blind to your files. A *RAG* query (no prefix, or `+`) retrieves from your indexed documents and cites them. Use `!!`/`+` to reach a frontier model with a more recent knowledge cutoff for current-events or reasoning-heavy questions.
+
+**Dynamic, safe, and visible:**
+- Frontier tiers auto-pick the **cheapest** (or **most capable**, for the doubled sigils) *configured* frontier model. No API key set? Mnemos tells you and points you to add one — it never silently fails.
+- Every answer is **labeled** ("⚡ Direct · files not searched", "☁️ Frontier") and the **audit log records** the provider, model, and whether retrieval ran — so each query's privacy posture is provable, and the labels persist across reloads.
+- **`/tips`** shows the cheatsheet anytime; **`/cost`** shows your frontier spend to date (see [Usage & cost visibility](#usage--cost-visibility)). Both work on web and Telegram.
+
+## Usage & cost visibility
+
+Because routing can send some queries to paid frontier models, Mnemos keeps the bill in plain sight. Send **`/cost`** (web or Telegram) for an estimated breakdown of frontier spend — computed from provider-reported token counts × per-model pricing (with the pricing date shown, since rates change):
+
+- **Total to date** and **cost by model**
+- **Queries** split into frontier vs local, and **total tokens**
+- **Number of sessions**, the **most expensive session**, and the **longest session**
+
+Local (Ollama) queries are always free and counted separately, so `/cost` answers "what have my frontier prefixes actually cost me?" at a glance. Everything is computed on-device from your own history — no telemetry leaves the machine.
+
 ## How private do you want it? Three tiers
 
 **Personal RAG means personal RAG. Privacy is the key — and the default.** Mnemos gives you three privacy tiers, in order of increasing data egress. *You choose.* Most users stay in Tier 1.
@@ -149,7 +191,8 @@ Train a small open model on your own corpus. Stays on your machine. Becomes spec
 - **Incremental & self-updating**: Re-ingest skips unchanged files via content-hash comparison; partial-state ingests recover automatically via the `ingest_status` invariant. Sources can **auto re-scan** on a per-source schedule (manual by default — static archives cost zero background CPU; point a changing folder at a faster cadence from a dropdown). A concurrency-safe lease prevents a manual and a background scan from ever colliding.
 - **Verified-answer memory**: Mark a correct answer as verified, and a closely-matching future question gets that confirmed answer injected into the prompt — so even a small local model nails facts it would otherwise fumble. Strict semantic matching, with lazy invalidation when the underlying files change. ([design notes](docs/design-notes/verified-answer-memory.md))
 - **Ask from anywhere**: Pair a private Telegram bot and query your RAG from your phone — outbound-only, default-deny, your files never leave the machine (see [above](#ask-from-your-phone-telegram)).
-- **Direct-to-model mode**: prefix a message with `!` to bypass retrieval and ask the model straight — for meta questions (*"which model am I using?"*) or general chat that isn't about your files. Works identically in the web app and Telegram; the answer is labeled "Direct · files not searched" and the audit log records it with zero retrieved chunks, so a direct query stays provably distinct from a RAG one.
+- **Smart model routing**: a leading `!`/`+` on any message picks whether to search your files and which model (local or frontier) answers — switchable per message, from web or phone. See [Smart model routing](#smart-model-routing--switch-models-with-one-character).
+- **Usage & cost visibility**: `/cost` reports estimated frontier spend (total, by model, priciest/longest session). See [Usage & cost visibility](#usage--cost-visibility).
 
 ## What Mnemos is not
 
@@ -160,7 +203,7 @@ Train a small open model on your own corpus. Stays on your machine. Becomes spec
 
 ## Status
 
-Active development — **v0.14**. The core (local-first RAG, audit, atomic ingestion, cross-OS install) has been stable since v0.1; releases since then have added single-file sources, per-file metadata, automatic re-scan, verified-answer memory, the Telegram remote channel, Word/Excel/image-OCR ingestion, a server-powered folder picker, pausable/resumable ingestion, worker-thread embedding (no UI freeze during ingest), and a model picker that ranks your local models by measured speed + accuracy. Track every release in [CHANGELOG.md](CHANGELOG.md).
+Active development — **v0.16**. The core (local-first RAG, audit, atomic ingestion, cross-OS install) has been stable since v0.1; releases since then have added single-file sources, per-file metadata, automatic re-scan, verified-answer memory, the Telegram remote channel, Word/Excel/image-OCR ingestion, a server-powered folder picker, pausable/resumable ingestion, worker-thread embedding (no UI freeze during ingest), a model picker that ranks your local models by measured speed + accuracy, [smart prefix model routing](#smart-model-routing--switch-models-with-one-character), and `/cost` spend visibility. Track every release in [CHANGELOG.md](CHANGELOG.md).
 
 ## Architecture
 
@@ -213,7 +256,7 @@ After `node setup.mjs` finishes, open **`http://127.0.0.1:3030`**. It's one page
 
 2. **Settings → Sources.** Paste a folder *or single-file* path (e.g. `~/Documents/notes` or `~/Documents/resume.pdf`). Mnemos detects which it is, then ingests with a live per-file progress indicator — entirely local via BGE-small, no API key. Security-blocked files (`.env`, `*.pem`, `id_rsa*`, anything under `~/.aws/` or `~/.ssh/`) are hard-locked and never indexed. Set a per-source auto re-scan cadence if the folder changes often (default is manual).
 
-3. **Ask.** Type a question in the chat box. Answers stream in with citations to the exact source files; per-answer **Sources** and **Data sent** panels show precisely which files were used and which chunks (if any) left your machine. Mark a great answer **✓ verified** so it's nailed next time. Want to ask the model itself instead of your files — *"which model am I using?"*, or a general question? Start the message with `!` for **direct mode** (no retrieval, no citations); the answer is labeled so you always know your files weren't searched.
+3. **Ask.** Type a question in the chat box. Answers stream in with citations to the exact source files; per-answer **Sources** and **Data sent** panels show precisely which files were used and which chunks (if any) left your machine. Mark a great answer **✓ verified** so it's nailed next time. Want to ask the model itself instead of your files — *"which model am I using?"*, or a general question? Start the message with `!` for **direct mode** (no retrieval, no citations). Or use a frontier model for the hard ones: `+` searches your files with a frontier brain, `!!` asks one directly — see **Smart prefix routing** below.
 
 4. **Optional — pair Telegram** (Settings → 📲 Telegram) to ask all of the above from your phone.
 

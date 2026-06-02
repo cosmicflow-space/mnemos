@@ -18,6 +18,8 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { SettingsMenu } from "@/components/SettingsMenu";
 import { ModelSettingsModal } from "@/components/ModelSettingsModal";
 import { SourcesModal } from "@/components/SourcesModal";
+import { parseQueryRoute, type RouteTier } from "@/lib/query-routing";
+import { formatTipsMarkdown, INPUT_TIPS, tipColor } from "@/lib/input-tips";
 import { Wordmark } from "@/components/Wordmark";
 import { VerifiedAnswersModal } from "@/components/VerifiedAnswersModal";
 import { TelegramSettingsModal } from "@/components/TelegramSettingsModal";
@@ -38,6 +40,7 @@ type StoredMessage = {
   model: string | null;
   tokensIn: number | null;
   tokensOut: number | null;
+  direct?: boolean;
   createdAt: number;
 };
 
@@ -133,8 +136,10 @@ type LiveMessage = {
   verifiedUsed?: boolean;
   /** True while the response is still streaming. */
   streaming?: boolean;
-  /** True when this was a direct-to-model turn (`!` prefix) — no file search. */
+  /** True when this was a direct-to-model turn (`!` family) — no file search. */
   direct?: boolean;
+  /** Routing tier (local / frontier-cheap / frontier-flagship) for the badge. */
+  tier?: RouteTier;
 };
 
 const STORAGE_SESSION_KEY = "mnemos.lastSessionId";
@@ -324,6 +329,9 @@ export default function ChatPage() {
             tokensIn: m.tokensIn,
             tokensOut: m.tokensOut,
             citations: m.citations ?? undefined,
+            // Persisted so a reloaded `!` answer keeps its "Direct" label
+            // instead of looking like an ordinary RAG answer.
+            direct: m.direct,
           })),
         );
       } catch {
@@ -389,14 +397,59 @@ export default function ChatPage() {
     const raw = input.trim();
     if (!raw || streaming) return;
 
-    // `!` prefix = direct-to-model: skip retrieval, ask the model straight.
-    // Strip the sigil; the cleaned text is what we send and display. A bare "!"
-    // with no question is ignored.
-    const direct = raw.startsWith("!");
-    const q = direct ? raw.slice(1).trim() : raw;
-    if (!q) return;
+    // Local help command — render the input shortcuts as a chat bubble without
+    // calling the model (mirrors Telegram's /tips). Same source of truth.
+    if (raw === "/tips" || raw === "/help") {
+      setInput("");
+      setInputHistory((h) => (h[h.length - 1] === raw ? h : [...h, raw]));
+      setHistoryIdx(null);
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", content: raw },
+        { role: "assistant", content: formatTipsMarkdown() },
+      ]);
+      return;
+    }
 
-    // Record the raw input (with sigil) for ↑ recall so re-running reproduces
+    // /cost — frontier spend report. Needs server data, so fetch it and render
+    // the returned markdown in a bubble (no model call).
+    if (raw === "/cost") {
+      setInput("");
+      setInputHistory((h) => (h[h.length - 1] === raw ? h : [...h, raw]));
+      setHistoryIdx(null);
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", content: raw },
+        { role: "assistant", content: "", streaming: true },
+      ]);
+      const finish = (content: string) =>
+        setMessages((prev) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (last && last.role === "assistant") next[next.length - 1] = { ...last, content, streaming: false };
+          return next;
+        });
+      try {
+        const res = await fetch("/api/cost");
+        const data = (await res.json()) as { markdown?: string; message?: string };
+        finish(
+          res.ok && data.markdown
+            ? data.markdown
+            : `⚠️ Couldn't load cost: ${data.message ?? res.statusText}`,
+        );
+      } catch (err) {
+        finish(`⚠️ ${err instanceof Error ? err.message : String(err)}`);
+      }
+      return;
+    }
+
+    // Routing prefix (!, !!, !!!, +, ++) decides direct-vs-RAG and the model
+    // tier. The server parses it authoritatively; we parse here only to show the
+    // cleaned text + the right badge optimistically. A bare prefix is ignored.
+    const route = parseQueryRoute(raw);
+    if (!route.q) return;
+
+    // Record the raw input (with prefix) for ↑ recall so re-running reproduces
     // the same mode. Skip consecutive duplicates; reset navigation.
     setInputHistory((h) => (h[h.length - 1] === raw ? h : [...h, raw]));
     setHistoryIdx(null);
@@ -407,14 +460,15 @@ export default function ChatPage() {
 
     setMessages((prev) => [
       ...prev,
-      { role: "user", content: q },
+      { role: "user", content: route.q },
       {
         role: "assistant",
         content: "",
         streaming: true,
         provider: providerId,
         model: model || null,
-        direct,
+        direct: route.direct,
+        tier: route.tier,
       },
     ]);
 
@@ -426,11 +480,13 @@ export default function ChatPage() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          q,
+          // Send the RAW input (with any routing prefix) — the server parses it
+          // authoritatively into direct/tier and overrides provider/model for
+          // frontier tiers. providerId/model below are used only for local tier.
+          q: raw,
           sessionId: sessionId ?? undefined,
           providerId,
           model: model || undefined,
-          direct,
         }),
       });
 
@@ -523,10 +579,12 @@ export default function ChatPage() {
             // 'done' event so the message footer can show "ollama · llama3.2:3b · 1.2s".
             const done = event as {
               phase: "done";
+              provider?: string;
               model?: string | null;
               durationMs?: number;
               tokenCounts?: { in?: number | null; out?: number | null };
               verifiedAnswerUsed?: boolean;
+              direct?: boolean;
             };
             setMessages((prev) => {
               const next = [...prev];
@@ -534,11 +592,15 @@ export default function ChatPage() {
               if (last && last.role === "assistant") {
                 next[next.length - 1] = {
                   ...last,
+                  // Correct the optimistic guess: a frontier tier (+/!!) was
+                  // resolved server-side to a different provider/model.
+                  provider: done.provider ?? last.provider,
                   model: done.model ?? null,
                   durationMs: done.durationMs,
                   tokensIn: done.tokenCounts?.in ?? null,
                   tokensOut: done.tokenCounts?.out ?? null,
                   verifiedUsed: Boolean(done.verifiedAnswerUsed),
+                  direct: Boolean(done.direct),
                 };
               }
               return next;
@@ -916,7 +978,7 @@ export default function ChatPage() {
                 setHistoryIdx(null);
               }}
               onKeyDown={onKeyDown}
-              placeholder={streaming ? "Streaming…" : "Ask about your sources… (start with ! to ask the model directly)"}
+              placeholder={streaming ? "Streaming…" : "Ask your files… (see routing prefixes below)"}
               disabled={streaming}
               rows={2}
               className="flex-1 bg-app border border-line rounded-md px-3 py-2 text-sm text-fg focus:outline-none focus:border-cyan-500 transition disabled:opacity-50 resize-none"
@@ -931,6 +993,42 @@ export default function ChatPage() {
               {streaming ? "…" : "⏎"}
             </button>
           </div>
+          {/* Routing legend that doubles as a live mode indicator: shows the
+              prefix key normally, and the active mode once a sigil is typed. */}
+          {(() => {
+            const r = parseQueryRoute(input);
+            if (!input.trim() || r.sigil === "") {
+              return (
+                <div className="mt-1.5 text-[11px] text-muted flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                  {/* Rendered from INPUT_TIPS so the legend can't drift from
+                      /tips and Telegram /help — one source of truth. */}
+                  {INPUT_TIPS.map((t) => {
+                    const c = tipColor(t.syntax);
+                    const cls =
+                      c === "amber" ? "text-amber-400" : c === "sky" ? "text-sky-400" : "text-muted/70";
+                    return (
+                      <span key={t.syntax}>
+                        <code className={cls}>{t.syntax}</code> {t.short}
+                      </span>
+                    );
+                  })}
+                  <span className="text-muted/70">· <code>/tips</code> for details</span>
+                </div>
+              );
+            }
+            const files = r.direct ? "skip your files" : "search your files";
+            const brain =
+              r.tier === "local"
+                ? "local model"
+                : r.tier === "frontier-flagship"
+                  ? "frontier model (flagship)"
+                  : "frontier model";
+            return (
+              <div className="mt-1.5 text-[11px] text-amber-400">
+                → Mode: {files} · {brain}
+              </div>
+            );
+          })()}
           <div className="mt-1 text-[10px] text-muted/70">
             ⏎ send · ⇧⏎ newline · ↑ history · ⌃C clear
           </div>
@@ -1363,14 +1461,25 @@ function MessageBubble({
         {!isUser && !message.streaming && message.content && (
           <div className="flex items-center justify-between mt-2 text-xs text-muted gap-3">
             <span className="flex items-center gap-2 min-w-0">
-              {message.direct && (
+              {message.direct ? (
                 <span
                   className="text-amber-400 shrink-0"
                   title="Direct question to the model — your files were not searched"
                 >
                   ⚡ Direct · files not searched
                 </span>
-              )}
+              ) : (message.tier && message.tier !== "local") ||
+                providers.find((p) => p.id === message.provider)?.needsKey ? (
+                // Frontier badge: from `tier` while live, or derived from the
+                // persisted (frontier) provider on reload — so `+`/`++` turns
+                // keep the badge after a refresh, not just `!` turns.
+                <span
+                  className="text-sky-400 shrink-0"
+                  title="Searched your files, answered by a frontier model"
+                >
+                  ☁️ Frontier
+                </span>
+              ) : null}
               {message.verifiedUsed && (
                 <span
                   className="text-emerald-400 shrink-0"

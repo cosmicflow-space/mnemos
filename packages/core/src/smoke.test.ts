@@ -625,6 +625,12 @@ describe("direct mode: runQuery skips retrieval", () => {
     expect(done?.citationChunkIds).toEqual([]);
     expect(done?.provider).toBe("ollama");
     expect(done?.model).toBe("llama3.2:3b");
+
+    // Both rows of the turn persist `direct` so the label survives a reload and
+    // the column describes the whole turn (not just the assistant row).
+    const stored = getRecentMessages(db, "s1", 10);
+    expect(stored).toHaveLength(2);
+    expect(stored.every((m) => m.direct === true)).toBe(true);
   });
 
   it("a RAG query with no embedder fails cleanly (guard), instead of crashing", async () => {

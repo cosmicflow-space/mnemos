@@ -910,6 +910,8 @@ export type AppendMessageInput = {
   provider?: string;
   model?: string;
   latencyMs?: number;
+  /** True when this turn skipped retrieval (the `!` routing family). */
+  direct?: boolean;
 };
 
 export function appendMessage(db: MnemosDb, input: AppendMessageInput): number {
@@ -917,8 +919,8 @@ export function appendMessage(db: MnemosDb, input: AppendMessageInput): number {
   return db.transaction(() => {
     const result = prepared(db)(
       `INSERT INTO chat_message
-         (session_id, role, content, citations, tokens_in, tokens_out, provider, model, latency_ms, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (session_id, role, content, citations, tokens_in, tokens_out, provider, model, latency_ms, direct, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       input.sessionId,
       input.role,
@@ -929,6 +931,7 @@ export function appendMessage(db: MnemosDb, input: AppendMessageInput): number {
       input.provider ?? null,
       input.model ?? null,
       input.latencyMs ?? null,
+      input.direct ? 1 : 0,
       now,
     );
     prepared(db)(`UPDATE session SET updated_at = ? WHERE id = ?`).run(
@@ -945,7 +948,7 @@ export function getRecentMessages(
   n = 10,
 ): ChatMessage[] {
   const rows = prepared(db)(
-    `SELECT id, session_id, role, content, citations, tokens_in, tokens_out, provider, model, latency_ms, created_at
+    `SELECT id, session_id, role, content, citations, tokens_in, tokens_out, provider, model, latency_ms, direct, created_at
      FROM chat_message
      WHERE session_id = ?
      ORDER BY created_at DESC, id DESC
@@ -961,6 +964,7 @@ export function getRecentMessages(
     provider: string | null;
     model: string | null;
     latency_ms: number | null;
+    direct: number | null;
     created_at: number;
   }>;
   return rows
@@ -975,6 +979,7 @@ export function getRecentMessages(
       provider: r.provider,
       model: r.model,
       latencyMs: r.latency_ms,
+      direct: Boolean(r.direct),
       createdAt: r.created_at,
     }))
     .reverse(); // oldest first for prompt-assembly convenience
@@ -1013,6 +1018,59 @@ export function getUsageTotals(db: MnemosDb): UsageTotal[] {
     tokensIn: r.tin,
     tokensOut: r.tout,
     messages: r.n,
+  }));
+}
+
+export type SessionUsageRow = {
+  sessionId: string;
+  title: string | null;
+  provider: string | null;
+  model: string | null;
+  tokensIn: number;
+  tokensOut: number;
+  /** Assistant messages in this session for this (provider, model). */
+  messages: number;
+  firstAt: number;
+  lastAt: number;
+};
+
+/** Per-(session, provider, model) assistant token sums + session title and time
+ * span. Raw tokens only — the caller applies per-model pricing (kept in the
+ * provider plugins) to derive cost, most-expensive-session, etc. Powers /cost. */
+export function getSessionUsage(db: MnemosDb): SessionUsageRow[] {
+  const rows = prepared(db)(
+    `SELECT m.session_id AS sid, s.title AS title,
+            m.provider AS provider, m.model AS model,
+            COALESCE(SUM(m.tokens_in), 0)  AS tin,
+            COALESCE(SUM(m.tokens_out), 0) AS tout,
+            COUNT(*)                       AS n,
+            MIN(m.created_at)              AS first_at,
+            MAX(m.created_at)              AS last_at
+       FROM chat_message m
+       JOIN session s ON s.id = m.session_id
+      WHERE m.role = 'assistant'
+      GROUP BY m.session_id, m.provider, m.model`,
+  ).all() as Array<{
+    sid: string;
+    title: string | null;
+    provider: string | null;
+    model: string | null;
+    tin: number;
+    tout: number;
+    n: number;
+    first_at: number;
+    last_at: number;
+  }>;
+  return rows.map((r) => ({
+    sessionId: r.sid,
+    title: r.title,
+    provider: r.provider,
+    model: r.model,
+    tokensIn: r.tin,
+    tokensOut: r.tout,
+    messages: r.n,
+    firstAt: r.first_at,
+    lastAt: r.last_at,
   }));
 }
 

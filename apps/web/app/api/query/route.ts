@@ -9,6 +9,8 @@ import {
 import { randomUUID } from "node:crypto";
 import { getDb, getRegistry, getDefaultEmbedder } from "@/lib/runtime";
 import { envKeyForProvider } from "@/lib/config";
+import { parseQueryRoute, isFrontierTier } from "@/lib/query-routing";
+import { resolveFrontierModel } from "@/lib/model-routing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,9 +25,9 @@ const QueryRequest = z.object({
   model: z.string().optional(),
   temperature: z.number().min(0).max(2).optional(),
   topK: z.number().int().min(1).max(50).optional(),
-  // Direct-to-model mode (the `!` prefix, stripped client-side). Skips
-  // retrieval entirely — answer from the model + conversation, no file search.
-  direct: z.boolean().optional().default(false),
+  // `q` may carry a routing prefix (!, !!, !!!, +, ++); the server parses it
+  // authoritatively (see parseQueryRoute) — direct mode + tier are derived, not
+  // trusted from the client.
 });
 
 const PROVIDER_CREDENTIAL_ENV: Record<string, (creds: Record<string, string>) => void> = {
@@ -101,21 +103,61 @@ export async function POST(req: Request) {
   }
 
   const db = getDb();
-  const { id: sessionId, isNew: isNewSession } = ensureSession(db, parsed.data.sessionId);
-  if (isNewSession) {
-    setSessionTitle(db, sessionId, titleFromQuery(parsed.data.q));
+
+  // Parse the routing prefix (!, !!, !!!, +, ++) into a (direct, tier) decision
+  // and the cleaned question. Server-authoritative: the client parses too (for
+  // optimistic UI) but we re-derive here and never trust client-sent flags.
+  const route = parseQueryRoute(parsed.data.q);
+  if (!route.q) {
+    return Response.json({ error: "empty_query" }, { status: 400 });
   }
 
   const registry = getRegistry();
 
+  // Resolve the tier → (provider, model). The local tier keeps the caller's
+  // selection; frontier tiers override it with the cheapest/flagship configured
+  // frontier model. No frontier configured → guide the user to add a key.
+  let providerId = parsed.data.providerId;
+  let model = parsed.data.model;
+  if (isFrontierTier(route.tier)) {
+    const { resolved, suggestProviderId } = await resolveFrontierModel(registry, route.tier);
+    if (!resolved) {
+      const suggest = suggestProviderId
+        ? registry.chatProviders.get(suggestProviderId)
+        : undefined;
+      return Response.json(
+        {
+          error: "missing_credentials",
+          provider: suggestProviderId ?? "anthropic",
+          providerName: suggest?.displayName ?? "a frontier provider",
+          envVar: suggestProviderId ? envKeyForProvider(suggestProviderId) : null,
+          fields: suggest
+            ? suggest.credentialSchema.fields
+                .filter((f) => f.required)
+                .map((f) => ({ key: f.key, label: f.label, description: f.description ?? null }))
+            : [],
+          routingHint: `The "${route.sigil}" prefix routes to a frontier model — add an API key to use it, or drop the prefix to stay local.`,
+        },
+        { status: 400 },
+      );
+    }
+    providerId = resolved.providerId;
+    model = resolved.model;
+  }
+
+  const { id: sessionId, isNew: isNewSession } = ensureSession(db, parsed.data.sessionId);
+  if (isNewSession) {
+    setSessionTitle(db, sessionId, titleFromQuery(route.q));
+  }
+
   let chatProvider;
   try {
-    chatProvider = getChatProvider(registry, parsed.data.providerId);
+    chatProvider = getChatProvider(registry, providerId);
   } catch {
     return Response.json(
       {
         error: "unknown_provider",
-        message: `Provider '${parsed.data.providerId}' not registered. Available: ${[...registry.chatProviders.keys()].join(", ")}`,
+        message: `Provider '${providerId}' not registered. Available: ${[...registry.chatProviders.keys()].join(", ")}`,
       },
       { status: 400 },
     );
@@ -123,7 +165,7 @@ export async function POST(req: Request) {
 
   // Initialize chat provider with credentials from env
   const creds: Record<string, string> = {};
-  const credHydrator = PROVIDER_CREDENTIAL_ENV[parsed.data.providerId];
+  const credHydrator = PROVIDER_CREDENTIAL_ENV[providerId];
   if (credHydrator) credHydrator(creds);
 
   // Schema-driven credential pre-check. Rather than let the provider throw a
@@ -141,7 +183,7 @@ export async function POST(req: Request) {
         provider: chatProvider.id,
         providerName: chatProvider.displayName,
         // The env var to set in ~/.mnemos/.env (or via the /agent page).
-        envVar: envKeyForProvider(parsed.data.providerId),
+        envVar: envKeyForProvider(providerId),
         // Each field carries its own human label + docs hint (e.g. the
         // "Get one at https://…/keys" URL lives in the field description).
         fields: missingFields.map((f) => ({
@@ -170,7 +212,7 @@ export async function POST(req: Request) {
   // a `!` query should work even when the local embedder is missing or still
   // warming up. Only initialize it for RAG queries.
   let embedder: Awaited<ReturnType<typeof getDefaultEmbedder>> | null = null;
-  if (!parsed.data.direct) {
+  if (!route.direct) {
     try {
       embedder = await getDefaultEmbedder();
     } catch (err) {
@@ -194,12 +236,12 @@ export async function POST(req: Request) {
       };
       try {
         for await (const ev of runQuery(db, embedder, chatProvider, {
-          query: parsed.data.q,
+          query: route.q,
           sessionId,
-          model: parsed.data.model,
+          model,
           temperature: parsed.data.temperature,
           topK: parsed.data.topK,
-          direct: parsed.data.direct,
+          direct: route.direct,
         })) {
           send(ev);
         }

@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS chat_message (
   provider    TEXT,
   model       TEXT,
   latency_ms  INTEGER,
+  direct      INTEGER NOT NULL DEFAULT 0,
   created_at  INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_chat_message_session ON chat_message(session_id);

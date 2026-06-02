@@ -82,6 +82,8 @@ export type ChatMessage = {
   provider: string | null;
   model: string | null;
   latencyMs: number | null;
+  /** True when this turn skipped retrieval (the `!` routing family). */
+  direct: boolean;
   createdAt: number;
 };
 

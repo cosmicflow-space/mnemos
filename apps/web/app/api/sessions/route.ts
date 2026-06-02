@@ -29,6 +29,7 @@ export async function GET(req: Request) {
           model: m.model,
           tokensIn: m.tokensIn,
           tokensOut: m.tokensOut,
+          direct: m.direct,
           createdAt: m.createdAt,
         })),
       });

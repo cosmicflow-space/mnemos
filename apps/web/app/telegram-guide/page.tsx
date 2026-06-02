@@ -170,10 +170,14 @@ export default function TelegramGuidePage() {
               with sources, generated on your computer. That&apos;s it. 🎉
             </p>
             <p className="mt-2">
-              Start a message with <Cmd>!</Cmd> to ask the model{" "}
-              <strong className="text-fg">directly</strong>, without searching your files — handy
-              for questions like <em>&quot;!which model am I using?&quot;</em> or general chat. The
-              reply is labeled so you always know your documents weren&apos;t consulted.
+              <strong className="text-fg">Smart routing</strong> — prefix a message to choose how
+              it&apos;s answered: <Cmd>!</Cmd> asks the model directly (skips your files);{" "}
+              <Cmd>!!</Cmd> asks a frontier model directly; <Cmd>+</Cmd> searches your files but
+              answers with a frontier model (<Cmd>!!!</Cmd>/<Cmd>++</Cmd> use the top frontier
+              model). No prefix = your files + the local model. Frontier prefixes need an API key
+              configured in Mnemos; the bot will tell you if one&apos;s missing. Every reply is
+              labeled so you always know whether your files were searched and which model answered.
+              Send <Cmd>/tips</Cmd> anytime to see this cheatsheet.
             </p>
           </Step>
         </ol>
