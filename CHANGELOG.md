@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-06-01
+
+### Added
+- **Smart prefix routing — pick retrieval + model tier per message.** A leading sigil now chooses *whether to search your files* and *which brain answers*, with no menus, identical on web and Telegram:
+
+  |                     | Local (private, free) | Frontier cheap | Frontier flagship |
+  |---------------------|-----------------------|----------------|-------------------|
+  | **Search my files** | *(no prefix)*         | `+`            | `++`              |
+  | **Skip (direct)**   | `!`                   | `!!`           | `!!!`             |
+
+  The `!` family skips retrieval (extends v0.15.0's direct mode); the `+` family runs RAG but answers with a frontier model. Repeats escalate the tier. Frontier tiers auto-resolve to the **cheapest** (or **most capable**, for the doubled sigils) *configured* frontier model by pricing metadata — no hardcoded provider IDs (a provider counts as "frontier" if it needs an API key, so local Ollama is excluded automatically). With no frontier key configured, the request is rejected with a clear "add an API key" prompt instead of failing opaquely. `!`/`+` were chosen over `#` because `#`/`@`/`/` are special in Telegram (hashtag/mention/command) while `!`/`+` are inert — so the exact syntax works on the phone too. Parsing is one shared pure module (`query-routing.ts`) used by the web client (optimistic UI), the API route (authoritative), and the Telegram poller; tier→model resolution is a second shared module (`model-routing.ts`). Answers are labeled with the mode + model, and the audit log records provider/model/direct, so each query's privacy posture stays provable. Covered by new parser and resolver unit tests.
+
+- **`/tips` input-help command** (web + Telegram). Sends back the routing-prefix cheatsheet from a single shared source (`input-tips.ts`) — rendered as a table in the web chat and plain text on Telegram, with no model call. Designed to grow: new shortcuts are added in one place and appear everywhere (the web input legend, `/help`, and `/tips` all render from the one registry). The web input also shows a live legend that flips to a mode indicator as you type a sigil.
+- **`/cost` usage & spend command** (web + Telegram). Reports **estimated frontier spending** computed from provider-reported token counts × per-model pricing (with the pricing date shown): **total to date**, **cost by model**, **queries split frontier vs local**, **total tokens**, **number of sessions**, **most expensive session**, and **longest session**. Local (Ollama) queries are free and counted separately. Computed on-device from your own history (`getSessionUsage` + the plugins' pricing); the cost math is a pure, unit-tested `buildCostReport`. Backed by `GET /api/cost`.
+
+### Changed
+- The query API now parses the routing prefix server-side from the raw message (the client no longer sends a `direct` flag), so routing can't be spoofed and the web/Telegram/route paths share one source of truth.
+- Routing labels (`direct`) now persist on chat messages, so a reloaded `!` turn keeps its "Direct · files not searched" badge; the frontier badge is derived from the persisted provider so `+`/`++` turns stay labeled across reloads.
+
+### Docs
+- **Model routing, model switching, and usage visibility are now first-class in the README** — a prominent "Smart model routing" section (with the matrix, mobile examples, and the direct-vs-RAG distinction) appears near the top instead of as a buried bullet, followed by a "Usage & cost visibility" section documenting `/cost`. The Telegram setup guide documents the prefixes and `/tips`.
+
 ## [0.15.0] - 2026-06-01
 
 ### Added
@@ -288,7 +310,8 @@ Roughly 90 seconds from clone to first answer on a typical laptop.
 
 <!-- Version links: each header above is a GitHub compare view of that release's diff.
      [Unreleased] is a live diff of everything on `main` since the latest tag. -->
-[Unreleased]: https://github.com/cosmicflow-space/mnemos/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/cosmicflow-space/mnemos/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.14.2...v0.15.0
 [0.14.2]: https://github.com/cosmicflow-space/mnemos/compare/v0.14.1...v0.14.2
 [0.14.1]: https://github.com/cosmicflow-space/mnemos/compare/v0.14.0...v0.14.1
