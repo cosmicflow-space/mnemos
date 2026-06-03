@@ -9,6 +9,8 @@
 [![Status: v0.16](https://img.shields.io/badge/Status-v0.16-cyan.svg)](CHANGELOG.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-cyan.svg)](CONTRIBUTING.md)
 
+Built by **[Sam Muthu](https://sammuthu.com)** · [Read the project write-up →](https://sammuthu.com/ai-ml/mnemos)
+
 </div>
 
 > 🚧 **You're on `mnemos-agent` — a work-in-progress feature branch, not `main`.**
