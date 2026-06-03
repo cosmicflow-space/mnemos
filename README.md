@@ -9,6 +9,8 @@
 [![Status: v0.16](https://img.shields.io/badge/Status-v0.16-cyan.svg)](CHANGELOG.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-cyan.svg)](CONTRIBUTING.md)
 
+Built by **[Sam Muthu](https://sammuthu.com)** · [Read the project write-up →](https://sammuthu.com/ai-ml/mnemos)
+
 </div>
 
 Mnemos is a personal RAG (retrieval-augmented generation) system that defaults to **100% local** — embeddings on your machine, chat on your machine, zero external inference calls. Drop a folder of documents, ask questions in plain English, get answers with citations to your own files. The audit log captures every query for transparency; in the default install, **query audit events record the local chat provider (`ollama`)** and **ingest events stay local but don't carry a provider field** — no external-provider call is ever recorded.
