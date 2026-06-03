@@ -11,6 +11,34 @@
 
 </div>
 
+> 🚧 **You're on `mnemos-agent` — a work-in-progress feature branch, not `main`.**
+> This is where Mnemos grows from a RAG tool into a **safe, read-only _investigative agent_**. It's not yet merged — actively being built and tested — but it's the clearest view of where the project is headed. Deep dives: **[Agent architecture](docs/agent/ARCHITECTURE.md)** · **[Security posture](docs/agent/SECURITY-POSTURE.md)**.
+
+## What `/agent` is — and why it's more than RAG
+
+Mnemos has four ways to ask, and the agent is the one that does real work:
+
+| You type | Mode | What happens |
+|----------|------|--------------|
+| `!question` | **Direct** | Straight to the model — no files touched. Fast Q&A. |
+| `question` | **RAG** (default) | Semantic search over your **already-indexed** files → a cited answer. Only sees what's been ingested. |
+| `/agent goal` | **Agent** | An *investigator*: it navigates folders, finds files by name, greps contents, reads whole files, **and** does semantic search — across multiple steps — to answer what plain RAG can't. |
+| `/run …` | **Command** | A single confirmed, read-only local command *(design stage — see Security posture)*. |
+
+**The distinction that matters:** RAG can only answer from what you've *already ingested and chunked*. The **agent investigates the live workspace** — it finds and reads files that were never indexed, reasons over directory structure, counts things, and chains tools to reach an answer. "Search my notes" vs. "go figure it out." It's read-only and provider-agnostic (runs on a local model or a frontier one).
+
+**Example:** *"in my WatchAlgo project ([watchalgo.com](https://watchalgo.com)), how many problems are solved in all three solution flavors, and how many have a visual?"* → the agent runs `find_files` → `list_dir` → `grep` → answers **"42 problems, 38 with all three flavors, 30 with a visual"** — something chunk-retrieval can't do reliably.
+
+### Working today on this branch
+A read-only investigative loop with five tools — `list_dir`, `find_files`, `read_file`, `grep`, `rag_search` — **confined to your registered sources** (realpath-bounded, read-only, never your whole disk), prompt-injection-hardened, live on the web app **and** a private Telegram bot. Deterministic mode router, untrusted-content fencing, 185 tests.
+
+### Where it's going (planned — not yet built)
+- **Discover → offer to ingest.** The agent spots relevant material that *isn't indexed yet* and offers to add it — *"I found `~/work/specs/` with 14 markdown files; want me to index it so you can ask grounded, cited questions?"* — bridging open-ended discovery into RAG.
+- **Safe command execution (`/run`).** Read-only, confirmed, classify-by-consequence — never a raw shell, never silent. Full threat model in the [Security posture](docs/agent/SECURITY-POSTURE.md).
+- **Scope is always by explicit grant.** Mnemos only ever touches folders you register; the agent never roams your machine on its own.
+
+---
+
 Mnemos is a personal RAG (retrieval-augmented generation) system that defaults to **100% local** — embeddings on your machine, chat on your machine, zero external inference calls. Drop a folder of documents, ask questions in plain English, get answers with citations to your own files. The audit log captures every query for transparency; in the default install, **query audit events record the local chat provider (`ollama`)** and **ingest events stay local but don't carry a provider field** — no external-provider call is ever recorded.
 
 If you choose to add a frontier LLM (Anthropic Claude or OpenAI today; Gemini planned), mnemos sends only the retrieved chunks — never raw files — and the audit log records the provider, model, retrieved chunk IDs, prompt-token estimate, and latency for each external request. Plugins are opt-in, not required. **Personal RAG means personal RAG. Privacy is the default.**

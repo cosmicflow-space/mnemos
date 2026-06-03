@@ -71,7 +71,27 @@ export {
 
 // Query
 export { runQuery, type QueryEvent, type RunQueryOptions } from "./query/runQuery";
-export { assemblePrompt, type AssembledPrompt } from "./query/prompt";
+export { assemblePrompt, wrapUntrusted, type AssembledPrompt, type UntrustedBlock } from "./query/prompt";
+
+// Agent (mnemos-agent branch — bounded read-only loop, Phase 3). No command
+// execution at this phase; tools only read. Provider-agnostic ReAct protocol.
+export {
+  runAgentLoop,
+  parseModelTurn,
+  type AgentEvent,
+  type AgentLoopOptions,
+} from "./agent/loop";
+export {
+  READ_ONLY_TOOLS,
+  getTool,
+  type AgentTool,
+  type ToolContext,
+  type ToolResult,
+  type WorkspaceFs,
+  type DirEntry,
+  type GrepMatch,
+} from "./agent/tools";
+export { buildWorkspaceFs } from "./agent/workspace";
 
 // Re-export plugin SDK types
 export type {

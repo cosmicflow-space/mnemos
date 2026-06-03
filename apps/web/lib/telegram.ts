@@ -22,7 +22,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { runQuery, getChatProvider } from "@mnemos/core";
+import { runQuery, runAgentLoop, getChatProvider, buildWorkspaceFs, type ToolContext } from "@mnemos/core";
 import {
   createSession,
   getTelegramState,
@@ -32,6 +32,11 @@ import {
   isTelegramChatPaired,
   getTelegramChatSession,
   setTelegramChatSession,
+  appendMessage,
+  getRecentMessages,
+  appendAudit,
+  vecSearch,
+  listSources,
 } from "@mnemos/db";
 import { getDb, getRegistry, getDefaultEmbedder } from "./runtime";
 import {
@@ -49,10 +54,11 @@ const TG_MSG_LIMIT = 4096;
 const LONG_POLL_SEC = 30;
 const IDLE_MS = 5_000;
 
+// /tips (formatTipsText) already renders the prefix shortcuts AND the live
+// command list from the registry, so HELP just adds a one-line intro.
 const HELP =
   "Send a question and I'll answer from your indexed documents, with sources.\n\n" +
-  formatTipsText() +
-  "\n\nCommands:\n/new — start a fresh conversation\n/tips — show the input shortcuts\n/help — this message";
+  formatTipsText();
 
 const PRIVACY_NOTE =
   "ℹ️ Privacy: your documents stay on your computer. Your questions and my " +
@@ -213,12 +219,119 @@ async function handleUpdate(token: string, update: TgUpdate): Promise<void> {
     await tgSend(token, chatId, formatCostText(report));
     return;
   }
+  if (text === "/agent" || text.startsWith("/agent ") || text.startsWith("/agent@")) {
+    const goal = text.replace(/^\/agent(@\S+)?\s*/i, "").trim();
+    if (!goal) {
+      await tgSend(
+        token,
+        chatId,
+        "Usage: /agent <goal> — I'll gather from your files (read-only) and answer. e.g. /agent summarize what my notes say about the aurora field test",
+      );
+      return;
+    }
+    await answerAgentGoal(token, chatId, goal);
+    return;
+  }
   if (text.startsWith("/")) {
     await tgSend(token, chatId, "Unknown command. Just send a question, or /new to reset.");
     return;
   }
 
   await answerQuestion(token, chatId, text);
+}
+
+/**
+ * Run ONE read-only agent loop for a Telegram goal and reply with the answer.
+ *
+ * Safe on Telegram precisely because the agent is read-only — it investigates
+ * the registered workspace (search + navigate/find/read/grep) and answers; there
+ * is NO write and NO command execution here (that stays web/loopback-only). The
+ * injected ToolContext carries only read-only capabilities, and the workspace
+ * view is realpath-confined to registered source roots.
+ */
+async function answerAgentGoal(token: string, chatId: number, goal: string): Promise<void> {
+  const db = getDb();
+  await tgAction(token, chatId, "typing").catch(() => {});
+
+  let sessionId = getTelegramChatSession(db, chatId);
+  if (!sessionId) {
+    sessionId = randomUUID();
+    createSession(db, sessionId, "Telegram");
+    setTelegramChatSession(db, chatId, sessionId);
+  }
+
+  const registry = getRegistry();
+  const providerId = getDefaultProviderId();
+  const model = getDefaultModel();
+
+  let provider;
+  try {
+    provider = getChatProvider(registry, providerId);
+  } catch {
+    await tgSend(token, chatId, "⚠️ No chat model is configured in Mnemos yet.");
+    return;
+  }
+  const creds = credentialsForProvider(providerId);
+  const missing = provider.credentialSchema.fields.filter((f) => f.required && !creds[f.key]);
+  if (missing.length > 0) {
+    await tgSend(token, chatId, `⚠️ ${provider.displayName} needs a credential configured in Mnemos first.`);
+    return;
+  }
+  try {
+    await provider.initialize(creds);
+  } catch {
+    await tgSend(token, chatId, "⚠️ Couldn't initialize the chat model.");
+    return;
+  }
+
+  let embedder: Awaited<ReturnType<typeof getDefaultEmbedder>>;
+  try {
+    embedder = await getDefaultEmbedder();
+  } catch {
+    await tgSend(token, chatId, "⚠️ The local embedder isn't ready yet — try again shortly.");
+    return;
+  }
+  const ctx: ToolContext = {
+    search: async (query: string, k: number) => {
+      const [embedding] = await embedder.embed([query]);
+      return embedding ? vecSearch(db, embedding, k) : [];
+    },
+    fs: buildWorkspaceFs(listSources(db).map((s) => s.path)),
+  };
+
+  // Conversation memory for continuity (parity with the web route).
+  const conversationMemory = getRecentMessages(db, sessionId, 10).map((m) => ({
+    role: m.role,
+    content: m.content,
+  }));
+
+  let answer = "";
+  let toolCalls = 0;
+  let steps = 0;
+  let terminatedBy = "error";
+  try {
+    for await (const ev of runAgentLoop(provider, { goal, ctx, model, conversationMemory })) {
+      if (ev.phase === "tool_call") toolCalls += 1;
+      else if (ev.phase === "answer") answer = ev.delta;
+      else if (ev.phase === "done") {
+        steps = ev.steps;
+        terminatedBy = ev.terminatedBy;
+      }
+    }
+  } catch (err) {
+    await tgSend(token, chatId, `⚠️ ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
+
+  appendMessage(db, { sessionId, role: "user", content: goal });
+  if (answer) appendMessage(db, { sessionId, role: "assistant", content: answer });
+  appendAudit(db, "agent_loop", { sessionId, channel: "telegram", steps, terminatedBy, readOnly: true });
+
+  const trace = `🧭 Agent · ${steps} step${steps === 1 ? "" : "s"}, ${toolCalls} search${toolCalls === 1 ? "" : "es"} (read-only)`;
+  let out = `${answer || "(no answer)"}\n\n${trace}`;
+  // Telegram rejects messages over 4096 chars — clamp like the normal answer path.
+  if (out.length > TG_MSG_LIMIT) out = out.slice(0, TG_MSG_LIMIT - 20).trimEnd() + "\n…(truncated)";
+  await tgSend(token, chatId, out);
 }
 
 async function answerQuestion(token: string, chatId: number, question: string): Promise<void> {
