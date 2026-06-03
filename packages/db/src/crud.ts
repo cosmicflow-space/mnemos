@@ -876,7 +876,7 @@ export function getSession(db: MnemosDb, id: string): Session | null {
 }
 
 /** Set a session's title. Called by /api/query after the first user message
- * lands so the sidebar shows "Stripe job description" instead of a raw
+ * lands so the sidebar shows "Aurora field-test report" instead of a raw
  * timestamp. */
 export function setSessionTitle(db: MnemosDb, id: string, title: string): void {
   prepared(db)(`UPDATE session SET title = ? WHERE id = ?`).run(title, id);
