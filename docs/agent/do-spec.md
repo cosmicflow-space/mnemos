@@ -13,16 +13,26 @@
 
 ## 1. What a verb is
 
-A verb is an **executable** at `~/.mnemos/do/<verb>` plus a **manifest** at
-`~/.mnemos/do/<verb>.json`. The executable can be any language with a shebang (`#!/bin/sh`,
-`#!/usr/bin/env python3`, …). Mnemos runs it with `execFile` — **arguments are passed as an
-argv array, never through a shell.**
+A verb is an **OS-native executable** at `~/.mnemos/do/<verb>` plus a **manifest** at
+`~/.mnemos/do/<verb>.json`. Mnemos runs the script with **no shell** — arguments are passed as
+an argv array. The script file is platform-specific; the **manifest is shared**:
+
+| OS | Script file | Shape | Runs as |
+|----|-------------|-------|---------|
+| **macOS / Linux** | `~/.mnemos/do/<verb>` (or `<verb>.sh`), `chmod +x` | any language with a shebang (`#!/bin/sh`, `#!/usr/bin/env python3`, …) | directly (shebang) |
+| **Windows** | `~/.mnemos/do/<verb>.ps1` (or `<verb>.exe`) | PowerShell `param([string]$Pattern)` | `powershell -NoProfile -File <verb>.ps1 <arg>` |
 
 ```
 ~/.mnemos/do/
-├── fs            #!/bin/sh   — the executable (chmod +x)
-└── fs.json       — the manifest
+├── fs            #!/bin/sh        — POSIX executable (chmod +x)
+├── fs.ps1        param($Pattern)  — Windows PowerShell verb
+└── fs.json       — the manifest (shared by both)
 ```
+
+The dispatcher resolves `<verb>` / `<verb>.sh` on POSIX and `<verb>.ps1` / `<verb>.exe` on
+Windows. `.cmd`/`.bat` are **not** supported (Node blocks spawning them without a shell, and
+`cmd.exe` quoting is injection-prone — use a `.ps1` or a real `.exe`). The validated glob arg
+reaches PowerShell as a single bound parameter, so the no-shell guarantee holds on Windows too.
 
 > Built-in verbs (e.g. `rag`) live in Mnemos code, not in this folder, because they must
 > touch the index. You author **script verbs**; this spec is about those.
@@ -68,12 +78,16 @@ When the user runs `/do fs policy*.pdf`, Mnemos:
 1. Looks up `fs` + its manifest. Unknown verb → prints the catalog and stops.
 2. **Validates the argument against the manifest's `shape`** (§4). Invalid → a clear error;
    the executable is never started.
-3. Runs `execFile("~/.mnemos/do/fs", ["policy*.pdf"], { … })` with:
-   - **a sanitized environment** — fixed `PATH`, no secrets, interpreter/loader vars
-     stripped (`LD_*`, `DYLD_*`, `NODE_OPTIONS`, `PYTHON*`, `BASH_ENV`, …);
+3. **Spawns the verb with no shell**, per OS: POSIX runs the script directly via its shebang
+   (`spawn("~/.mnemos/do/fs", ["policy*.pdf"])`); Windows runs a `.ps1` through PowerShell
+   (`spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+   "-File", "fs.ps1", "policy*.pdf"])`). Either way the arg is a single argv element. With:
+   - **a sanitized, per-OS environment** — POSIX: a fixed `PATH` + `$HOME`; Windows: `System32`
+     on `Path`/`PATH` + `PATHEXT` + `%USERPROFILE%`. No secrets; loader/interpreter vars
+     (`LD_*`, `DYLD_*`, `NODE_OPTIONS`, `PYTHON*`, `BASH_ENV`, …) are never present;
    - **a confined working directory**;
-   - **bounds** — a wall-clock timeout, a stdout byte cap, and a **process-group kill** on
-     timeout/overflow (the verb runs in its own group, so grandchildren die with it).
+   - **bounds** — a wall-clock timeout, a stdout byte cap, and a **tree-kill** on
+     timeout/overflow: POSIX kills the verb's process group; Windows uses `taskkill /T`.
 4. Interprets the verb's **stdout/exit code** per its role (§6/§7).
 5. Writes an `audit_event` row.
 

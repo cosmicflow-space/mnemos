@@ -129,6 +129,27 @@ Bot:  No Mnemos aliases are available yet. Create one in the Mnemos web app
 The same text answers an unknown verb's tail (`available: …`), so "what exists" and "that
 doesn't exist, here's what does" share one source of truth: the live catalog.
 
+### Platform support — a verb is OS-native
+
+A "verb" is an OS-native executable, so the *script* is platform-specific even though the
+dispatcher, validation, PIN, buffer, and audit are all cross-platform. The dispatcher resolves
+a verb's script by OS and runs it with **no shell**:
+
+| OS | Verb file (for `fs`) | How it runs | Status |
+|----|----------------------|-------------|--------|
+| **macOS** | `~/.mnemos/do/fs` (`#!/bin/sh`, `+x`) | directly via its shebang | **supported, tested** — Spotlight (`mdfind`) fast-path |
+| **Linux** | `~/.mnemos/do/fs` (`#!/bin/sh`, `+x`) | directly via its shebang | **supported, tested** — `find` fallback |
+| **Windows** | `~/.mnemos/do/fs.ps1` | `powershell -NoProfile -File fs.ps1 <arg>` | **supported, community-tested** — `Get-ChildItem` walk |
+
+The same `<verb>.json` manifest serves all three; only the script file differs. The dispatcher
+prefers `<verb>` / `<verb>.sh` on POSIX and `<verb>.ps1` / `<verb>.exe` on Windows
+(`.cmd`/`.bat` are intentionally unsupported — Node blocks spawning them without a shell, and
+`cmd.exe` quoting is injection-prone). The sanitized environment is per-OS (POSIX: a fixed
+`PATH` + `$HOME`; Windows: `System32` on `Path`, `PATHEXT`, `%USERPROFILE%`), and the
+timeout's tree-kill is per-OS too (POSIX process group; Windows `taskkill /T`). `examples/do/`
+ships both `fs` (POSIX) and `fs.ps1` (Windows). Windows globbing supports `*` and `?` (not
+`[…]` classes), and lacks a Spotlight-style index, so the Windows walk is slower than macOS.
+
 ---
 
 ## 3. The working set — RAG you assemble on demand

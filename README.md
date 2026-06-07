@@ -105,7 +105,7 @@ You can't index five terabytes of disk, so the useful pattern is to **find a fil
 - **`/do rag <n>`** — add the files you picked to the index, on demand. It **upserts by content hash** (new → added, unchanged → skipped, changed → re-indexed — never a duplicate), runs in the background, and tells you when they're searchable (`/do rag status`).
 - **A write is gated by a proof-of-human PIN** — a secret the model can't produce — and every `/do` action is audited. Reads stay free.
 
-Adding your own verb is a documented contract with an adversarial test protocol: see **[`docs/agent/DO.md`](docs/agent/DO.md)** and **[`docs/agent/do-spec.md`](docs/agent/do-spec.md)**, with a runnable example in [`examples/do/`](examples/do/).
+Works on **macOS, Linux, and Windows** — a verb is an OS-native script (a `#!/bin/sh` file on macOS/Linux, a PowerShell `.ps1` on Windows), and the runner picks the right one for your platform. Adding your own verb is a documented contract with an adversarial test protocol: see **[`docs/agent/DO.md`](docs/agent/DO.md)** and **[`docs/agent/do-spec.md`](docs/agent/do-spec.md)**, with runnable examples in [`examples/do/`](examples/do/).
 
 ## Smart model routing — switch models with one character
 

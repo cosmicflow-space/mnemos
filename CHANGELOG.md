@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-06-07
+
+### Added
+- **`/do` is now cross-platform.** A verb is an OS-native executable, so the runner resolves and runs it per platform: macOS/Linux run `~/.mnemos/do/<verb>` directly via its shebang; Windows runs `~/.mnemos/do/<verb>.ps1` through `powershell -NoProfile -File` (or a `<verb>.exe`). The `<verb>.json` manifest is shared across platforms. The sanitized environment and the timeout's tree-kill are per-OS (POSIX process group; Windows `taskkill /T`). `examples/do/` now ships a Windows `fs.ps1` alongside the POSIX `fs`, and the docs carry a per-OS support table. (`.cmd`/`.bat` verbs are intentionally unsupported — Node blocks spawning them without a shell and `cmd.exe` quoting is injection-prone.)
+
+### Fixed
+- **Glob argument validation now rejects a leading dash**, matching the documented contract — a `-`-prefixed pattern would otherwise be read as an option by PowerShell (`-File … -foo`) and some POSIX tools.
+
 ## [0.17.0] - 2026-06-07
 
 ### Added
