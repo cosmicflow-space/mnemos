@@ -1,0 +1,7 @@
+{
+  "tier": "read",
+  "summary": "Find files under your home directory by name or glob.",
+  "usage": "/do fs <name-or-glob>",
+  "args": { "kind": "single", "shape": "glob", "required": true },
+  "role": "producer"
+}

@@ -1,0 +1,66 @@
+#!/bin/sh
+# /do fs <glob> — find files under $HOME whose NAME matches <glob>.
+#
+# Contract (see docs/agent/do-spec.md):
+#   • The argument arrives as $1. The dispatcher validates it to a bare glob
+#     (letters/digits/. _ - * ? [ ]) with no '/', no '..', no quotes — so it is a
+#     NAME to match, never a path and never query/shell syntax.
+#   • $1 is matched as DATA: handed to `find` as a literal -name pattern, or
+#     interpolated into a Spotlight predicate after the quote-guard below.
+#   • Producer contract: one ABSOLUTE path per line on stdout, diagnostics on
+#     stderr, exit 0 even when nothing matches.
+#
+# READ-only: it observes file names. It never opens contents, never writes, moves,
+# or deletes. Granting a file to the index is the SEPARATE, PIN-gated `/do rag`.
+
+set -u
+
+pattern="${1:?usage: fs <glob>}"
+limit=50
+
+# Defense in depth: the dispatcher already rejects quotes, but a standalone run
+# must not let one break out of the Spotlight predicate. (mdfind is a query
+# language, not a shell — worst case is a bad query — but fail closed anyway.)
+case "$pattern" in
+  *"'"* | *'"'* ) echo "fs: illegal character in pattern" >&2; exit 2 ;;
+esac
+
+# Drop sensitive + noisy trees from results (same set for both backends).
+filter() {
+  grep -v \
+    -e '/node_modules/' -e '/Library/' -e '/\.git/' -e '/\.Trash/' \
+    -e '/\.cache/' -e '/\.npm/' -e '/\.pnpm-store/' \
+    -e '/\.ssh/' -e '/\.gnupg/' -e '/\.aws/'
+}
+
+# Cap at $limit absolute paths; note overflow on stderr (producer contract).
+# Only regular files: Spotlight (mdfind) can return directories/bundles, whereas
+# `rag` adds files — filtering here keeps the list consistent with what's addable.
+emit() {
+  count=0
+  while IFS= read -r path; do
+    [ -f "$path" ] || continue
+    count=$((count + 1))
+    if [ "$count" -gt "$limit" ]; then
+      echo "…more than $limit matches; narrow the pattern (e.g. add an extension)." >&2
+      break
+    fi
+    printf '%s\n' "$path"
+  done
+}
+
+if command -v mdfind >/dev/null 2>&1 && mdutil -s / 2>/dev/null | grep -q "Indexing enabled"; then
+  # Fast path: Spotlight's prebuilt index (sub-second vs. tens of seconds walking
+  # the tree). The 'wc' modifiers give wildcard + case-insensitive matching, so a
+  # glob like policy*.pdf works as written.
+  mdfind -onlyin "$HOME" "kMDItemFSName == '$pattern'wc" 2>/dev/null | filter | emit
+else
+  # Portable fallback: walk $HOME, pruning heavy/sensitive dirs for speed + signal.
+  find "$HOME" \
+    \( -name node_modules -o -name .git -o -name Library \
+       -o -name .Trash -o -name .cache -o -name .npm -o -name .pnpm-store \
+       -o -name .ssh -o -name .gnupg -o -name .aws \) -prune \
+    -o -type f -name "$pattern" -print 2>/dev/null | filter | emit
+fi
+
+exit 0

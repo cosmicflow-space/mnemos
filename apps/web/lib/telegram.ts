@@ -32,6 +32,7 @@ import {
   isTelegramChatPaired,
   getTelegramChatSession,
   setTelegramChatSession,
+  appendAudit,
 } from "@mnemos/db";
 import { getDb, getRegistry, getDefaultEmbedder } from "./runtime";
 import {
@@ -40,6 +41,18 @@ import {
   credentialsForProvider,
 } from "./config";
 import { parseQueryRoute, isFrontierTier, type RouteTier } from "./query-routing";
+import { listVerbs, runVerb, parseSelection } from "./do-runner";
+import {
+  setBuffer,
+  getBuffer,
+  setPending,
+  getPending,
+  clearPending,
+  setRagStatus,
+  getRagStatus,
+} from "./do-state";
+import { pinExists, setPin, verify as verifyPin, windowValid, lockedMs, getCadence } from "./do-pin";
+import { addPathsToRag, type RagOutcome } from "./do-rag";
 import { resolveFrontierModel } from "./model-routing";
 import { formatTipsText } from "./input-tips";
 import { computeCostReport, formatCostText } from "./cost-stats";
@@ -213,12 +226,274 @@ async function handleUpdate(token: string, update: TgUpdate): Promise<void> {
     await tgSend(token, chatId, formatCostText(report));
     return;
   }
+  if (/^\/do(@\S+)?(\s|$)/i.test(text)) {
+    await handleDo(token, chatId, text.replace(/^\/do(@\S+)?\s*/i, "").trim());
+    return;
+  }
   if (text.startsWith("/")) {
     await tgSend(token, chatId, "Unknown command. Just send a question, or /new to reset.");
     return;
   }
 
+  // A 6-digit message answers a pending PIN gate (a parked write), if any.
+  if (/^\d{6}$/.test(text) && (await tryPinReply(token, chatId, text))) {
+    return;
+  }
+
   await answerQuestion(token, chatId, text);
+}
+
+/**
+ * `/do` — run a read-only Mnemos alias (a vetted script in ~/.mnemos/do/).
+ * Bare `/do` lists available aliases; `/do <verb> <glob>` runs one. Read-only:
+ * verbs that mutate the index are refused here (see lib/do-runner.ts).
+ */
+const DO_TELEGRAM_LIMIT = 25; // keep the message well under Telegram's 4096-char cap
+const RAG_BULK_THRESHOLD = 10; // adding more than this at once is an anomaly → force a PIN
+
+function chatKey(chatId: number): string {
+  return `tg:${chatId}`;
+}
+
+/**
+ * Audit every `/do` action — the operator's source of truth for what the system
+ * actually did (e.g. which files a write added), which is part of why exposing
+ * `/do` over Telegram is justifiable. Best-effort: never block the user action.
+ * NEVER logs PIN digits.
+ */
+function auditDo(chatId: number, event: string, data: Record<string, unknown>): void {
+  try {
+    appendAudit(getDb(), event, { channel: "telegram", chatId, ...data });
+  } catch {
+    /* audit must not break the action */
+  }
+}
+
+async function handleDo(token: string, chatId: number, rest: string): Promise<void> {
+  if (!rest) {
+    const verbs = await listVerbs();
+    const lines = verbs.map((v) => `• ${v.name} — ${v.summary}`);
+    lines.push("• rag — add files you found to the index (PIN-gated)");
+    await tgSend(
+      token,
+      chatId,
+      `Mnemos aliases:\n${lines.join("\n")}\n\nUse: /do fs <name>, then /do rag <n>.`,
+    );
+    return;
+  }
+
+  const sp = rest.indexOf(" ");
+  const verb = (sp === -1 ? rest : rest.slice(0, sp)).trim().toLowerCase();
+  const arg = sp === -1 ? "" : rest.slice(sp + 1).trim();
+
+  if (verb === "rag") return handleRag(token, chatId, arg);
+  if (verb === "pin") return handlePin(token, chatId, arg);
+  if (verb === "status") return handleRagStatus(token, chatId);
+
+  // A read-tier script verb (e.g. fs). A producer's output becomes the buffer.
+  const res = await runVerb(verb, arg);
+  if (!res.ok) {
+    await tgSend(token, chatId, `⚠️ ${res.error}`);
+    return;
+  }
+  if (res.lines.length === 0) {
+    await tgSend(token, chatId, `No files match "${arg}".`);
+    return;
+  }
+  setBuffer(chatKey(chatId), verb, res.lines);
+  auditDo(chatId, "do_verb", { verb, arg, resultCount: res.lines.length, truncated: res.truncated });
+
+  const shown = res.lines.slice(0, DO_TELEGRAM_LIMIT);
+  const numbered = shown.map((p, i) => `[${i + 1}] ${p}`).join("\n");
+  const overflow =
+    res.truncated || res.lines.length > shown.length
+      ? `\n…more matches — narrow the pattern (e.g. add an extension).`
+      : "";
+  await tgSend(
+    token,
+    chatId,
+    `${res.lines.length} match(es) for "${arg}":\n${numbered}${overflow}\n\nAdd to the index: /do rag <n> · 1-3 · all`,
+  );
+}
+
+/** `/do rag <sel>` — add buffer-selected files to the index, behind the PIN. */
+async function handleRag(token: string, chatId: number, arg: string): Promise<void> {
+  if (arg.trim().toLowerCase() === "status") return handleRagStatus(token, chatId);
+
+  const key = chatKey(chatId);
+  const buf = getBuffer(key);
+  if (!buf || buf.items.length === 0) {
+    await tgSend(token, chatId, "Nothing to add yet — run /do fs <name> first, then /do rag <n>.");
+    return;
+  }
+  const sel = parseSelection(arg, buf.items.length);
+  if ("error" in sel) {
+    await tgSend(token, chatId, `⚠️ ${sel.error}`);
+    return;
+  }
+  if (sel.indices.length === 0) {
+    await tgSend(token, chatId, "No files selected.");
+    return;
+  }
+  const paths = sel.indices.map((i) => buf.items[i - 1]).filter((p): p is string => Boolean(p));
+
+  if (!pinExists()) {
+    await tgSend(
+      token,
+      chatId,
+      "🔒 Set a PIN once to enable adding files: reply  /do pin <6 digits>  (it guards every add).",
+    );
+    return;
+  }
+  const locked = lockedMs();
+  if (locked > 0) {
+    await tgSend(token, chatId, `🔒 Too many wrong PINs. Try again in ${Math.ceil(locked / 60000)} min.`);
+    return;
+  }
+
+  const anomaly = paths.length > RAG_BULK_THRESHOLD;
+  const prompted = !(windowValid() && !anomaly);
+  auditDo(chatId, "do_rag_attempt", { count: paths.length, anomaly, prompted });
+  if (!prompted) {
+    await startRag(token, chatId, paths);
+    return;
+  }
+  setPending(key, { verb: "rag", paths });
+  const why = anomaly ? ` (${paths.length} files at once)` : "";
+  await tgSend(
+    token,
+    chatId,
+    `🔒 Reply with your 6-digit PIN to add ${paths.length} file(s)${why}. ` +
+      `(Your reply is visible in chat history — you can delete it after.)`,
+  );
+}
+
+/** A 6-digit reply to a parked write. Returns true if it consumed the message. */
+async function tryPinReply(token: string, chatId: number, digits: string): Promise<boolean> {
+  const key = chatKey(chatId);
+  const pending = getPending(key);
+  if (!pending) return false;
+  const res = verifyPin(digits);
+  auditDo(chatId, "do_pin", {
+    ok: res.ok,
+    locked: !res.ok && res.lockedMs != null,
+    attemptsLeft: !res.ok ? (res.attemptsLeft ?? null) : null,
+  });
+  if (!res.ok) {
+    clearPending(key);
+    const msg =
+      res.lockedMs != null
+        ? `❌ Wrong PIN — locked for ${Math.ceil(res.lockedMs / 60000)} min.`
+        : `❌ Wrong PIN${res.attemptsLeft != null ? ` (${res.attemptsLeft} left)` : ""}. Re-run /do rag to try again.`;
+    await tgSend(token, chatId, msg);
+    return true;
+  }
+  clearPending(key);
+  await startRag(token, chatId, pending.paths);
+  return true;
+}
+
+/**
+ * Kick the ingest in the BACKGROUND and reply immediately. Awaiting the ingest
+ * here would block the single-threaded poller (and the user) until a large file
+ * finished chunking — so we acknowledge now, record status, and send a "ready"
+ * follow-up when it completes. `/do rag status` reports progress meanwhile.
+ */
+async function startRag(token: string, chatId: number, paths: string[]): Promise<void> {
+  const key = chatKey(chatId);
+  const names = paths.map((p) => p.split("/").pop() ?? p);
+  setRagStatus(key, "chunking", { files: names });
+  await tgSend(
+    token,
+    chatId,
+    `⏳ Adding ${paths.length} file(s) — chunking now. I'll say when they're ready (or check /do rag status).`,
+  );
+
+  // Fire-and-forget: the poller moves on; this resolves on the event loop.
+  void addPathsToRag(paths)
+    .then(async (outcome) => {
+      setRagStatus(key, "done", {
+        added: outcome.added.length,
+        updated: outcome.updated.length,
+        unchanged: outcome.unchanged.length,
+        failed: outcome.failed.length,
+        chunks: outcome.chunks,
+        files: names,
+      });
+      auditDo(chatId, "do_rag_done", {
+        added: outcome.added.length,
+        updated: outcome.updated.length,
+        unchanged: outcome.unchanged.length,
+        failed: outcome.failed.length,
+        chunks: outcome.chunks,
+      });
+      await tgSend(token, chatId, `✅ Ready — ${formatRag(outcome)}`);
+    })
+    .catch(async (err) => {
+      setRagStatus(key, "error", { message: err instanceof Error ? err.message : String(err) });
+      await tgSend(token, chatId, `⚠️ ${err instanceof Error ? err.message : String(err)}`).catch(() => {});
+    });
+}
+
+/** `/do rag status` — what's chunking now, and what was added recently. */
+async function handleRagStatus(token: string, chatId: number): Promise<void> {
+  const status = getRagStatus(chatKey(chatId));
+  if (!status) {
+    await tgSend(token, chatId, "Nothing added yet. Use /do fs <name>, then /do rag <n>.");
+    return;
+  }
+  const ago = Math.max(0, Math.round((Date.now() - status.updatedAt) / 1000));
+  const files = Array.isArray(status.detail.files) ? (status.detail.files as string[]) : [];
+  const list = files.length ? `\n${files.map((f) => `• ${f}`).join("\n")}` : "";
+
+  if (status.state === "chunking") {
+    await tgSend(token, chatId, `⏳ Chunking now (started ${ago}s ago):${list}`);
+  } else if (status.state === "error") {
+    await tgSend(token, chatId, `⚠️ Last add failed: ${String(status.detail.message ?? "unknown")}`);
+  } else {
+    const chunks = typeof status.detail.chunks === "number" ? status.detail.chunks : 0;
+    await tgSend(
+      token,
+      chatId,
+      `✅ Ready (${ago}s ago) — ${chunks} chunk(s) embedded, searchable now.${list}`,
+    );
+  }
+}
+
+function formatRag(o: RagOutcome): string {
+  const parts: string[] = [];
+  if (o.added.length) parts.push(`✅ added ${o.added.length}`);
+  if (o.updated.length) parts.push(`♻️ re-indexed ${o.updated.length}`);
+  if (o.unchanged.length) parts.push(`↩️ already up to date ${o.unchanged.length}`);
+  if (o.failed.length) parts.push(`⚠️ failed ${o.failed.length}`);
+  const head = parts.length ? parts.join(" · ") : "nothing to do";
+  const chunks = o.chunks > 0 ? `\n${o.chunks} chunk(s) embedded — now searchable.` : "";
+  const fails = o.failed.length
+    ? `\n${o.failed.map((f) => `• ${f.path.split("/").pop()}: ${f.reason}`).join("\n")}`
+    : "";
+  return `${head}.${chunks}${fails}`;
+}
+
+/** `/do pin <6 digits>` — set the write PIN the first time (one-time bootstrap). */
+async function handlePin(token: string, chatId: number, arg: string): Promise<void> {
+  const digits = arg.trim();
+  if (!/^\d{6}$/.test(digits)) {
+    await tgSend(token, chatId, "Usage: /do pin <6 digits> — e.g. /do pin 246810");
+    return;
+  }
+  if (pinExists()) {
+    await tgSend(token, chatId, "A PIN is already set. Change it in the Mnemos web app.");
+    return;
+  }
+  setPin(digits);
+  auditDo(chatId, "do_pin_set", { via: "telegram" });
+  await tgSend(
+    token,
+    chatId,
+    `✅ PIN set (re-asked ${getCadence()}, or on an unusual add). It guards adding files to the index.\n\n` +
+      `⚠️ Security: this PIN is now a reusable write secret sitting in your Telegram history — ` +
+      `delete that message now. For the most private setup, set or change your PIN in the Mnemos web app instead.`,
+  );
 }
 
 async function answerQuestion(token: string, chatId: number, question: string): Promise<void> {
