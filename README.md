@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node: 22+](https://img.shields.io/badge/Node-22%2B-339933.svg)](https://nodejs.org/)
-[![Status: v0.16](https://img.shields.io/badge/Status-v0.16-cyan.svg)](CHANGELOG.md)
+[![Status: v0.17](https://img.shields.io/badge/Status-v0.17-cyan.svg)](CHANGELOG.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-cyan.svg)](CONTRIBUTING.md)
 
 Built by **[Sam Muthu](https://sammuthu.com)** · [Read the project write-up →](https://sammuthu.com/ai-ml/mnemos)
@@ -96,6 +96,16 @@ Set it up in **Settings → 📲 Telegram** (there's a built-in [step-by-step gu
 </p>
 
 > WhatsApp is on the radar but not yet supported — there's no free, local-first-friendly bot API for it the way Telegram offers.
+
+## Pull files in on demand — `/do`
+
+You can't index five terabytes of disk, so the useful pattern is to **find a file and add it when you need it** — including from your phone. `/do` does that with one new verb, and it is deliberately **not** "let an AI run shell commands." It is *capability-by-catalog*: a verb is a small, **you-authored, pre-tested script** in `~/.mnemos/do/` (the whole action surface is `ls ~/.mnemos/do/`). The model or you only pick a verb and supply a **validated** argument, run with no shell — there is no arbitrary command to analyze because there is no arbitrary command.
+
+- **`/do fs <name>`** — find files by name across your home directory (Spotlight-fast, with a `find` fallback), returned as a numbered list. Read-only: it sees *names*, never contents.
+- **`/do rag <n>`** — add the files you picked to the index, on demand. It **upserts by content hash** (new → added, unchanged → skipped, changed → re-indexed — never a duplicate), runs in the background, and tells you when they're searchable (`/do rag status`).
+- **A write is gated by a proof-of-human PIN** — a secret the model can't produce — and every `/do` action is audited. Reads stay free.
+
+Adding your own verb is a documented contract with an adversarial test protocol: see **[`docs/agent/DO.md`](docs/agent/DO.md)** and **[`docs/agent/do-spec.md`](docs/agent/do-spec.md)**, with a runnable example in [`examples/do/`](examples/do/).
 
 ## Smart model routing — switch models with one character
 

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-06-07
+
+### Added
+- **`/do` — pull files into the index on demand, from your desk or your phone.** A single new chat verb alongside the `!`/`+` prefixes, for the case plain ingest doesn't cover: you can't index five terabytes, so *find a file and add it when you need it*. `/do` is deliberately **not** "an AI runs shell commands" — it is **capability-by-catalog**: a verb is a small, user-authored, pre-tested script in `~/.mnemos/do/<verb>` (the whole action surface is `ls ~/.mnemos/do/`). The model/user only picks a verb and supplies a **validated glob argument**, run via `execFile` (no shell is ever constructed from input) with a sanitized environment and a process-group kill.
+  - **`fs`** (read) finds files by name under `$HOME` — a Spotlight (`mdfind`) fast-path with a `find` fallback, regular files only, sensitive trees pruned, output capped — and fills a per-conversation selection buffer. Reads only observe names, so they need no gate and work on any authenticated surface.
+  - **`rag`** (write) adds the files you pick to the index on demand, reusing the existing ingest pipeline, so it **upserts by content hash**: a new file is added, an unchanged one is skipped ("already up to date"), a changed one is re-indexed — never a duplicate chunk. Containment is re-validated at write time (`realpath` under `$HOME`, symlinks rejected). It runs in the background with a readiness follow-up, and `/do rag status` reports progress.
+  - **Proof-of-human PIN** (`~/.mnemos/.pin.json`, scrypt-hashed, chmod 600) gates writes — a secret the model can't produce, with a global daily cadence window, a bulk-add anomaly tripwire, and lockout with persisted state. Setting or entering the PIN over Telegram warns about chat-history retention.
+  - Every `/do` action writes an audit row (verb runs, write attempts, PIN outcomes, `rag` completion); digits are never logged. Design and the verb-authoring contract live in `docs/agent/DO.md` and `docs/agent/do-spec.md`; `examples/do/` ships a runnable `fs` verb.
+
 ## [0.16.0] - 2026-06-01
 
 ### Added
