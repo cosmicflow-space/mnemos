@@ -16,6 +16,8 @@ Built by **[Sam Muthu](https://sammuthu.com)** · [Read the project write-up →
 > 🚧 **You're on `mnemos-agent` — a work-in-progress feature branch, not `main`.**
 > This is where Mnemos grows from a RAG tool into a **safe, read-only _investigative agent_**. It's not yet merged — actively being built and tested — but it's the clearest view of where the project is headed. Deep dives: **[Agent architecture](docs/agent/ARCHITECTURE.md)** · **[Security posture](docs/agent/SECURITY-POSTURE.md)**.
 
+> 📌 **Note — 2026-06-07: this branch is paused for review.** Active development has moved to a new branch, **`mnemos-do`**, exploring a simpler and more predictable direction: a single **`/do <verb>`** command that runs small, user-approved scripts — for example `fs` to find files on disk and `rag` to add them to the index **on demand** — behind a PIN-based guard rail. The aim is on-demand, working-set RAG you assemble per task rather than a standing index. While we review the agent design here and build `/do` over there, **`mnemos-agent` is intentionally frozen** — that's why you won't see new commits on this branch for now.
+
 ## What `/agent` is — and why it's more than RAG
 
 Mnemos has four ways to ask, and the agent is the one that does real work:
