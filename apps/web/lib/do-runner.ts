@@ -47,6 +47,9 @@ const VERB_RE = /^[a-z0-9_-]+$/;
 // A bare glob: letters/digits and . _ - * ? [ ] only. No '/', no '..', no quotes,
 // no whitespace — a NAME to match, never a path or query/shell syntax.
 const GLOB_RE = /^[A-Za-z0-9._*?[\]-]+$/;
+// A fuzzy search query: the glob set PLUS spaces, so "Land Rover" works. The verb
+// tokenizes it. Still no '/', '\', '..', or quotes (validated below).
+const SEARCH_RE = /^[A-Za-z0-9 ._*?[\]-]+$/;
 
 const IS_WIN = process.platform === "win32";
 
@@ -105,15 +108,21 @@ async function resolveScript(verb: string): Promise<Resolved | null> {
 const TIMEOUT_MS = 30_000;
 const MAX_OUTPUT = 4 * 1024 * 1024;
 
-function validateGlob(arg: string): string | null {
-  if (!arg) return "add a name to search for, e.g. /do fs report*.pdf";
+function validateArg(arg: string, shape: string): string | null {
+  if (!arg) return "add a name to search for, e.g. /do fs land rover";
   if (arg.length > 200) return "search term is too long";
-  if (arg.includes("..")) return "invalid pattern";
+  if (arg.includes("..") || arg.includes("/") || arg.includes("\\")) {
+    return "use a file's name, not a path (no slashes)";
+  }
+  if (/["']/.test(arg)) return "quotes aren't allowed";
   // A leading dash would be read as an option by PowerShell (`-File … -foo`) and
-  // some POSIX tools; the documented `glob` contract forbids it.
-  if (arg.startsWith("-")) return "pattern can't start with a dash";
-  if (!GLOB_RE.test(arg)) {
-    return "pattern may contain only letters, digits, and . _ - * ? [ ] (no slashes or spaces)";
+  // some POSIX tools.
+  if (arg.startsWith("-")) return "can't start with a dash";
+  const ok = shape === "search" ? SEARCH_RE.test(arg) : GLOB_RE.test(arg);
+  if (!ok) {
+    return shape === "search"
+      ? "use letters, digits, spaces, and . _ - * ? only"
+      : "pattern may contain only letters, digits, and . _ - * ? [ ] (no slashes or spaces)";
   }
   return null;
 }
@@ -266,7 +275,7 @@ export async function runVerb(verb: string, arg: string): Promise<RunResult> {
     return { ok: false, error: `"${verb}" changes the index — it isn't available from Telegram yet.` };
   }
 
-  const bad = validateGlob(arg);
+  const bad = validateArg(arg, manifest.args?.shape ?? "glob");
   if (bad) return { ok: false, error: bad };
 
   const { code, stdout, stderr, timedOut, capped } = await execVerb(resolved, arg);

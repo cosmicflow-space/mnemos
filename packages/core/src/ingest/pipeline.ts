@@ -20,8 +20,13 @@ import {
   purgeFileChunks,
   getMetadataChunkText,
   deleteMetadataChunk,
+  fileContentChars,
   appendAudit,
 } from "@mnemos/db";
+
+// Below this many chars of indexed content, a file is "metadata-only" — used by
+// repairMetadataOnly to decide which files to re-extract.
+const METADATA_ONLY_CHARS = 20;
 import type { EmbeddingProvider } from "@mnemos/plugin-sdk";
 import { hashFile } from "./hash";
 import { chunkText } from "./chunker";
@@ -111,6 +116,18 @@ export type IngestFolderOptions = {
    * user-initiated runs (manual re-scan / resume); the background watcher leaves
    * it off so a poison/oversized/offline file isn't re-burned every tick. */
   retryFailed?: boolean;
+  /** Force re-extraction even when a file is unchanged AND already complete —
+   * bypasses the hash-skip so the loader runs again. Used by `/reindex` to retry
+   * a file that ended up metadata-only (e.g. after a loader was improved). */
+  force?: boolean;
+  /** Re-extract ONLY the files in this source that are currently metadata-only
+   * (no readable content) — leaving healthy files hash-skipped. Lets `/reindex`
+   * cheaply repair empty files without re-embedding the whole source. */
+  repairMetadataOnly?: boolean;
+  /** Process ONLY the file at this source-relative path (skip all others in the
+   * scan). Lets `/reindex` re-extract a single focused file without touching the
+   * rest of a folder source. */
+  onlyRelPath?: string;
 };
 
 function humanSize(bytes: number): string {
@@ -198,6 +215,8 @@ export async function ingestFolder(
   // given the user's per-tier opt-ins. Hard-locked security files were never
   // in scan.files in the first place.
   const candidates = scan.files.filter((f) => {
+    // Single-file targeting (`/reindex` of one focused file): skip everything else.
+    if (opts.onlyRelPath != null && f.relativePath !== opts.onlyRelPath) return false;
     if (f.classification.category !== "supported") return false;
     if (excludeLabels.has(f.classification.label)) return false;
     if (!includeLargeFiles && f.sizeBytes > LARGE_FILE_BYTES) return false;
@@ -289,7 +308,13 @@ export async function ingestFolder(
     // poison / oversized / offline-OCR file isn't re-attempted (and re-burned)
     // every watcher tick. A user-initiated run (retryFailed) re-attempts it, as
     // does any content change (hash differs → not skipped here).
-    if (!upsertResult.changed && upsertResult.ingestStatus === "failed" && !opts.retryFailed) {
+    if (
+      !upsertResult.changed &&
+      upsertResult.ingestStatus === "failed" &&
+      !opts.retryFailed &&
+      !opts.repairMetadataOnly &&
+      !opts.force
+    ) {
       filesSkipped += 1;
       onProgress({ phase: "file-skipped", filePath: file.relativePath, reason: "load-error", current, total });
       continue;
@@ -299,7 +324,15 @@ export async function ingestFolder(
     // ingested to completion. Pending/partial states force a re-process even
     // when the hash hasn't moved — this is the atomic-ingest guarantee that
     // prevents mid-file crashes from leaving permanently corrupt indexes.
-    if (!upsertResult.changed && upsertResult.ingestStatus === "complete") {
+    // repairMetadataOnly re-extracts only files that are currently empty (so an
+    // improved loader can recover them) while leaving healthy files hash-skipped.
+    const repairThisFile =
+      opts.repairMetadataOnly === true &&
+      !upsertResult.changed &&
+      upsertResult.ingestStatus === "complete" &&
+      fileContentChars(db, upsertResult.fileId) < METADATA_ONLY_CHARS;
+
+    if (!opts.force && !repairThisFile && !upsertResult.changed && upsertResult.ingestStatus === "complete") {
       // Backfill the metadata chunk for files ingested before this feature
       // existed. upsertMetadataChunk no-ops if one is already present, so this
       // re-embeds nothing on steady-state re-scans — it only fills the gap once.

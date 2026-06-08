@@ -22,6 +22,7 @@ import {
   searchVerifiedAnswers,
   getChunksByIds,
   getContentChunksForFile,
+  countChunksForFile,
   getCorpusStats,
   type MnemosDb,
   type SearchHit,
@@ -67,6 +68,8 @@ export type QueryEvent =
       hits: Array<{
         ref: number;
         chunkId: number;
+        /** The file this chunk belongs to — lets a caller offer `/focus <n>` on a cited source. */
+        fileId: number;
         filePath: string;
         sourcePath: string;
         snippet: string;
@@ -110,7 +113,16 @@ export type RunQueryOptions = {
    * injection. The model answers from its own knowledge + conversation memory,
    * plus a session-facts note. No document content leaves the machine. */
   direct?: boolean;
+  /** File Focus Mode: scope retrieval to these file ids only. A small focused
+   * file is loaded WHOLE (all content chunks, in order) so summarize/explore
+   * work; a large one falls back to vector search within it. Ignored in `direct`
+   * mode (which bypasses retrieval entirely). */
+  scopeFileIds?: number[];
 };
+
+// In focus mode, load the whole file when its content fits this many chunks
+// (~8–16k tokens for typical chunk sizes); above it, scope vector search instead.
+const FOCUS_WHOLE_FILE_BUDGET = 40;
 
 export async function* runQuery(
   db: MnemosDb,
@@ -143,6 +155,68 @@ export async function* runQuery(
     const { messages } = assembleDirectPrompt(opts.query, memory, sessionFacts);
     yield { phase: "retrieved", hits: [] };
     yield* streamAndPersist(db, chat, messages, [], undefined, opts, start);
+    return;
+  }
+
+  // File Focus Mode: retrieval is scoped to the chosen file(s). A small focused
+  // file is loaded WHOLE (every content chunk, in order) so "summarize this" /
+  // "what does it say about X" work; a large one falls back to vector search
+  // WITHIN the file. No metadata-expansion, corpus, or verified-answer injection —
+  // the answer comes only from the focused file(s). Whole-file load needs no
+  // embedder, so this runs before the embedder guard below.
+  if (opts.scopeFileIds && opts.scopeFileIds.length > 0) {
+    const ids = opts.scopeFileIds;
+    const totalContent = ids.reduce((n, id) => n + countChunksForFile(db, id), 0);
+    let hits: SearchHit[] = [];
+
+    if (totalContent > 0 && totalContent <= FOCUS_WHOLE_FILE_BUDGET) {
+      hits = ids.flatMap((id) => getContentChunksForFile(db, id, FOCUS_WHOLE_FILE_BUDGET, 0));
+    } else {
+      // Large (or unknown-size) focused file: scope vector search to it. Retrieve
+      // wide globally, then keep only the focused file's chunks. Needs the embedder.
+      if (!embedder) {
+        yield { phase: "error", message: "Embedder unavailable — /done to leave focus and ask directly with !." };
+        return;
+      }
+      let qv: number[];
+      try {
+        const [v] = await embedder.embed([opts.query]);
+        if (!v) throw new Error("Embedder returned empty vector");
+        qv = v;
+      } catch (err) {
+        yield { phase: "error", message: `embed failed: ${err instanceof Error ? err.message : String(err)}` };
+        return;
+      }
+      const idset = new Set(ids);
+      hits = vecSearch(db, qv, Math.max(topK * 6, 48)).filter((h) => idset.has(h.fileId)).slice(0, topK);
+      // Query unrelated to the file's content → fall back to the file's opening chunks
+      // so there's always grounded context to answer/summarize from.
+      if (hits.length === 0) hits = ids.flatMap((id) => getContentChunksForFile(db, id, topK, 0));
+    }
+
+    yield {
+      phase: "retrieved",
+      hits: hits.map((h, idx) => ({
+        ref: idx + 1,
+        chunkId: h.chunkId,
+        fileId: h.fileId,
+        filePath: h.filePath,
+        sourcePath: h.sourcePath,
+        snippet: h.text.length > 200 ? `${h.text.slice(0, 200)}…` : h.text,
+        text: h.text,
+        fileMtime: h.fileMtime,
+        startOffset: h.startOffset,
+        endOffset: h.endOffset,
+        distance: h.distance,
+      })),
+    };
+
+    const focusMemory = getRecentMessages(db, opts.sessionId, memoryTurns).map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+    const { messages } = assemblePrompt(opts.query, hits, focusMemory, undefined, undefined);
+    yield* streamAndPersist(db, chat, messages, hits, undefined, opts, start);
     return;
   }
 
@@ -229,6 +303,7 @@ export async function* runQuery(
     hits: hits.map((h, idx) => ({
       ref: idx + 1,
       chunkId: h.chunkId,
+      fileId: h.fileId,
       filePath: h.filePath,
       sourcePath: h.sourcePath,
       snippet: h.text.length > 200 ? `${h.text.slice(0, 200)}…` : h.text,
@@ -380,6 +455,7 @@ async function* streamAndPersist(
     completionLength: assistantText.length,
     durationMs,
     direct: opts.direct ?? false,
+    ...(opts.scopeFileIds?.length ? { focusFileIds: opts.scopeFileIds } : {}),
   });
 
   yield {

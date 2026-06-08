@@ -47,6 +47,9 @@ export {
   insertChunk,
   vecSearch,
   getContentChunksForFile,
+  findIndexedFilesByName,
+  fileContentChars,
+  getFileLocation,
   getCorpusStats,
   getChunksByIds,
   type ChunkDetail,
@@ -104,4 +107,6 @@ export {
   type UpsertCredentialInput,
   type AppendMessageInput,
   type SearchHit,
+  type IndexedFile,
+  type FileLocation,
 } from "./crud";

@@ -22,6 +22,9 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { readFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { runQuery, getChatProvider } from "@mnemos/core";
 import {
   createSession,
@@ -32,7 +35,11 @@ import {
   isTelegramChatPaired,
   getTelegramChatSession,
   setTelegramChatSession,
+  listTelegramChats,
   appendAudit,
+  findIndexedFilesByName,
+  fileContentChars,
+  getFileLocation,
 } from "@mnemos/db";
 import { getDb, getRegistry, getDefaultEmbedder } from "./runtime";
 import {
@@ -50,9 +57,16 @@ import {
   clearPending,
   setRagStatus,
   getRagStatus,
+  setFocus,
+  getFocus,
+  clearFocus,
+  setCited,
+  getCited,
+  clearCited,
+  type FocusFile,
 } from "./do-state";
 import { pinExists, setPin, verify as verifyPin, windowValid, lockedMs, getCadence } from "./do-pin";
-import { addPathsToRag, type RagOutcome } from "./do-rag";
+import { addPathsToRag, reindexFile, type RagOutcome } from "./do-rag";
 import { resolveFrontierModel } from "./model-routing";
 import { formatTipsText } from "./input-tips";
 import { computeCostReport, formatCostText } from "./cost-stats";
@@ -89,6 +103,7 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref?.
 async function loop(): Promise<void> {
   // Runs for the life of the process. Idles cheaply until a token is present
   // and the channel is enabled, so it's safe to start unconditionally.
+  let announcedThisBoot = false;
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const token = (process.env.MNEMOS_TELEGRAM_BOT_TOKEN ?? "").trim();
@@ -104,6 +119,13 @@ async function loop(): Promise<void> {
     if (!token || !enabled) {
       await sleep(IDLE_MS);
       continue;
+    }
+
+    // First time the channel is live this boot: deliver any pending deploy
+    // announcement (a reliable "deployment is done" ping to the operator's phone).
+    if (!announcedThisBoot) {
+      announcedThisBoot = true;
+      await sendBootAnnounce(token).catch(() => {});
     }
 
     let updates: TgUpdate[];
@@ -214,7 +236,28 @@ async function handleUpdate(token: string, update: TgUpdate): Promise<void> {
   }
   if (text === "/new" || text.startsWith("/new@")) {
     setTelegramChatSession(db, chatId, null); // next question starts fresh
+    clearFocus(chatKey(chatId)); // a fresh conversation isn't scoped to a file
+    clearCited(chatKey(chatId)); // …and `/focus <n>` must not reach a stale citation list
     await tgSend(token, chatId, "🧹 Started a new conversation.");
+    return;
+  }
+  if (/^\/focus(@\S+)?(\s|$)/i.test(text)) {
+    await handleFocus(token, chatId, text.replace(/^\/focus(@\S+)?\s*/i, "").trim());
+    return;
+  }
+  if (text === "/done" || text.startsWith("/done@")) {
+    const was = clearFocus(chatKey(chatId));
+    clearCited(chatKey(chatId)); // a stale `/focus <n>` target must not survive the exit
+    if (was) resetConversation(chatId); // leaving focus starts a clean global thread
+    await tgSend(
+      token,
+      chatId,
+      was ? "🌐 Focus off. Back to searching all your files." : "You're not focused on a file. /focus <name> to scope to one.",
+    );
+    return;
+  }
+  if (text === "/reindex" || text.startsWith("/reindex@")) {
+    await handleReindex(token, chatId);
     return;
   }
   if (text === "/tips" || text.startsWith("/tips@")) {
@@ -256,6 +299,55 @@ function chatKey(chatId: number): string {
 }
 
 /**
+ * Drop the conversation memory for this chat. Called on every focus transition
+ * (enter / switch / exit) so a focused chat is its OWN clean thread — otherwise
+ * the previous document's discussion leaks via session memory into the new scope
+ * (e.g. switching focus to a near-empty file but still summarizing the old one).
+ */
+function resetConversation(chatId: number): void {
+  setTelegramChatSession(getDb(), chatId, null);
+}
+
+const ANNOUNCE_PATH = path.join(os.homedir(), ".mnemos", ".announce");
+
+/**
+ * Keep Telegram's "typing…" indicator alive — it auto-expires after ~5s, so on a
+ * RAG/focus answer that takes seconds-to-minutes it would vanish and look stuck.
+ * Refresh it every 4.5s until the returned stop() is called.
+ */
+function startTypingKeepalive(token: string, chatId: number): () => void {
+  void tgAction(token, chatId, "typing").catch(() => {});
+  const timer = setInterval(() => {
+    void tgAction(token, chatId, "typing").catch(() => {});
+  }, 4500);
+  return () => clearInterval(timer);
+}
+
+/**
+ * One-shot deploy announcement: if the operator wrote `~/.mnemos/.announce`
+ * before a restart, deliver it to every paired chat once the poller is live,
+ * then delete it. Because it fires only when the channel is actually up, it's a
+ * reliable "deployment is done" ping — no need to check the computer.
+ */
+async function sendBootAnnounce(token: string): Promise<void> {
+  let message: string;
+  try {
+    message = (await readFile(ANNOUNCE_PATH, "utf8")).trim();
+  } catch {
+    return; // nothing pending
+  }
+  try {
+    if (message) {
+      for (const chat of listTelegramChats(getDb())) {
+        await tgSend(token, chat.chatId, message).catch(() => {});
+      }
+    }
+  } finally {
+    await rm(ANNOUNCE_PATH, { force: true }).catch(() => {});
+  }
+}
+
+/**
  * Audit every `/do` action — the operator's source of truth for what the system
  * actually did (e.g. which files a write added), which is part of why exposing
  * `/do` over Telegram is justifiable. Best-effort: never block the user action.
@@ -267,6 +359,118 @@ function auditDo(chatId: number, event: string, data: Record<string, unknown>): 
   } catch {
     /* audit must not break the action */
   }
+}
+
+/** Short label for the active focus: a single file's name, or "N files". */
+function focusLabel(files: FocusFile[]): string {
+  return files.length === 1 && files[0] ? files[0].name : `${files.length} files`;
+}
+
+// Below this many characters of indexed content, a file is "metadata-only" — no
+// readable text was extracted (e.g. a scanned PDF, or an unsupported type).
+const META_ONLY_CHARS = 20;
+
+function isMetadataOnly(fileId: number): boolean {
+  return fileContentChars(getDb(), fileId) < META_ONLY_CHARS;
+}
+
+/** Honest, located explanation when a focused file has no readable text. */
+function metadataOnlyMessage(fileId: number, name: string): string {
+  const loc = getFileLocation(getDb(), fileId);
+  const where = loc ? `\nLocation: ${loc.fullPath}` : "";
+  const reason = /\.pdf$/i.test(name)
+    ? "Even OCR found no readable text — it may be a blank or very low-quality scan."
+    : "No text could be extracted for this file type.";
+  return `📄 I only have metadata for "${name}" — no readable text is indexed.${where}\n${reason}\nReply /reindex to try extracting it again (PDFs run OCR).`;
+}
+
+/**
+ * `/focus <name>` — scope the conversation to an ALREADY-INDEXED file by name
+ * (e.g. one the user just saw cited). Distinct from `/do rag`, which adds a new
+ * file and auto-focuses. Bare `/focus` shows the current focus.
+ */
+async function handleFocus(token: string, chatId: number, arg: string): Promise<void> {
+  const key = chatKey(chatId);
+  if (!arg) {
+    const cur = getFocus(key);
+    await tgSend(
+      token,
+      chatId,
+      cur
+        ? `🎯 Focused on ${focusLabel(cur)}. /done to exit.`
+        : "Not focused. /focus <name> to scope to an indexed file, or /do fs <name> to find a new one.",
+    );
+    return;
+  }
+
+  // Numeric → pick from the LAST answer's cited sources (the `/focus <n>` hint).
+  if (/^\d+$/.test(arg)) {
+    const cited = getCited(key);
+    const n = Number(arg);
+    const pick = cited && n >= 1 && n <= cited.length ? cited[n - 1] : undefined;
+    if (pick) {
+      setFocus(key, [pick]);
+      resetConversation(chatId); // fresh thread scoped to the new file — no leak from the prior one
+      auditDo(chatId, "do_focus", { fileId: pick.fileId, name: pick.name, via: "focus-n" });
+      await tgSend(token, chatId, `🎯 Now focused on ${pick.name} — questions are scoped to this file. /done to exit.`);
+      if (isMetadataOnly(pick.fileId)) await tgSend(token, chatId, metadataOnlyMessage(pick.fileId, pick.name));
+    } else {
+      await tgSend(token, chatId, "Ask a question first, then reply /focus <n> to scope to one of its listed sources.");
+    }
+    return;
+  }
+
+  const matches = findIndexedFilesByName(getDb(), arg, 25);
+  if (matches.length === 0) {
+    await tgSend(token, chatId, `No indexed file matches "${arg}". Find and add it: /do fs ${arg}`);
+    return;
+  }
+  if (matches.length > 1) {
+    const names = matches.slice(0, 8).map((m) => `• ${m.name}`).join("\n");
+    const more = matches.length > 8 ? `\n…and ${matches.length - 8} more` : "";
+    await tgSend(
+      token,
+      chatId,
+      `Several indexed files match "${arg}":\n${names}${more}\n\nBe more specific (e.g. include the extension).`,
+    );
+    return;
+  }
+
+  const [first] = matches;
+  if (!first) return;
+  const f: FocusFile = { fileId: first.fileId, name: first.name };
+  setFocus(key, [f]);
+  resetConversation(chatId); // fresh thread scoped to the new file — no leak from the prior one
+  auditDo(chatId, "do_focus", { fileId: f.fileId, name: f.name, via: "focus" });
+  await tgSend(token, chatId, `🎯 Now focused on ${f.name} — questions are scoped to this file. /done to exit.`);
+  if (isMetadataOnly(f.fileId)) await tgSend(token, chatId, metadataOnlyMessage(f.fileId, f.name));
+}
+
+/** `/reindex` — force re-extraction of the focused file (retry a metadata-only file). */
+async function handleReindex(token: string, chatId: number): Promise<void> {
+  const focus = getFocus(chatKey(chatId));
+  const target = focus?.[0];
+  if (!target) {
+    await tgSend(token, chatId, "Focus on a file first (/focus <name>), then /reindex to re-extract it.");
+    return;
+  }
+  await tgSend(token, chatId, `⏳ Re-extracting "${target.name}"… (scanned PDFs run OCR — may take a moment)`);
+  const res = await reindexFile(target.fileId);
+  auditDo(chatId, "do_reindex", { fileId: target.fileId, ok: res.ok, contentChars: res.contentChars });
+
+  if (!res.ok) {
+    await tgSend(token, chatId, `⚠️ Couldn't re-extract "${target.name}": ${res.reason ?? "it failed"}.`);
+    return;
+  }
+  if (res.contentChars >= META_ONLY_CHARS) {
+    resetConversation(chatId);
+    await tgSend(token, chatId, `✅ Extracted text from "${target.name}" — it's readable now. Ask away.`);
+    return;
+  }
+  const why = /\.pdf$/i.test(target.name)
+    ? "Even OCR couldn't read it — likely a blank or very low-quality scan."
+    : "This file type has no extractable text.";
+  await tgSend(token, chatId, `📄 Still no readable text in "${target.name}". ${why}`);
 }
 
 async function handleDo(token: string, chatId: number, rest: string): Promise<void> {
@@ -427,7 +631,15 @@ async function startRag(token: string, chatId: number, paths: string[]): Promise
         failed: outcome.failed.length,
         chunks: outcome.chunks,
       });
-      await tgSend(token, chatId, `✅ Ready — ${formatRag(outcome)}`);
+      // Auto-focus on the file(s) just added — selecting a file via /do is intent.
+      let focusNote = "";
+      if (outcome.focus.length > 0) {
+        setFocus(key, outcome.focus);
+        resetConversation(chatId); // a freshly-added file starts its own clean thread
+        auditDo(chatId, "do_focus", { count: outcome.focus.length, via: "rag" });
+        focusNote = `\n\n🎯 Now focused on ${focusLabel(outcome.focus)} — questions are scoped to it. /done to exit.`;
+      }
+      await tgSend(token, chatId, `✅ Ready — ${formatRag(outcome)}${focusNote}`);
     })
     .catch(async (err) => {
       setRagStatus(key, "error", { message: err instanceof Error ? err.message : String(err) });
@@ -565,6 +777,22 @@ async function answerQuestion(token: string, chatId: number, question: string): 
     return;
   }
 
+  // File Focus Mode: scope retrieval to the active file(s) — unless this is a
+  // direct (`!`) message, which intentionally bypasses files entirely. Focus is
+  // scope; the `!`/`+` prefix is tier. The two are orthogonal.
+  const focus = direct ? null : getFocus(chatKey(chatId));
+
+  // If the focused file(s) have no readable text, don't let the model improvise —
+  // say so plainly (with the file's location) and offer /reindex. Done BEFORE the
+  // embedder init so an embedder hiccup can't mask the honest metadata-only reply.
+  if (focus && focus.every((f) => isMetadataOnly(f.fileId))) {
+    const f0 = focus[0];
+    if (f0) {
+      await tgSend(token, chatId, metadataOnlyMessage(f0.fileId, f0.name));
+      return;
+    }
+  }
+
   // Direct mode skips retrieval, so it must not require the embedder — a `!`
   // question should answer even if the local embedder isn't ready.
   let embedder: Awaited<ReturnType<typeof getDefaultEmbedder>> | null = null;
@@ -577,13 +805,30 @@ async function answerQuestion(token: string, chatId: number, question: string): 
     }
   }
 
+  // Hold the "typing…" indicator for the whole generation — answers can take
+  // seconds to minutes, and the indicator would otherwise expire and look stuck.
+  const stopTyping = startTypingKeepalive(token, chatId);
   let answer = "";
-  const sources: string[] = [];
+  // Cited files in display order, de-duplicated by file — so a normal answer can
+  // offer `/focus <n>` to scope to one of its own sources.
+  const citedFiles: FocusFile[] = [];
+  const seenFiles = new Set<number>();
   try {
-    for await (const ev of runQuery(db, embedder, provider, { query: q, sessionId, model, direct })) {
+    for await (const ev of runQuery(db, embedder, provider, {
+      query: q,
+      sessionId,
+      model,
+      direct,
+      scopeFileIds: focus?.map((f) => f.fileId),
+    })) {
       if (ev.phase === "delta") answer += ev.delta;
-      else if (ev.phase === "retrieved") for (const h of ev.hits) sources.push(h.filePath);
-      else if (ev.phase === "error") {
+      else if (ev.phase === "retrieved") {
+        for (const h of ev.hits) {
+          if (seenFiles.has(h.fileId)) continue;
+          seenFiles.add(h.fileId);
+          citedFiles.push({ fileId: h.fileId, name: h.filePath.split("/").pop() ?? h.filePath });
+        }
+      } else if (ev.phase === "error") {
         await tgSend(token, chatId, `⚠️ ${ev.message}`);
         return;
       }
@@ -591,9 +836,25 @@ async function answerQuestion(token: string, chatId: number, question: string): 
   } catch (err) {
     await tgSend(token, chatId, `⚠️ ${err instanceof Error ? err.message : String(err)}`);
     return;
+  } finally {
+    stopTyping();
   }
 
-  await tgSend(token, chatId, formatAnswer(answer, sources, { direct, tier, model }));
+  // Offer `/focus <n>` on the cited docs — but only on a normal multi-file answer
+  // (not when already focused, and not for a direct `!` query). Remember the same
+  // list we display, so the numbers line up with `/focus <n>`.
+  const offerFocus = !focus && !direct && citedFiles.length > 0;
+  const shown = citedFiles.slice(0, 8);
+  if (offerFocus) setCited(chatKey(chatId), shown);
+  else clearCited(chatKey(chatId)); // an answer with no fresh numbered list invalidates /focus <n>
+
+  // The footer keeps the active scope (and the way out) in view on every focused answer.
+  const footer = focus ? `\n\n🎯 Focused on ${focusLabel(focus)} · /done to exit` : "";
+  await tgSend(
+    token,
+    chatId,
+    formatAnswer(answer, shown.map((f) => f.name), { direct, tier, model, offerFocus }) + footer,
+  );
 }
 
 /** Plain-text answer (no parse_mode, so model markdown/code can't break
@@ -602,11 +863,11 @@ async function answerQuestion(token: string, chatId: number, question: string): 
  * routing mode + (for frontier tiers) the model used, mirroring the web badges. */
 function formatAnswer(
   answer: string,
-  sources: string[],
-  opts: { direct: boolean; tier: RouteTier; model?: string },
+  sourceNames: string[],
+  opts: { direct: boolean; tier: RouteTier; model?: string; offerFocus: boolean },
 ): string {
   const body = answer.trim() || "(no answer produced)";
-  const { direct, tier, model } = opts;
+  const { direct, tier, model, offerFocus } = opts;
   const frontier = isFrontierTier(tier);
   const modelTag = frontier && model ? ` · ${model}` : "";
   const header = direct
@@ -614,10 +875,12 @@ function formatAnswer(
     : frontier
       ? `☁️ Frontier${modelTag}\n\n`
       : "";
-  const unique = [...new Set(sources.map((s) => s.split("/").pop() ?? s))];
+  // On a normal answer, number the cited documents so the user can drill into one
+  // with `/focus <n>`. (Suppressed when already focused — the 🎯 footer covers it.)
   const footer =
-    !direct && unique.length > 0
-      ? `\n\n📎 Sources: ${unique.slice(0, 5).join(", ")}${unique.length > 5 ? ` +${unique.length - 5} more` : ""}`
+    offerFocus && sourceNames.length > 0
+      ? `\n\n📎 Sources:\n${sourceNames.map((n, i) => `[${i + 1}] ${n}`).join("\n")}` +
+        `\n\nReply /focus <n> to chat with just that document.`
       : "";
   let out = header + body + footer;
   if (out.length > TG_MSG_LIMIT) {

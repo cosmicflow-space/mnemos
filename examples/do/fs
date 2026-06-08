@@ -1,66 +1,64 @@
 #!/bin/sh
-# /do fs <glob> — find files under $HOME whose NAME matches <glob>.
+# /do fs <name…> — fuzzy file-name hunt under $HOME.
 #
-# Contract (see docs/agent/do-spec.md):
-#   • The argument arrives as $1. The dispatcher validates it to a bare glob
-#     (letters/digits/. _ - * ? [ ]) with no '/', no '..', no quotes — so it is a
-#     NAME to match, never a path and never query/shell syntax.
-#   • $1 is matched as DATA: handed to `find` as a literal -name pattern, or
-#     interpolated into a Spotlight predicate after the quote-guard below.
-#   • Producer contract: one ABSOLUTE path per line on stdout, diagnostics on
-#     stderr, exit 0 even when nothing matches.
+# Accepts a NATURAL query: spaces ("Land Rover"), camelCase ("LandRover"),
+# separators ("land_rover"), or leftover glob chars ("Land*Rover*.pdf") all work.
+# The query is tokenized (split on camelCase / spaces / . _ - * ? [ ]) and a file
+# matches when its NAME contains EVERY token, case-insensitive and order-free.
+# READ-only: it observes file names, never contents.
 #
-# READ-only: it observes file names. It never opens contents, never writes, moves,
-# or deletes. Granting a file to the index is the SEPARATE, PIN-gated `/do rag`.
-
+# $1 is pre-validated by the dispatcher (letters/digits/spaces and . _ - * ? [ ]
+# only — no '/', '..', or quotes), so it is data, never a path or shell syntax.
 set -u
 
-pattern="${1:?usage: fs <glob>}"
+query="${1:?usage: fs <name>}"
 limit=50
+case "$query" in *"'"* | *'"'*) echo "fs: illegal character" >&2; exit 2 ;; esac
 
-# Defense in depth: the dispatcher already rejects quotes, but a standalone run
-# must not let one break out of the Spotlight predicate. (mdfind is a query
-# language, not a shell — worst case is a bad query — but fail closed anyway.)
-case "$pattern" in
-  *"'"* | *'"'* ) echo "fs: illegal character in pattern" >&2; exit 2 ;;
-esac
+# Tokenize: split camelCase, turn separators/glob chars into spaces, lowercase.
+tokens=$(printf '%s' "$query" \
+  | sed -E 's/([a-z0-9])([A-Z])/\1 \2/g' \
+  | tr -c 'a-zA-Z0-9' ' ' \
+  | tr 'A-Z' 'a-z' \
+  | tr -s ' ' \
+  | sed -E 's/^ +//; s/ +$//')
+[ -n "$tokens" ] || exit 0
 
-# Drop sensitive + noisy trees from results (same set for both backends).
+# Seed the candidate search with the LONGEST token (most selective).
+seed=$(printf '%s\n' $tokens | awk '{ if (length($0) > length(m)) m = $0 } END { print m }')
+
 filter() {
-  grep -v \
-    -e '/node_modules/' -e '/Library/' -e '/\.git/' -e '/\.Trash/' \
-    -e '/\.cache/' -e '/\.npm/' -e '/\.pnpm-store/' \
-    -e '/\.ssh/' -e '/\.gnupg/' -e '/\.aws/'
+  grep -v -e '/node_modules/' -e '/Library/' -e '/\.git/' -e '/\.Trash/' \
+    -e '/\.cache/' -e '/\.npm/' -e '/\.ssh/' -e '/\.gnupg/' -e '/\.aws/'
 }
 
-# Cap at $limit absolute paths; note overflow on stderr (producer contract).
-# Only regular files: Spotlight (mdfind) can return directories/bundles, whereas
-# `rag` adds files — filtering here keeps the list consistent with what's addable.
-emit() {
-  count=0
-  while IFS= read -r path; do
-    [ -f "$path" ] || continue
-    count=$((count + 1))
-    if [ "$count" -gt "$limit" ]; then
-      echo "…more than $limit matches; narrow the pattern (e.g. add an extension)." >&2
-      break
-    fi
-    printf '%s\n' "$path"
+# Candidate set: file names containing the seed token. Spotlight fast-path.
+candidates() {
+  if command -v mdfind >/dev/null 2>&1 && mdutil -s / 2>/dev/null | grep -q "Indexing enabled"; then
+    mdfind -onlyin "$HOME" "kMDItemFSName == '*$seed*'wc" 2>/dev/null
+  else
+    find "$HOME" \( -name node_modules -o -name .git -o -name Library -o -name .ssh \
+      -o -name .aws -o -name .gnupg -o -name .Trash -o -name .cache -o -name .npm \) -prune \
+      -o -type f -iname "*$seed*" -print 2>/dev/null
+  fi
+}
+
+# Keep regular files whose lowercased basename contains EVERY token; cap output.
+count=0
+candidates | filter | while IFS= read -r path; do
+  [ -f "$path" ] || continue
+  base=$(printf '%s' "${path##*/}" | tr 'A-Z' 'a-z')
+  ok=1
+  for t in $tokens; do
+    case "$base" in *"$t"*) ;; *) ok=0; break ;; esac
   done
-}
-
-if command -v mdfind >/dev/null 2>&1 && mdutil -s / 2>/dev/null | grep -q "Indexing enabled"; then
-  # Fast path: Spotlight's prebuilt index (sub-second vs. tens of seconds walking
-  # the tree). The 'wc' modifiers give wildcard + case-insensitive matching, so a
-  # glob like policy*.pdf works as written.
-  mdfind -onlyin "$HOME" "kMDItemFSName == '$pattern'wc" 2>/dev/null | filter | emit
-else
-  # Portable fallback: walk $HOME, pruning heavy/sensitive dirs for speed + signal.
-  find "$HOME" \
-    \( -name node_modules -o -name .git -o -name Library \
-       -o -name .Trash -o -name .cache -o -name .npm -o -name .pnpm-store \
-       -o -name .ssh -o -name .gnupg -o -name .aws \) -prune \
-    -o -type f -name "$pattern" -print 2>/dev/null | filter | emit
-fi
+  [ "$ok" = 1 ] || continue
+  count=$((count + 1))
+  if [ "$count" -gt "$limit" ]; then
+    echo "...more than $limit matches; add another word to narrow." >&2
+    break
+  fi
+  printf '%s\n' "$path"
+done
 
 exit 0

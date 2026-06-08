@@ -33,6 +33,11 @@ function db() {
         detail     TEXT NOT NULL,
         updated_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS do_focus (
+        chat_key   TEXT PRIMARY KEY,
+        files      TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
     `);
     ready = true;
   }
@@ -116,4 +121,54 @@ export function getRagStatus(key: string): RagStatus | null {
   } catch {
     return null;
   }
+}
+
+// ── File Focus Mode ────────────────────────────────────────────────────────
+// The active file scope for a conversation: subsequent questions answer only
+// from these file(s) until `/done`. Persisted so focus survives a restart.
+export type FocusFile = { fileId: number; name: string };
+
+export function setFocus(key: string, files: FocusFile[]): void {
+  db()
+    .prepare(
+      `INSERT INTO do_focus (chat_key, files, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(chat_key) DO UPDATE SET files = excluded.files, updated_at = excluded.updated_at`,
+    )
+    .run(key, JSON.stringify(files), Date.now());
+}
+
+export function getFocus(key: string): FocusFile[] | null {
+  const row = db().prepare(`SELECT files FROM do_focus WHERE chat_key = ?`).get(key) as { files: string } | undefined;
+  if (!row) return null;
+  try {
+    const files = JSON.parse(row.files) as FocusFile[];
+    return Array.isArray(files) && files.length > 0 ? files : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Clear focus; returns true if a focus was actually active. */
+export function clearFocus(key: string): boolean {
+  const res = db().prepare(`DELETE FROM do_focus WHERE chat_key = ?`).run(key);
+  return res.changes > 0;
+}
+
+// The files cited by the LAST normal answer, in display order — so the user can
+// reply `/focus <n>` to scope to one of them. Reuses the do_focus table's row by
+// a distinct key suffix to avoid another table.
+function citedKey(key: string): string {
+  return `${key}#cited`;
+}
+
+export function setCited(key: string, files: FocusFile[]): void {
+  setFocus(citedKey(key), files);
+}
+
+export function getCited(key: string): FocusFile[] | null {
+  return getFocus(citedKey(key));
+}
+
+export function clearCited(key: string): void {
+  clearFocus(citedKey(key));
 }

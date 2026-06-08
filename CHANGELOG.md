@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-06-07
+
+### Added
+- **File Focus Mode — chat with one document.** The phone-first workflow this release is built around: *find a vaguely-remembered file → add it → focus → ask.* `/focus <name|n>` scopes the conversation to one indexed file (by name, or by `<n>` from a numbered Sources list — normal answers now offer `/focus <n>` on their citations); `/do rag` auto-focuses on what you just added; `/done` exits back to all files. A *small* focused file is loaded **whole** into context (so "summarize this" works); a large one falls back to vector search within the file. Every focused answer is footed with `🎯 <file> · /done to exit`. Focus is *scope*; the `!`/`+` prefix is *tier* — orthogonal. Switching/entering/leaving focus resets the conversation thread, so a prior document never leaks into the new one. Live on the private Telegram channel (the engine is surface-agnostic; web-UI wiring is a fast follow).
+- **`/do fs` is now a fuzzy hunt.** It tokenizes the query (split on camelCase, spaces, and any non-alphanumeric character, lowercased) and returns files whose name contains **every** token, in **any order** — so `land rover`, `LandRover`, and `Land*Rover*.pdf` all find `Land rover VIN and Sale.pdf`, and `pearl` finds `InnerPearl.pdf`. Same tokenization on macOS/Linux (`fs`) and Windows (`fs.ps1`).
+- **On-demand OCR for scanned PDFs.** The PDF loader is now a three-tier extractor: `pdf-parse` → `pdftotext` (recovers text layers pdf-parse misses or errors on) → **OCR** (`pdftoppm` renders pages → `tesseract.js` reads them, bounded to 20 pages). Scanned PDFs become readable when you add them — e.g. a scanned VIN/sale PDF now yields its VIN. Tiers 2–3 use `poppler`; they degrade to a graceful no-op where it isn't installed.
+- **`/reindex`** re-extracts just the focused file (force-targeted by its source-relative path), retrying files that previously failed or ended up metadata-only. A file with genuinely no readable text is reported honestly — with its path and the reason — instead of letting the model improvise.
+- **Quality-of-life:** the Telegram "typing…" indicator now holds until the answer arrives; a boot-time deploy-announce hook delivers a "what's new" message to the operator's phone when the channel comes up.
+
 ## [0.17.1] - 2026-06-07
 
 ### Added

@@ -1,13 +1,14 @@
 {
   "name": "@mnemos/plugin-loader-pdf",
   "version": "0.1.0",
-  "description": "PDF DocumentLoader for Mnemos (pdf-parse).",
+  "description": "PDF DocumentLoader for Mnemos (pdf-parse, with pdftotext + OCR fallbacks).",
   "license": "MIT",
   "type": "module",
   "main": "./src/index.ts",
   "scripts": { "typecheck": "tsc --noEmit" },
   "dependencies": {
     "pdf-parse": "^1.1.1",
+    "tesseract.js": "^6.0.1",
     "@mnemos/plugin-sdk": "workspace:*"
   },
   "devDependencies": {

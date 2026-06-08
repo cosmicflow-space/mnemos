@@ -102,12 +102,14 @@ a shell command from that input (`sh -c "find … $1"` is forbidden — see §8)
 
 | `shape` | Accepts | Rejects |
 |---------|---------|---------|
-| `glob` | a filename or shell-style glob: letters, digits, `. _ - * ? [ ]` | path separators (`/`), `..`, NUL, control chars, leading `-` |
+| `search` | a **fuzzy name query**: letters, digits, **spaces**, and `. _ - * ? [ ]` (the verb tokenizes it) | `/`, `\`, `..`, quotes, control chars, leading `-` |
+| `glob` | a filename or shell-style glob: letters, digits, `. _ - * ? [ ]` (no spaces) | `/`, `\`, `..`, quotes, control chars, leading `-` |
 | `index` | a selector against the buffer: `3`, `1 3 5`, `1-4`, `all` | anything else |
 
-A `glob` deliberately **cannot contain `/`** — a search term is a *name*, not a path, so it
-can't be aimed outside the registered sources. New shapes are added in code (with tests),
-not invented per verb.
+`search` (used by `fs`) is the friendly one — it allows **spaces** so a natural query like
+`land rover` reaches the verb, which then tokenizes it (§10). Neither `search` nor `glob` may
+contain `/` or `\` — a search term is a *name*, not a path, so it can't be aimed outside the
+home tree. New shapes are added in code (with tests), not invented per verb.
 
 ---
 
@@ -204,56 +206,69 @@ Every verb ships with tests, and **you run it by hand once** before relying on i
 
 ## 10. Worked example — the `fs` verb
 
-`~/.mnemos/do/fs` (a `read` producer) searches file *names* under `$HOME`. It uses a
-**Spotlight fast-path** (`mdfind`, a prebuilt index) when available and falls back to `find`
-for portability — measured at **~0.4s vs ~27s** for the same query on a real home directory,
-which is the difference between "answers on your phone" and "times out." Both backends share
-one sensitive/noise filter and one output cap:
+`~/.mnemos/do/fs` (a `read` producer, `search` shape) is a **fuzzy** file-name hunt under
+`$HOME`. It **tokenizes** the query (split on camelCase, spaces, and any non-alphanumeric char,
+lowercased) and returns files whose name contains **every** token, in any order. So
+`land rover`, `LandRover`, and `Land*Rover*.pdf` all find `Land rover VIN and Sale.pdf`, and
+`pearl` finds `InnerPearl.pdf`. macOS seeds candidates from Spotlight (`mdfind`) for speed;
+Linux walks with `find`. Both share one sensitive/noise filter and an output cap:
 
 ```sh
 #!/bin/sh
-# /do fs <glob> — find files under $HOME whose NAME matches <glob>.
-# $1 is pre-validated to a bare glob (no '/', '..', or quotes). It is matched as
-# DATA: a literal find -name pattern, or a Spotlight predicate after a quote-guard.
+# /do fs <name…> — fuzzy file-name hunt under $HOME (every token must match, any order).
+# $1 is pre-validated (letters/digits/spaces and . _ - * ? [ ]; no '/', '..', or quotes).
 set -u
-pattern="${1:?usage: fs <glob>}"; limit=50
-case "$pattern" in *"'"* | *'"'* ) echo "fs: illegal character" >&2; exit 2 ;; esac
+query="${1:?usage: fs <name>}"; limit=50
+case "$query" in *"'"* | *'"'* ) echo "fs: illegal character" >&2; exit 2 ;; esac
 
-filter() { grep -v -e '/node_modules/' -e '/Library/' -e '/\.git/' \
-  -e '/\.Trash/' -e '/\.cache/' -e '/\.ssh/' -e '/\.gnupg/' -e '/\.aws/'; }
-emit() { n=0; while IFS= read -r p; do [ -f "$p" ] || continue; n=$((n+1))
-  [ "$n" -le "$limit" ] || { echo "…>$limit matches; narrow it." >&2; break; }
-  printf '%s\n' "$p"; done; }
+# Tokenize: split camelCase, non-alphanumerics → spaces, lowercase.
+tokens=$(printf '%s' "$query" | sed -E 's/([a-z0-9])([A-Z])/\1 \2/g' \
+  | tr -c 'a-zA-Z0-9' ' ' | tr 'A-Z' 'a-z' | tr -s ' ' | sed -E 's/^ +//; s/ +$//')
+[ -n "$tokens" ] || exit 0
+seed=$(printf '%s\n' $tokens | awk '{ if (length($0) > length(m)) m = $0 } END { print m }')
 
-if command -v mdfind >/dev/null 2>&1 && mdutil -s / 2>/dev/null | grep -q "Indexing enabled"; then
-  mdfind -onlyin "$HOME" "kMDItemFSName == '$pattern'wc" 2>/dev/null | filter | emit
-else
-  find "$HOME" \( -name node_modules -o -name .git -o -name Library -o -name .ssh \
-    -o -name .aws -o -name .gnupg -o -name .Trash -o -name .cache \) -prune \
-    -o -type f -name "$pattern" -print 2>/dev/null | filter | emit
-fi
+filter() { grep -v -e '/node_modules/' -e '/Library/' -e '/\.git/' -e '/\.ssh/' -e '/\.aws/'; }
+candidates() {
+  if command -v mdfind >/dev/null 2>&1 && mdutil -s / 2>/dev/null | grep -q "Indexing enabled"; then
+    mdfind -onlyin "$HOME" "kMDItemFSName == '*$seed*'wc" 2>/dev/null
+  else
+    find "$HOME" \( -name node_modules -o -name .git -o -name Library \) -prune \
+      -o -type f -iname "*$seed*" -print 2>/dev/null
+  fi
+}
+n=0
+candidates | filter | while IFS= read -r path; do
+  [ -f "$path" ] || continue
+  base=$(printf '%s' "${path##*/}" | tr 'A-Z' 'a-z'); ok=1
+  for t in $tokens; do case "$base" in *"$t"*) ;; *) ok=0; break ;; esac; done
+  [ "$ok" = 1 ] || continue
+  n=$((n + 1)); [ "$n" -le "$limit" ] || { echo "…>$limit matches; add a word." >&2; break; }
+  printf '%s\n' "$path"
+done
 exit 0
 ```
 
 > Verified against the adversarial protocol (§9): injection (`; echo …`),
-> command-substitution (`$(…)`), and a quote breakout were all treated as data — nothing
-> executed — and a quote in the pattern exits non-zero before the Spotlight query is built.
+> command-substitution (`$(…)`), and quote breakout are all treated as data — nothing executes
+> — and a quote exits non-zero before any query is built. The shipped Windows counterpart
+> (`examples/do/fs.ps1`) tokenizes identically with `Get-ChildItem`.
 
 `~/.mnemos/do/fs.json`:
 
 ```json
 {
   "tier": "read",
-  "summary": "Find files on disk by name or glob.",
-  "usage": "/do fs <name-or-glob>",
-  "args": { "kind": "single", "shape": "glob", "required": true },
+  "summary": "Fuzzy-find files under your home directory by name (any word order).",
+  "usage": "/do fs <name> — e.g. /do fs land rover",
+  "args": { "kind": "single", "shape": "search", "required": true },
   "role": "producer"
 }
 ```
 
 The matching consumer, `rag`, is built in: it takes the buffer items the user selected,
-chunks + embeds + inserts them, is PIN-gated, and audits the added chunk IDs. Together they
-are the whole v1 loop: **`/do fs <glob>` → `/do rag <sel>` → ask.**
+extracts text (text PDFs, Office docs, **and scanned PDFs via OCR** — `DO.md` §5.1), chunks +
+embeds + inserts them, is PIN-gated, and audits the added chunk IDs. Together they are the loop:
+**`/do fs <name>` → `/do rag <sel>` → `/focus` → ask.**
 
 ---
 

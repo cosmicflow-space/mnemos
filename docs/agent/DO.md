@@ -1,40 +1,52 @@
 # Mnemos `/do` — Architecture
 
-> **Status:** the `mnemos-do` branch. The first slice is **implemented**: the read verb
-> `fs` (file discovery), the write verb `rag` (on-demand index add) behind a proof-of-human
-> PIN, the selection buffer, and non-blocking ingest with status — live on the private
-> Telegram channel. `main` stays RAG-only until this is merged. The earlier agent design
-> (a four-mode router with `/agent` and `/run`) is **retired**; this branch starts from
-> the RAG-only baseline and adds exactly one new verb.
+> **Status: shipped on the Telegram channel.** `/do` (`fs`, `rag`), **File Focus Mode**
+> (`/focus` … `/done`), on-demand ingest with a three-tier PDF extractor (text → `pdftotext` →
+> OCR), and a proof-of-human PIN are live on the **private Telegram bot**. The shared engine —
+> retrieval scope, the loader/OCR, the argument validation, the PIN — is **surface-agnostic and
+> cross-platform**; wiring the same commands into the **web chat UI is a fast follow** (the web
+> app today handles the `!`/`+` prefixes and `/tips`/`/cost`). The OCR tier needs `poppler` on
+> the host (graceful no-op otherwise; §5.1). Runs on **macOS, Linux, and Windows** (§2.1). The
+> earlier agent design (`/agent`, `/run`) is retired.
 
 ---
 
-## 0. Why `/do` exists — read this before judging it
+## 0. The intent — find a file, add it, chat with it (especially from your phone)
 
-If you are reviewing this or cloning Mnemos to add your own verb, start here, so the design is
-judged against its actual goal rather than a misread of it.
+Read this first; it's the *why*, and everything below serves it.
 
-**The problem.** Mnemos is a personal RAG. You cannot index five terabytes of disk, so the
-useful pattern is *pull a file into the index on demand* — including from your phone — ask
-questions, and move on. Doing that from a chat surface naïvely would mean "let the assistant
-run commands on my machine," which every security instinct (correctly) rejects.
+**The workflow this enables.** On your computer you already have a hundred ways to find a file
+and a Sources panel to add a whole folder. **On your phone you don't** — and that's exactly
+where this matters. You're away from your desk, you half-remember a file's name ("the Land
+Rover VIN thing"), and you want to *find it, pull it into the index, and ask questions about
+it.* That four-step arc is the feature:
+
+```
+/do fs land rover      ① find it on disk — fuzzy, any word order   (read, free)
+/do rag 1              ② add it to the index — text/PDF/scanned     (write, PIN-gated)
+/focus land rover      ③ scope the chat to just that file
+"what is my VIN?"      ④ ask / summarize / explore — answered from that file alone
+```
+
+Steps ① and ④ are the adoption unlock: a vaguely-remembered name becomes a focused
+conversation with the document, from anywhere, with your files never leaving your machine.
 
 **What `/do` is — and is NOT.** `/do` is **not** "an AI runs arbitrary shell commands." It is
 the opposite design, chosen specifically to avoid that:
 
-- A verb is a **small script you wrote and tested**, in `~/.mnemos/do/`. The catalog of
-  everything `/do` can do is `ls ~/.mnemos/do/` — finite, inspectable, yours.
+- A verb is a **small script you wrote and tested**, in `~/.mnemos/do/` (OS-native — a shell
+  script on macOS/Linux, a PowerShell script on Windows; §2.1). The catalog of everything
+  `/do` can do is `ls ~/.mnemos/do/` — finite, inspectable, yours.
 - The model/user only **picks a verb and supplies an argument**. The argument is **validated**
-  (a bare glob — no slashes, `..`, quotes, or whitespace) and passed via `execFile` — **no
-  shell is ever constructed** from input. There is no arbitrary command to analyze because
-  there is no arbitrary command.
+  (no slashes, `..`, or quotes) and passed via `execFile`/`spawn` — **no shell is ever
+  constructed** from input. There is no arbitrary command to analyze because there is none.
 - **Reads are free; writes are gated.** Finding files (`fs`) only observes names. Adding a
   file's *contents* to the index (`rag`) is the one mutation; it touches only Mnemos's own
   store (never your files), it is **reversible**, and it sits behind a **proof-of-human PIN**
   the model cannot produce.
 
 **Why this is the safer architecture, not a weaker one.** The rejected alternative — give the
-model a shell and try to *prove each command safe* — is unbounded (you cannot enumerate every
+model a shell and *prove each command safe* — is unbounded (you cannot enumerate every
 destructive spelling). `/do` replaces it with a **bounded** problem: a curated set of vetted
 verbs plus argument validation. This is *capability-by-catalog* — the same instinct that makes
 a parameterized query safer than string-concatenated SQL.
@@ -45,28 +57,40 @@ until it passes that protocol and you have read it yourself.
 
 ---
 
-## 1. One verb: `/do`
+## 0.1 The two new verbs at a glance (cross-platform)
 
-Mnemos's input grammar today is two prefixes, and they are good — terse, glanceable,
-and proven on a phone:
+| Command | What it does | Tier |
+|---------|--------------|------|
+| `/do fs <name…>` | **Fuzzy** file-name hunt under `$HOME`. Spaces, camelCase, and any word order all work — `land rover`, `LandRover`, `Land*Rover*.pdf` all find `Land rover VIN and Sale.pdf`. Returns a numbered list. | read |
+| `/do rag <sel>` | Add the picked files (`3` · `1 3` · `1-4` · `all`) to the index. Text PDFs, Office docs, **and scanned PDFs (OCR)** all extract. PIN-gated, reversible, auto-focuses on what you added. | write |
+| `/focus <name\|n>` | Scope the chat to one already-indexed file — by name, or by `<n>` from a citation/source list. | — |
+| `/done` | Leave focus; back to searching all your files. | — |
+
+These behave **identically on macOS, Linux, and Windows** — the dispatcher, validation, PIN,
+buffer, focus, and OCR are all cross-platform; only the verb *script* is OS-native (§2.1).
+
+---
+
+## 1. The grammar: `!`/`+` to *ask*, `/do` to *act*, `/focus` to *narrow*
+
+Mnemos's input grammar is small, terse, and glanceable. The `!`/`+` prefixes are identical on
+web and phone; `/do`, `/focus`, and `/done` are live on the **Telegram channel** today (web-UI
+wiring is a fast follow — the engine is shared):
 
 | You type | Meaning |
 |----------|---------|
-| `!question` | **Direct** — straight to the model, no files touched. |
-| `+question` | **RAG + frontier** — retrieve from the index, answer with a frontier model. |
 | `question` | **RAG** (default) — retrieve from the index, answer. |
+| `!question` | **Direct** — straight to the model, no files touched. |
+| `+question` | **RAG + frontier** — retrieve, answer with a frontier model. |
+| `/do <verb> <args…>` | **Act** — run a small, named, pre-vetted script (`fs`, `rag`). |
+| `/focus <name\|n>` | **Narrow** — scope the chat to one indexed file. |
+| `/done` | Leave focus — back to all files. |
 
-`/do` is the **only** addition. Where `!`/`+`/plain-text are ways to *ask*, `/do` is the
-way to *act*: it runs a small, named, pre-vetted script.
-
-```
-/do <verb> <args…>
-```
-
-There is **no mode to enter and no mode to forget.** Every `/do` is one self-contained
-action that begins and ends in a single message. (The retired design needed a sticky
-"agent mode," a banner, and an exit affordance precisely because it had a mode you could
-be stranded in. One-shot `/do` deletes that whole problem.)
+Where `!`/`+`/plain-text *ask*, `/do` *acts* — it runs a vetted verb. There is **no mode to
+enter and no mode to forget** for `/do`: every call is one self-contained action in a single
+message. `/focus` does add a visible, always-footed scope (`🎯 <file> · /done to exit`) — a
+mode by design, but one you can never be stranded in (`/done`, `/new`, or switching files all
+return you to the safe global state).
 
 ---
 
@@ -135,11 +159,11 @@ A "verb" is an OS-native executable, so the *script* is platform-specific even t
 dispatcher, validation, PIN, buffer, and audit are all cross-platform. The dispatcher resolves
 a verb's script by OS and runs it with **no shell**:
 
-| OS | Verb file (for `fs`) | How it runs | Status |
-|----|----------------------|-------------|--------|
-| **macOS** | `~/.mnemos/do/fs` (`#!/bin/sh`, `+x`) | directly via its shebang | **supported, tested** — Spotlight (`mdfind`) fast-path |
-| **Linux** | `~/.mnemos/do/fs` (`#!/bin/sh`, `+x`) | directly via its shebang | **supported, tested** — `find` fallback |
-| **Windows** | `~/.mnemos/do/fs.ps1` | `powershell -NoProfile -File fs.ps1 <arg>` | **supported, community-tested** — `Get-ChildItem` walk |
+| OS | Verb file (for `fs`) | How it runs | Search engine |
+|----|----------------------|-------------|---------------|
+| **macOS** | `~/.mnemos/do/fs` (`#!/bin/sh`, `+x`) | directly via its shebang | Spotlight (`mdfind`) — instant |
+| **Linux** | `~/.mnemos/do/fs` (`#!/bin/sh`, `+x`) | directly via its shebang | `find` walk |
+| **Windows** | `~/.mnemos/do/fs.ps1` | `powershell -NoProfile -File fs.ps1 <arg>` | `Get-ChildItem` walk |
 
 The same `<verb>.json` manifest serves all three; only the script file differs. The dispatcher
 prefers `<verb>` / `<verb>.sh` on POSIX and `<verb>.ps1` / `<verb>.exe` on Windows
@@ -147,8 +171,14 @@ prefers `<verb>` / `<verb>.sh` on POSIX and `<verb>.ps1` / `<verb>.exe` on Windo
 `cmd.exe` quoting is injection-prone). The sanitized environment is per-OS (POSIX: a fixed
 `PATH` + `$HOME`; Windows: `System32` on `Path`, `PATHEXT`, `%USERPROFILE%`), and the
 timeout's tree-kill is per-OS too (POSIX process group; Windows `taskkill /T`). `examples/do/`
-ships both `fs` (POSIX) and `fs.ps1` (Windows). Windows globbing supports `*` and `?` (not
-`[…]` classes), and lacks a Spotlight-style index, so the Windows walk is slower than macOS.
+ships both `fs` (POSIX) and `fs.ps1` (Windows).
+
+**`fs` is a fuzzy hunt, identically on every OS.** Each script tokenizes the query the same
+way — split on camelCase, spaces, and any non-alphanumeric character, lowercase — then returns
+files whose name contains **every** token, in **any order**. So `land rover`, `LandRover`,
+`land_rover`, and `Land*Rover*.pdf` all find `Land rover VIN and Sale.pdf`, and `pearl` finds
+`InnerPearl.pdf`. (macOS seeds the candidate set from Spotlight for speed; Linux/Windows walk
+the tree.)
 
 ---
 
@@ -220,6 +250,56 @@ Bot:  ✅ Added 2 files (~210 chunks). They're now searchable.
 
 ---
 
+## 4.1 File Focus Mode — chat with one file (`/focus` … `/done`)
+
+Default RAG searches *all* your files. But once you've narrowed to a document, you usually want
+to stay there — *"summarize this,"* *"what does it say about X,"* follow-ups — without other
+files leaking in. **File Focus Mode** scopes the conversation to one file (or a small set).
+
+**Two ways in, one way out** (on the Telegram channel today; the engine is surface-agnostic, so
+the web UI gets the same behavior when wired):
+
+- **`/do rag <n>` auto-focuses** on the file(s) you just added — selecting *is* intent.
+- **`/focus <name|n>`** scopes to an **already-indexed** file. `<name>` matches indexed files
+  by name; `<n>` picks from the **numbered Sources list** of the last answer (so a normal
+  answer's citations are directly drillable: *"Reply /focus 1 to chat with just that doc"*).
+- **`/done`** exits — back to global search. So does `/new`. The safe state (all files) is the
+  attractor; you fall back to it, never stranded.
+
+**It's a real retrieval mode, not just a filter.** A *small* focused file is loaded **whole**
+(all its chunks, in order) into context — so "summarize this" works because the model sees the
+entire document, not a top-k sample. A *large* focused file falls back to vector search
+*within* that file. Either way, every focused answer is footed with `🎯 <file> · /done to exit`
+so the active scope (and the way out) is always visible.
+
+**Scope vs. tier are orthogonal.** Focus controls *which documents*; the `!`/`+` prefix controls
+*which model*. So while focused: a plain question → that file (local); `+question` → that file
+(frontier model); `!question` → direct, no files (a one-message escape). And **switching focus
+starts a fresh conversation thread**, so a prior document's discussion can never bleed into the
+new one.
+
+```
+You:  what files mention the Land Rover?
+Bot:  …📎 Sources:
+      [1] Land rover VIN and Sale.pdf
+      [2] insurance-2024.pdf
+      Reply /focus <n> to chat with just that document.
+You:  /focus 1
+Bot:  🎯 Now focused on Land rover VIN and Sale.pdf — questions are scoped to this file. /done to exit.
+You:  what is my VIN?
+Bot:  SALWA2VK7HA000000 …
+      🎯 Focused on Land rover VIN and Sale.pdf · /done to exit
+```
+
+### Files with no readable text — honest, located, fixable
+
+If a focused file has no extractable text (a scanned PDF, an unsupported type), Mnemos doesn't
+let the model improvise — it says so plainly, **with the file's path and the reason**, and
+offers **`/reindex`** to re-extract just that one file (which runs OCR for scanned PDFs; §5.1).
+This is the "find → add → chat" loop refusing to silently fail.
+
+---
+
 ## 5. Tiers — read is free, write is guarded
 
 Every verb declares one tier (in its manifest for script verbs; in code for built-ins):
@@ -232,6 +312,30 @@ Every verb declares one tier (in its manifest for script verbs; in code for buil
 The tier is **declared, and it provisions what the verb can reach** — it is not advisory. A
 `read` verb is handed no index handle; it is structurally incapable of mutation. A `write`
 verb receives a confined index handle and nothing more (no network, no file writes, no shell).
+
+---
+
+## 5.1 On-demand extraction — text → `pdftotext` → OCR
+
+When `rag` adds a file, the loader extracts its text. For PDFs this is a **three-tier**
+pipeline so the messy real-world documents you actually have still work:
+
+1. **`pdf-parse`** (pure-JS, cross-platform) — handles normal text PDFs.
+2. **`pdftotext`** (poppler) fallback — recovers PDFs whose text layer `pdf-parse` silently
+   missed *or errored on*. Used only if poppler is on the system; a no-op otherwise.
+3. **OCR** fallback — for **scanned/image PDFs with no text layer**: `pdftoppm` renders the
+   pages to images and **`tesseract.js`** (the same engine the image loader uses) reads them.
+   Bounded to the first 20 pages; runs in a worker so it doesn't block.
+
+Each tier runs only if the previous came back empty, so there's no cost for clean files. A
+file that survives all three with no text is honestly reported as **metadata-only** (with its
+path + reason), and **`/reindex`** re-runs this pipeline on just that one focused file.
+
+> **Cross-platform note.** Tiers 2–3 use system tools (`poppler`'s `pdftotext`/`pdftoppm`) plus
+> the bundled `tesseract.js`. Where poppler isn't installed they degrade gracefully — text PDFs
+> still work everywhere; scanned-PDF OCR is available wherever poppler is present (macOS/Linux
+> via Homebrew/apt; Windows via the poppler build). Raster image files (`.png`/`.jpg`/…) OCR on
+> every platform via `tesseract.js` with no system dependency.
 
 ---
 

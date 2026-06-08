@@ -501,6 +501,80 @@ export function getContentChunksForFile(
   ).all(inheritedDistance, fileId, limit) as SearchHit[];
 }
 
+export type IndexedFile = { fileId: number; name: string; path: string };
+
+/**
+ * Find indexed (ingest-complete) files whose name/path contains `query`. Powers
+ * `/focus <name>` — scoping a conversation to a file the user already has in the
+ * index (e.g. one that just appeared in a citation), with no re-search needed.
+ */
+export function findIndexedFilesByName(db: MnemosDb, query: string, limit = 25): IndexedFile[] {
+  const escaped = query.replace(/[%_\\]/g, "\\$&"); // treat LIKE wildcards as literals
+  const like = `%${escaped}%`;
+  const rows = prepared(db)(
+    `SELECT f.id AS fileId, f.path AS filePath, s.path AS sourcePath, s.kind AS kind
+       FROM file f JOIN source s ON f.source_id = s.id
+      WHERE f.ingest_status = 'complete'
+        AND (f.path LIKE ? ESCAPE '\\' OR s.path LIKE ? ESCAPE '\\')
+      ORDER BY length(f.path) ASC
+      LIMIT ?`,
+  ).all(like, like, limit) as Array<{ fileId: number; filePath: string; sourcePath: string; kind: string }>;
+
+  const seen = new Set<number>();
+  const out: IndexedFile[] = [];
+  for (const r of rows) {
+    if (seen.has(r.fileId)) continue;
+    seen.add(r.fileId);
+    const full = (r.kind === "file" ? r.sourcePath : `${r.sourcePath}/${r.filePath}`).replace(/\/+/g, "/");
+    out.push({ fileId: r.fileId, name: full.split("/").pop() || full, path: full });
+  }
+  return out;
+}
+
+/** Total characters of CONTENT (ordinal >= 0) indexed for a file. ~0 means the
+ * file is "metadata-only" — no extractable text was found (e.g. a scanned PDF). */
+export function fileContentChars(db: MnemosDb, fileId: number): number {
+  const row = prepared(db)(
+    `SELECT COALESCE(SUM(length(text)), 0) AS n FROM chunk WHERE file_id = ? AND ordinal >= 0`,
+  ).get(fileId) as { n: number } | undefined;
+  return row?.n ?? 0;
+}
+
+export type FileLocation = {
+  fileId: number;
+  name: string;
+  fullPath: string;
+  /** Path relative to the source root (the file table's `path`) — for targeting
+   * a single file inside a folder source on re-ingest. */
+  relPath: string;
+  loader: string;
+  sourceId: number;
+  sourcePath: string;
+};
+
+/** Where a file lives + how it was loaded — for the metadata-only notice and a
+ * targeted re-extract. Null if the file id is unknown. */
+export function getFileLocation(db: MnemosDb, fileId: number): FileLocation | null {
+  const row = prepared(db)(
+    `SELECT f.path AS filePath, f.loader AS loader, s.id AS sourceId, s.path AS sourcePath, s.kind AS kind
+       FROM file f JOIN source s ON f.source_id = s.id
+      WHERE f.id = ?`,
+  ).get(fileId) as
+    | { filePath: string; loader: string; sourceId: number; sourcePath: string; kind: string }
+    | undefined;
+  if (!row) return null;
+  const fullPath = (row.kind === "file" ? row.sourcePath : `${row.sourcePath}/${row.filePath}`).replace(/\/+/g, "/");
+  return {
+    fileId,
+    name: fullPath.split("/").pop() || fullPath,
+    fullPath,
+    relPath: row.filePath,
+    loader: row.loader,
+    sourceId: row.sourceId,
+    sourcePath: row.sourcePath,
+  };
+}
+
 export type CorpusStats = {
   totalFiles: number;
   totalChunks: number;

@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node: 22+](https://img.shields.io/badge/Node-22%2B-339933.svg)](https://nodejs.org/)
-[![Status: v0.17](https://img.shields.io/badge/Status-v0.17-cyan.svg)](CHANGELOG.md)
+[![Status: v0.18](https://img.shields.io/badge/Status-v0.18-cyan.svg)](CHANGELOG.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-cyan.svg)](CONTRIBUTING.md)
 
 Built by **[Sam Muthu](https://sammuthu.com)** · [Read the project write-up →](https://sammuthu.com/ai-ml/mnemos)
@@ -97,15 +97,23 @@ Set it up in **Settings → 📲 Telegram** (there's a built-in [step-by-step gu
 
 > WhatsApp is on the radar but not yet supported — there's no free, local-first-friendly bot API for it the way Telegram offers.
 
-## Pull files in on demand — `/do`
+## Find it, add it, chat with it — `/do` + `/focus`
 
-You can't index five terabytes of disk, so the useful pattern is to **find a file and add it when you need it** — including from your phone. `/do` does that with one new verb, and it is deliberately **not** "let an AI run shell commands." It is *capability-by-catalog*: a verb is a small, **you-authored, pre-tested script** in `~/.mnemos/do/` (the whole action surface is `ls ~/.mnemos/do/`). The model or you only pick a verb and supply a **validated** argument, run with no shell — there is no arbitrary command to analyze because there is no arbitrary command.
+On your computer you have a file browser and can add a whole folder. **On your phone you don't** — and that's the point. You're away from your desk, you half-remember a file's name, and you want to *find it, pull it into the index, and ask about it.* That four-step arc is the feature:
 
-- **`/do fs <name>`** — find files by name across your home directory (Spotlight-fast, with a `find` fallback), returned as a numbered list. Read-only: it sees *names*, never contents.
-- **`/do rag <n>`** — add the files you picked to the index, on demand. It **upserts by content hash** (new → added, unchanged → skipped, changed → re-indexed — never a duplicate), runs in the background, and tells you when they're searchable (`/do rag status`).
-- **A write is gated by a proof-of-human PIN** — a secret the model can't produce — and every `/do` action is audited. Reads stay free.
+```
+/do fs land rover     ① find it — fuzzy, any word order
+/do rag 1             ② add it to the index (text, Office, or scanned PDFs via OCR)
+/focus land rover     ③ scope the chat to just that file
+"what is my VIN?"     ④ ask / summarize — answered from that file alone → SALWA2VK7HA000000
+```
 
-Works on **macOS, Linux, and Windows** — a verb is an OS-native script (a `#!/bin/sh` file on macOS/Linux, a PowerShell `.ps1` on Windows), and the runner picks the right one for your platform. Adding your own verb is a documented contract with an adversarial test protocol: see **[`docs/agent/DO.md`](docs/agent/DO.md)** and **[`docs/agent/do-spec.md`](docs/agent/do-spec.md)**, with runnable examples in [`examples/do/`](examples/do/).
+- **`/do fs <name>`** — a **fuzzy** file-name hunt under your home directory: `land rover`, `LandRover`, and `Land*Rover*.pdf` all find `Land rover VIN and Sale.pdf`; `pearl` finds `InnerPearl.pdf`. Returns a numbered list. Read-only — it sees *names*, never contents.
+- **`/do rag <n>`** — add the files you picked, on demand. Extracts text PDFs, Office docs, **and scanned PDFs (OCR, where [poppler](https://poppler.freedesktop.org/) is installed)**; **upserts by content hash** (never a duplicate); runs in the background; auto-focuses on what you added.
+- **`/focus <name|n>`** — scope the chat to one indexed file (by name, or by `<n>` from a citation). **`/done`** returns to searching all files. A small focused file is loaded *whole* into context, so "summarize this" actually works.
+- **Safe by design** — `/do` is *capability-by-catalog*, not "an AI runs shell commands": each verb is a small **you-authored, pre-tested script** in `~/.mnemos/do/` (the whole action surface is `ls ~/.mnemos/do/`), run with **no shell** on a validated argument. Writes are gated by a **proof-of-human PIN**; every action is audited.
+
+This workflow is **live on the private Telegram channel** today (the shared engine is surface-agnostic; wiring the same commands into the web UI is a fast follow). It runs identically on **macOS, Linux, and Windows** — the dispatcher, fuzzy search, PIN, focus, and OCR are cross-platform; only the verb *script* is OS-native (`#!/bin/sh` on macOS/Linux, PowerShell `.ps1` on Windows). Add your own verb against a documented contract + adversarial test protocol: **[`docs/agent/DO.md`](docs/agent/DO.md)**, **[`docs/agent/do-spec.md`](docs/agent/do-spec.md)**, runnable examples in [`examples/do/`](examples/do/).
 
 ## Smart model routing — switch models with one character
 
