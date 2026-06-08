@@ -67,3 +67,4 @@ pnpm-debug.log*
 
 # Local session-handoff scratch (launch planning) — never commit
 session-continuation.md
+session_continuation.md

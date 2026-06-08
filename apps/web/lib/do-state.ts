@@ -11,6 +11,20 @@
 
 import { getDb } from "./runtime";
 
+/**
+ * The canonical state key for a conversation: its shared session id.
+ *
+ * Web and Telegram both derive the SAME key from the SAME sessionId, so the
+ * focus, selection buffer, cited list, pending-PIN, and rag-status all travel
+ * WITH the conversation across surfaces. Open a phone thread in the browser and
+ * its focus is already there; hand a browser thread back to the phone and the
+ * working-set follows. (The older `tg:<chatId>` / `web:<sessionId>` keys are
+ * superseded by this — keying by surface would have stranded state per device.)
+ */
+export function sessionKey(sessionId: string): string {
+  return `sess:${sessionId}`;
+}
+
 let ready = false;
 function db() {
   const d = getDb();

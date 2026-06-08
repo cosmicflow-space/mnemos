@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-06-08
+
+### Added
+- **`/do`, `/focus`, `/done`, `/reindex` now work in the web chat — same commands, same decisions as the Telegram bot.** The whole find → add → focus → chat workflow is usable from the browser: `/do fs <name>` lists numbered matches, `/do rag <n>` adds them behind the PIN (a 6-digit modal — confirming a parked write, or setting the PIN the first time), `/focus <name>`/`/focus <n>` scopes the chat to one file (with a 🎯 chip and an "exit focus" control), `/done` leaves it, and `/reindex` re-extracts a metadata-only file (OCR for scanned PDFs). The PIN/anomaly write-gate and the selection→paths resolution are now a single shared module the web and Telegram both call, so neither surface can drift on what's allowed.
+- **One conversation across phone and browser (continue either way).** Focus, the selection buffer, the cited list, the pending-PIN, and the rag-status are now keyed by the **shared session id** rather than the device — so a thread started on the phone opens in the browser with its scope intact, and vice-versa. Telegram threads are titled by their first question and appear in the web sidebar; the one live on the bot is marked **📱 active on Telegram**, and a **"Continue on phone"** control re-points the bot at any web thread (the trust model is unchanged — it only rebinds which session a chat points at, never touches a file). A focus change forks a fresh thread on both surfaces so a prior document never leaks into the next scope.
+- **Input legend documents the workflow.** The hint under the chat box now shows the find-&-focus commands alongside the `!`/`+` routing prefixes — one shared source of truth with `/tips` and Telegram `/help`.
+
+### Changed
+- A Telegram conversation is now an ordinary, real-titled session (no longer a generic "Telegram" label), so it's a first-class citizen in the web sidebar.
+
 ## [0.18.0] - 2026-06-07
 
 ### Added

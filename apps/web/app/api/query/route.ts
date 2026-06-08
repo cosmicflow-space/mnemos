@@ -11,6 +11,8 @@ import { getDb, getRegistry, getDefaultEmbedder } from "@/lib/runtime";
 import { envKeyForProvider } from "@/lib/config";
 import { parseQueryRoute, isFrontierTier } from "@/lib/query-routing";
 import { resolveFrontierModel } from "@/lib/model-routing";
+import { sessionKey, getFocus, setCited, clearCited, type FocusFile } from "@/lib/do-state";
+import { isMetadataOnly, metadataOnlyText, titleFromQuery } from "@/lib/focus-util";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,18 +60,6 @@ function ensureSession(
   const id = randomUUID();
   createSession(db, id);
   return { id, isNew: true };
-}
-
-/** Truncate a user query into a sidebar-friendly title. Cuts on a word
- * boundary near 50 chars and strips trailing punctuation. Falls back to a
- * hard slice if no whitespace nearby. */
-function titleFromQuery(q: string): string {
-  const cleaned = q.replace(/\s+/g, " ").trim();
-  if (cleaned.length <= 50) return cleaned;
-  const truncated = cleaned.slice(0, 50);
-  const lastSpace = truncated.lastIndexOf(" ");
-  const cut = lastSpace > 30 ? truncated.slice(0, lastSpace) : truncated;
-  return cut.replace(/[.,;:!?\-]+$/, "") + "…";
 }
 
 /**
@@ -148,6 +138,39 @@ export async function POST(req: Request) {
   const { id: sessionId, isNew: isNewSession } = ensureSession(db, parsed.data.sessionId);
   if (isNewSession) {
     setSessionTitle(db, sessionId, titleFromQuery(route.q));
+  }
+
+  // File Focus Mode (shared with Telegram via the session-keyed state): scope
+  // retrieval to the active file(s) unless this is a direct (`!`) query, which
+  // bypasses files entirely. Focus is scope; the `!`/`+` prefix is tier.
+  const stateK = sessionKey(sessionId);
+  const focus = route.direct ? null : getFocus(stateK);
+
+  // If every focused file is metadata-only (no extractable text — e.g. a scanned
+  // PDF), don't let the model improvise. Reply with the honest, located notice
+  // and a reindex hint. A short SSE stream so the client renders it like a turn.
+  if (focus && focus.every((f) => isMetadataOnly(f.fileId))) {
+    const f0 = focus[0];
+    const notice = f0 ? metadataOnlyText(f0.fileId, f0.name) : "This file has no readable text indexed.";
+    const enc = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(enc.encode(`data: ${JSON.stringify({ phase: "notice", message: notice })}\n\n`));
+        controller.enqueue(
+          enc.encode(`data: ${JSON.stringify({ phase: "done", sessionId, metadataOnly: true })}\n\n`),
+        );
+        controller.close();
+      },
+    });
+    return new Response(stream, {
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache, no-transform",
+        connection: "keep-alive",
+        "x-mnemos-session-id": sessionId,
+      },
+    });
   }
 
   let chatProvider;
@@ -234,6 +257,11 @@ export async function POST(req: Request) {
           encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
         );
       };
+      // Cited files in display order, de-duplicated by file — so a normal answer
+      // can offer `/focus <n>` to scope to one of its own sources (web parity
+      // with Telegram). Suppressed when already focused or for a direct query.
+      const citedFiles: FocusFile[] = [];
+      const seenFiles = new Set<number>();
       try {
         for await (const ev of runQuery(db, embedder, chatProvider, {
           query: route.q,
@@ -242,9 +270,20 @@ export async function POST(req: Request) {
           temperature: parsed.data.temperature,
           topK: parsed.data.topK,
           direct: route.direct,
+          scopeFileIds: focus?.map((f) => f.fileId),
         })) {
+          if (ev.phase === "retrieved") {
+            for (const h of ev.hits) {
+              if (seenFiles.has(h.fileId)) continue;
+              seenFiles.add(h.fileId);
+              citedFiles.push({ fileId: h.fileId, name: h.filePath.split("/").pop() ?? h.filePath });
+            }
+          }
           send(ev);
         }
+        const offerFocus = !focus && !route.direct && citedFiles.length > 0;
+        if (offerFocus) setCited(stateK, citedFiles.slice(0, 8));
+        else clearCited(stateK);
       } catch (err) {
         send({
           phase: "error",

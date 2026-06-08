@@ -28,6 +28,8 @@ import path from "node:path";
 import { runQuery, getChatProvider } from "@mnemos/core";
 import {
   createSession,
+  getSession,
+  setSessionTitle,
   getTelegramState,
   setTelegramOffset,
   consumeTelegramPairingCode,
@@ -38,8 +40,6 @@ import {
   listTelegramChats,
   appendAudit,
   findIndexedFilesByName,
-  fileContentChars,
-  getFileLocation,
 } from "@mnemos/db";
 import { getDb, getRegistry, getDefaultEmbedder } from "./runtime";
 import {
@@ -48,10 +48,10 @@ import {
   credentialsForProvider,
 } from "./config";
 import { parseQueryRoute, isFrontierTier, type RouteTier } from "./query-routing";
-import { listVerbs, runVerb, parseSelection } from "./do-runner";
+import { listVerbs, runVerb } from "./do-runner";
 import {
+  sessionKey,
   setBuffer,
-  getBuffer,
   setPending,
   getPending,
   clearPending,
@@ -59,13 +59,14 @@ import {
   getRagStatus,
   setFocus,
   getFocus,
-  clearFocus,
   setCited,
   getCited,
   clearCited,
   type FocusFile,
 } from "./do-state";
-import { pinExists, setPin, verify as verifyPin, windowValid, lockedMs, getCadence } from "./do-pin";
+import { resolveRag, ragGate } from "./do-commands";
+import { isMetadataOnly, metadataOnlyText, META_ONLY_CHARS, titleFromQuery } from "./focus-util";
+import { pinExists, setPin, verify as verifyPin, getCadence } from "./do-pin";
 import { addPathsToRag, reindexFile, type RagOutcome } from "./do-rag";
 import { resolveFrontierModel } from "./model-routing";
 import { formatTipsText } from "./input-tips";
@@ -235,9 +236,9 @@ async function handleUpdate(token: string, update: TgUpdate): Promise<void> {
     return;
   }
   if (text === "/new" || text.startsWith("/new@")) {
-    setTelegramChatSession(db, chatId, null); // next question starts fresh
-    clearFocus(chatKey(chatId)); // a fresh conversation isn't scoped to a file
-    clearCited(chatKey(chatId)); // …and `/focus <n>` must not reach a stale citation list
+    // Unbind so the next question opens a fresh session. The prior thread (with
+    // its focus, if any) stays in history — reopen it here or in the web app.
+    setTelegramChatSession(db, chatId, null);
     await tgSend(token, chatId, "🧹 Started a new conversation.");
     return;
   }
@@ -246,9 +247,11 @@ async function handleUpdate(token: string, update: TgUpdate): Promise<void> {
     return;
   }
   if (text === "/done" || text.startsWith("/done@")) {
-    const was = clearFocus(chatKey(chatId));
-    clearCited(chatKey(chatId)); // a stale `/focus <n>` target must not survive the exit
-    if (was) resetConversation(chatId); // leaving focus starts a clean global thread
+    const cur = currentKey(chatId);
+    const was = cur ? getFocus(cur) !== null : false;
+    // Leaving focus starts a clean global thread; the focused thread is left in
+    // history with its focus intact (resumable). No need to clear it in place.
+    if (was) freshSession(chatId);
     await tgSend(
       token,
       chatId,
@@ -292,20 +295,49 @@ async function handleUpdate(token: string, update: TgUpdate): Promise<void> {
  * verbs that mutate the index are refused here (see lib/do-runner.ts).
  */
 const DO_TELEGRAM_LIMIT = 25; // keep the message well under Telegram's 4096-char cap
-const RAG_BULK_THRESHOLD = 10; // adding more than this at once is an anomaly → force a PIN
 
-function chatKey(chatId: number): string {
-  return `tg:${chatId}`;
+/**
+ * Conversation state (focus, selection buffer, cited list, pending PIN) is keyed
+ * by the chat's SHARED Mnemos session id — not by `tg:<chatId>` — so it travels
+ * with the conversation to the web app and back (see do-state.sessionKey).
+ */
+
+/** The chat's current session id, or null if it hasn't started one yet. */
+function currentSession(chatId: number): string | null {
+  return getTelegramChatSession(getDb(), chatId);
+}
+
+/** The state key for the chat's current session, or null if none exists yet. */
+function currentKey(chatId: number): string | null {
+  const s = currentSession(chatId);
+  return s ? sessionKey(s) : null;
+}
+
+/** The chat's session id, creating + binding one if absent (titled lazily from
+ * the first question, exactly like a web session). */
+function ensureSession(chatId: number): string {
+  const existing = getTelegramChatSession(getDb(), chatId);
+  if (existing) return existing;
+  return freshSession(chatId);
+}
+
+/** The state key for the chat's session, creating the session if needed. */
+function stateKey(chatId: number): string {
+  return sessionKey(ensureSession(chatId));
 }
 
 /**
- * Drop the conversation memory for this chat. Called on every focus transition
- * (enter / switch / exit) so a focused chat is its OWN clean thread — otherwise
- * the previous document's discussion leaks via session memory into the new scope
- * (e.g. switching focus to a near-empty file but still summarizing the old one).
+ * Start a brand-new clean thread bound to this chat. Called on every focus
+ * transition (enter / switch / exit) so a focused chat is its OWN thread —
+ * otherwise the previous document's discussion leaks via session memory into the
+ * new scope. The prior session stays in history with its focus intact, so it can
+ * be reopened (here or in the web app) and resumed.
  */
-function resetConversation(chatId: number): void {
-  setTelegramChatSession(getDb(), chatId, null);
+function freshSession(chatId: number): string {
+  const id = randomUUID();
+  createSession(getDb(), id); // null title — set from the first question
+  setTelegramChatSession(getDb(), chatId, id);
+  return id;
 }
 
 const ANNOUNCE_PATH = path.join(os.homedir(), ".mnemos", ".announce");
@@ -366,33 +398,15 @@ function focusLabel(files: FocusFile[]): string {
   return files.length === 1 && files[0] ? files[0].name : `${files.length} files`;
 }
 
-// Below this many characters of indexed content, a file is "metadata-only" — no
-// readable text was extracted (e.g. a scanned PDF, or an unsupported type).
-const META_ONLY_CHARS = 20;
-
-function isMetadataOnly(fileId: number): boolean {
-  return fileContentChars(getDb(), fileId) < META_ONLY_CHARS;
-}
-
-/** Honest, located explanation when a focused file has no readable text. */
-function metadataOnlyMessage(fileId: number, name: string): string {
-  const loc = getFileLocation(getDb(), fileId);
-  const where = loc ? `\nLocation: ${loc.fullPath}` : "";
-  const reason = /\.pdf$/i.test(name)
-    ? "Even OCR found no readable text — it may be a blank or very low-quality scan."
-    : "No text could be extracted for this file type.";
-  return `📄 I only have metadata for "${name}" — no readable text is indexed.${where}\n${reason}\nReply /reindex to try extracting it again (PDFs run OCR).`;
-}
-
 /**
  * `/focus <name>` — scope the conversation to an ALREADY-INDEXED file by name
  * (e.g. one the user just saw cited). Distinct from `/do rag`, which adds a new
  * file and auto-focuses. Bare `/focus` shows the current focus.
  */
 async function handleFocus(token: string, chatId: number, arg: string): Promise<void> {
-  const key = chatKey(chatId);
   if (!arg) {
-    const cur = getFocus(key);
+    const key = currentKey(chatId);
+    const cur = key ? getFocus(key) : null;
     await tgSend(
       token,
       chatId,
@@ -405,15 +419,17 @@ async function handleFocus(token: string, chatId: number, arg: string): Promise<
 
   // Numeric → pick from the LAST answer's cited sources (the `/focus <n>` hint).
   if (/^\d+$/.test(arg)) {
-    const cited = getCited(key);
+    // Read the cited list from the CURRENT session before transitioning away.
+    const cur = currentKey(chatId);
+    const cited = cur ? getCited(cur) : null;
     const n = Number(arg);
     const pick = cited && n >= 1 && n <= cited.length ? cited[n - 1] : undefined;
     if (pick) {
-      setFocus(key, [pick]);
-      resetConversation(chatId); // fresh thread scoped to the new file — no leak from the prior one
+      // Focus is a transition → fresh thread scoped to the picked file (no leak).
+      setFocus(sessionKey(freshSession(chatId)), [pick]);
       auditDo(chatId, "do_focus", { fileId: pick.fileId, name: pick.name, via: "focus-n" });
       await tgSend(token, chatId, `🎯 Now focused on ${pick.name} — questions are scoped to this file. /done to exit.`);
-      if (isMetadataOnly(pick.fileId)) await tgSend(token, chatId, metadataOnlyMessage(pick.fileId, pick.name));
+      if (isMetadataOnly(pick.fileId)) await tgSend(token, chatId, metadataOnlyText(pick.fileId, pick.name));
     } else {
       await tgSend(token, chatId, "Ask a question first, then reply /focus <n> to scope to one of its listed sources.");
     }
@@ -426,12 +442,14 @@ async function handleFocus(token: string, chatId: number, arg: string): Promise<
     return;
   }
   if (matches.length > 1) {
-    const names = matches.slice(0, 8).map((m) => `• ${m.name}`).join("\n");
+    // Full paths, not basenames — so duplicate basenames are distinguishable and
+    // the user can retype with a folder segment (the matcher matches on path too).
+    const names = matches.slice(0, 8).map((m) => `• ${m.path}`).join("\n");
     const more = matches.length > 8 ? `\n…and ${matches.length - 8} more` : "";
     await tgSend(
       token,
       chatId,
-      `Several indexed files match "${arg}":\n${names}${more}\n\nBe more specific (e.g. include the extension).`,
+      `Several indexed files match "${arg}":\n${names}${more}\n\nBe more specific (e.g. include a parent folder).`,
     );
     return;
   }
@@ -439,17 +457,17 @@ async function handleFocus(token: string, chatId: number, arg: string): Promise<
   const [first] = matches;
   if (!first) return;
   const f: FocusFile = { fileId: first.fileId, name: first.name };
-  setFocus(key, [f]);
-  resetConversation(chatId); // fresh thread scoped to the new file — no leak from the prior one
+  // Focus is a transition → fresh thread scoped to the new file (no leak).
+  setFocus(sessionKey(freshSession(chatId)), [f]);
   auditDo(chatId, "do_focus", { fileId: f.fileId, name: f.name, via: "focus" });
   await tgSend(token, chatId, `🎯 Now focused on ${f.name} — questions are scoped to this file. /done to exit.`);
-  if (isMetadataOnly(f.fileId)) await tgSend(token, chatId, metadataOnlyMessage(f.fileId, f.name));
+  if (isMetadataOnly(f.fileId)) await tgSend(token, chatId, metadataOnlyText(f.fileId, f.name));
 }
 
 /** `/reindex` — force re-extraction of the focused file (retry a metadata-only file). */
 async function handleReindex(token: string, chatId: number): Promise<void> {
-  const focus = getFocus(chatKey(chatId));
-  const target = focus?.[0];
+  const cur = currentKey(chatId);
+  const target = cur ? getFocus(cur)?.[0] : undefined;
   if (!target) {
     await tgSend(token, chatId, "Focus on a file first (/focus <name>), then /reindex to re-extract it.");
     return;
@@ -463,7 +481,8 @@ async function handleReindex(token: string, chatId: number): Promise<void> {
     return;
   }
   if (res.contentChars >= META_ONLY_CHARS) {
-    resetConversation(chatId);
+    // Now readable — fresh thread, still scoped to this file.
+    setFocus(sessionKey(freshSession(chatId)), [target]);
     await tgSend(token, chatId, `✅ Extracted text from "${target.name}" — it's readable now. Ask away.`);
     return;
   }
@@ -504,7 +523,7 @@ async function handleDo(token: string, chatId: number, rest: string): Promise<vo
     await tgSend(token, chatId, `No files match "${arg}".`);
     return;
   }
-  setBuffer(chatKey(chatId), verb, res.lines);
+  setBuffer(stateKey(chatId), verb, res.lines);
   auditDo(chatId, "do_verb", { verb, arg, resultCount: res.lines.length, truncated: res.truncated });
 
   const shown = res.lines.slice(0, DO_TELEGRAM_LIMIT);
@@ -524,24 +543,28 @@ async function handleDo(token: string, chatId: number, rest: string): Promise<vo
 async function handleRag(token: string, chatId: number, arg: string): Promise<void> {
   if (arg.trim().toLowerCase() === "status") return handleRagStatus(token, chatId);
 
-  const key = chatKey(chatId);
-  const buf = getBuffer(key);
-  if (!buf || buf.items.length === 0) {
+  const key = stateKey(chatId);
+  const sel = resolveRag(key, arg);
+  if (sel.kind === "empty") {
     await tgSend(token, chatId, "Nothing to add yet — run /do fs <name> first, then /do rag <n>.");
     return;
   }
-  const sel = parseSelection(arg, buf.items.length);
-  if ("error" in sel) {
-    await tgSend(token, chatId, `⚠️ ${sel.error}`);
+  if (sel.kind === "error") {
+    await tgSend(token, chatId, `⚠️ ${sel.message}`);
     return;
   }
-  if (sel.indices.length === 0) {
+  if (sel.kind === "none") {
     await tgSend(token, chatId, "No files selected.");
     return;
   }
-  const paths = sel.indices.map((i) => buf.items[i - 1]).filter((p): p is string => Boolean(p));
+  const { paths } = sel;
 
-  if (!pinExists()) {
+  // Single source of truth for the write-gate (PIN / anomaly / lockout).
+  const gate = ragGate(paths);
+  const anomaly = gate.kind === "pin" || gate.kind === "ready" ? gate.anomaly : false;
+  auditDo(chatId, "do_rag_attempt", { count: paths.length, anomaly, prompted: gate.kind === "pin" });
+
+  if (gate.kind === "setup") {
     await tgSend(
       token,
       chatId,
@@ -549,21 +572,16 @@ async function handleRag(token: string, chatId: number, arg: string): Promise<vo
     );
     return;
   }
-  const locked = lockedMs();
-  if (locked > 0) {
-    await tgSend(token, chatId, `🔒 Too many wrong PINs. Try again in ${Math.ceil(locked / 60000)} min.`);
+  if (gate.kind === "locked") {
+    await tgSend(token, chatId, `🔒 Too many wrong PINs. Try again in ${Math.ceil(gate.ms / 60000)} min.`);
     return;
   }
-
-  const anomaly = paths.length > RAG_BULK_THRESHOLD;
-  const prompted = !(windowValid() && !anomaly);
-  auditDo(chatId, "do_rag_attempt", { count: paths.length, anomaly, prompted });
-  if (!prompted) {
+  if (gate.kind === "ready") {
     await startRag(token, chatId, paths);
     return;
   }
   setPending(key, { verb: "rag", paths });
-  const why = anomaly ? ` (${paths.length} files at once)` : "";
+  const why = gate.anomaly ? ` (${paths.length} files at once)` : "";
   await tgSend(
     token,
     chatId,
@@ -574,9 +592,9 @@ async function handleRag(token: string, chatId: number, arg: string): Promise<vo
 
 /** A 6-digit reply to a parked write. Returns true if it consumed the message. */
 async function tryPinReply(token: string, chatId: number, digits: string): Promise<boolean> {
-  const key = chatKey(chatId);
-  const pending = getPending(key);
-  if (!pending) return false;
+  const key = currentKey(chatId);
+  const pending = key ? getPending(key) : null;
+  if (!key || !pending) return false;
   const res = verifyPin(digits);
   auditDo(chatId, "do_pin", {
     ok: res.ok,
@@ -604,7 +622,7 @@ async function tryPinReply(token: string, chatId: number, digits: string): Promi
  * follow-up when it completes. `/do rag status` reports progress meanwhile.
  */
 async function startRag(token: string, chatId: number, paths: string[]): Promise<void> {
-  const key = chatKey(chatId);
+  const key = stateKey(chatId);
   const names = paths.map((p) => p.split("/").pop() ?? p);
   setRagStatus(key, "chunking", { files: names });
   await tgSend(
@@ -632,10 +650,10 @@ async function startRag(token: string, chatId: number, paths: string[]): Promise
         chunks: outcome.chunks,
       });
       // Auto-focus on the file(s) just added — selecting a file via /do is intent.
+      // A freshly-added file starts its own clean thread (focus on the new session).
       let focusNote = "";
       if (outcome.focus.length > 0) {
-        setFocus(key, outcome.focus);
-        resetConversation(chatId); // a freshly-added file starts its own clean thread
+        setFocus(sessionKey(freshSession(chatId)), outcome.focus);
         auditDo(chatId, "do_focus", { count: outcome.focus.length, via: "rag" });
         focusNote = `\n\n🎯 Now focused on ${focusLabel(outcome.focus)} — questions are scoped to it. /done to exit.`;
       }
@@ -649,7 +667,8 @@ async function startRag(token: string, chatId: number, paths: string[]): Promise
 
 /** `/do rag status` — what's chunking now, and what was added recently. */
 async function handleRagStatus(token: string, chatId: number): Promise<void> {
-  const status = getRagStatus(chatKey(chatId));
+  const cur = currentKey(chatId);
+  const status = cur ? getRagStatus(cur) : null;
   if (!status) {
     await tgSend(token, chatId, "Nothing added yet. Use /do fs <name>, then /do rag <n>.");
     return;
@@ -721,13 +740,13 @@ async function answerQuestion(token: string, chatId: number, question: string): 
   }
   await tgAction(token, chatId, "typing").catch(() => {});
 
-  // Per-chat session for conversation memory.
-  let sessionId = getTelegramChatSession(db, chatId);
-  if (!sessionId) {
-    sessionId = randomUUID();
-    createSession(db, sessionId, "Telegram");
-    setTelegramChatSession(db, chatId, sessionId);
-  }
+  // The chat's shared session (conversation memory + the cross-surface state
+  // key). Titled lazily from the first question — exactly like a web session —
+  // so the sidebar shows real text, not a generic "Telegram" label.
+  const sessionId = ensureSession(chatId);
+  const sess = getSession(db, sessionId);
+  if (sess && !sess.title) setSessionTitle(db, sessionId, titleFromQuery(q));
+  const key = sessionKey(sessionId);
 
   const registry = getRegistry();
 
@@ -780,7 +799,7 @@ async function answerQuestion(token: string, chatId: number, question: string): 
   // File Focus Mode: scope retrieval to the active file(s) — unless this is a
   // direct (`!`) message, which intentionally bypasses files entirely. Focus is
   // scope; the `!`/`+` prefix is tier. The two are orthogonal.
-  const focus = direct ? null : getFocus(chatKey(chatId));
+  const focus = direct ? null : getFocus(key);
 
   // If the focused file(s) have no readable text, don't let the model improvise —
   // say so plainly (with the file's location) and offer /reindex. Done BEFORE the
@@ -788,7 +807,7 @@ async function answerQuestion(token: string, chatId: number, question: string): 
   if (focus && focus.every((f) => isMetadataOnly(f.fileId))) {
     const f0 = focus[0];
     if (f0) {
-      await tgSend(token, chatId, metadataOnlyMessage(f0.fileId, f0.name));
+      await tgSend(token, chatId, metadataOnlyText(f0.fileId, f0.name));
       return;
     }
   }
@@ -845,8 +864,8 @@ async function answerQuestion(token: string, chatId: number, question: string): 
   // list we display, so the numbers line up with `/focus <n>`.
   const offerFocus = !focus && !direct && citedFiles.length > 0;
   const shown = citedFiles.slice(0, 8);
-  if (offerFocus) setCited(chatKey(chatId), shown);
-  else clearCited(chatKey(chatId)); // an answer with no fresh numbered list invalidates /focus <n>
+  if (offerFocus) setCited(key, shown);
+  else clearCited(key); // an answer with no fresh numbered list invalidates /focus <n>
 
   // The footer keeps the active scope (and the way out) in view on every focused answer.
   const footer = focus ? `\n\n🎯 Focused on ${focusLabel(focus)} · /done to exit` : "";

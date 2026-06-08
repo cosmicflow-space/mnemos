@@ -1,13 +1,14 @@
 # Mnemos `/do` — Architecture
 
-> **Status: shipped on the Telegram channel.** `/do` (`fs`, `rag`), **File Focus Mode**
-> (`/focus` … `/done`), on-demand ingest with a three-tier PDF extractor (text → `pdftotext` →
-> OCR), and a proof-of-human PIN are live on the **private Telegram bot**. The shared engine —
-> retrieval scope, the loader/OCR, the argument validation, the PIN — is **surface-agnostic and
-> cross-platform**; wiring the same commands into the **web chat UI is a fast follow** (the web
-> app today handles the `!`/`+` prefixes and `/tips`/`/cost`). The OCR tier needs `poppler` on
-> the host (graceful no-op otherwise; §5.1). Runs on **macOS, Linux, and Windows** (§2.1). The
-> earlier agent design (`/agent`, `/run`) is retired.
+> **Status: shipped on both the web app and the Telegram channel.** `/do` (`fs`, `rag`), **File
+> Focus Mode** (`/focus` … `/done`, `/reindex`), on-demand ingest with a three-tier PDF extractor
+> (text → `pdftotext` → OCR), and a proof-of-human PIN are live in the **web chat UI** and on the
+> **private Telegram bot** — the same commands, the same decisions. The two surfaces **share one
+> conversation**: focus and the selection buffer are keyed by the session id (not the device), so
+> a thread started on your phone continues in the browser (and back) with its scope intact — and a
+> sidebar **"Continue on phone"** re-points the bot at any web thread (§6.1). The OCR tier needs
+> `poppler` on the host (graceful no-op otherwise; §5.1). Runs on **macOS, Linux, and Windows**
+> (§2.1). The earlier agent design (`/agent`, `/run`) is retired.
 
 ---
 
@@ -73,9 +74,8 @@ buffer, focus, and OCR are all cross-platform; only the verb *script* is OS-nati
 
 ## 1. The grammar: `!`/`+` to *ask*, `/do` to *act*, `/focus` to *narrow*
 
-Mnemos's input grammar is small, terse, and glanceable. The `!`/`+` prefixes are identical on
-web and phone; `/do`, `/focus`, and `/done` are live on the **Telegram channel** today (web-UI
-wiring is a fast follow — the engine is shared):
+Mnemos's input grammar is small, terse, and glanceable. The `!`/`+` prefixes, `/do`, `/focus`,
+`/done`, and `/reindex` are **identical on web and phone** — the same shared engine drives both:
 
 | You type | Meaning |
 |----------|---------|
@@ -256,8 +256,7 @@ Default RAG searches *all* your files. But once you've narrowed to a document, y
 to stay there — *"summarize this,"* *"what does it say about X,"* follow-ups — without other
 files leaking in. **File Focus Mode** scopes the conversation to one file (or a small set).
 
-**Two ways in, one way out** (on the Telegram channel today; the engine is surface-agnostic, so
-the web UI gets the same behavior when wired):
+**Two ways in, one way out** (identical on the web chat and the Telegram bot):
 
 - **`/do rag <n>` auto-focuses** on the file(s) you just added — selecting *is* intent.
 - **`/focus <name|n>`** scopes to an **already-indexed** file. `<name>` matches indexed files
@@ -380,12 +379,39 @@ guess-and-check oracle inside the loop. A prompt-injected model told *"add every
 - **Setting the PIN — the one retention tradeoff.** A PIN is a *reusable write secret*. Setting
   or entering it over **Telegram puts it in chat history**, which enlarges the blast radius under
   Telegram-account compromise or shoulder-surfing. Mnemos therefore (a) warns loudly and tells you
-  to delete the message, and (b) recommends setting/changing the PIN in the **web UI (planned) as
-  the private path**. This is a deliberate, documented tradeoff for phone convenience — not an
-  oversight.
+  to delete the message, and (b) recommends setting/changing the PIN in the **web UI as the private
+  path** — there the PIN goes into a password field that submits over localhost and is never echoed
+  into a chat log. This is a deliberate, documented tradeoff for phone convenience — not an oversight.
 
-PIN entry works the same on web (a field) and Telegram (a reply); read verbs and chat never
+PIN entry works the same on web (a modal field) and Telegram (a reply); read verbs and chat never
 require it.
+
+---
+
+## 6.1 Cross-surface continuity — one conversation, phone ↔ browser
+
+The web chat and the Telegram bot are **two windows onto the same conversations**, not two
+parallel histories. The mechanism is deliberately boring: there is no sync protocol, because
+there is nothing to sync.
+
+- **One identity.** Every conversation is a `session` row. A Telegram chat is bound to its current
+  session; the browser holds the session id it's viewing. Both surfaces derive the **same state
+  key** from that id (`sess:<id>`), so the **focus, the selection buffer, the cited list, the
+  pending-PIN, and the rag-status all live with the session** — not with the device. Open a phone
+  thread in the browser and its focus is already applied; the working-set is the same set.
+- **It shows up where you'd look.** Telegram threads are titled by their first question (like web
+  threads) and appear in the web sidebar. The one currently bound to the bot is marked **📱 active
+  on Telegram**, so you can pick the phone conversation up at your desk and keep going.
+- **"Continue on phone" (the other direction).** A sidebar control re-points the paired Telegram
+  chat(s) at the chosen web session. Because focus + working-set are session-keyed, the phone
+  inherits the exact scope with nothing copied — start at your desk, finish on the couch.
+- **Focus transitions fork a fresh thread on *both* surfaces.** Entering/switching/leaving focus
+  starts a new session (Telegram unbinds; the web opens a new thread and the client adopts its id),
+  so a prior document's discussion can't leak into the new scope. The old thread stays in history
+  with its focus intact — reopen it anywhere and resume.
+- **The trust model is unchanged.** "Continue on phone" only changes *which session a chat is bound
+  to*; it never touches a user file, and the only mutation on any surface remains the PIN-gated
+  add-to-index. Query/read stays ungated everywhere.
 
 ---
 

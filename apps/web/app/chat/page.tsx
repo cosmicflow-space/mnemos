@@ -19,7 +19,8 @@ import { SettingsMenu } from "@/components/SettingsMenu";
 import { ModelSettingsModal } from "@/components/ModelSettingsModal";
 import { SourcesModal } from "@/components/SourcesModal";
 import { parseQueryRoute, type RouteTier } from "@/lib/query-routing";
-import { formatTipsMarkdown, INPUT_TIPS, tipColor } from "@/lib/input-tips";
+import { formatTipsMarkdown, INPUT_TIPS, INPUT_COMMANDS, tipColor } from "@/lib/input-tips";
+import type { DoResult, FocusResult, ReindexResult, RagStatusWire } from "@/lib/do-types";
 import { Wordmark } from "@/components/Wordmark";
 import { VerifiedAnswersModal } from "@/components/VerifiedAnswersModal";
 import { TelegramSettingsModal } from "@/components/TelegramSettingsModal";
@@ -29,7 +30,12 @@ type SessionRow = {
   title: string | null;
   createdAt: number;
   updatedAt: number;
+  /** True when this session is the one currently bound to a paired Telegram
+   * chat — i.e. it's "live on the phone" right now (📱 badge). */
+  telegramActive?: boolean;
 };
+
+type FocusFile = { fileId: number; name: string };
 
 type StoredMessage = {
   id: number;
@@ -140,6 +146,9 @@ type LiveMessage = {
   direct?: boolean;
   /** Routing tier (local / frontier-cheap / frontier-flagship) for the badge. */
   tier?: RouteTier;
+  /** True for a local command result (e.g. /do, /focus) — render the body only,
+   * no model footer / sources / copy chrome. */
+  note?: boolean;
 };
 
 const STORAGE_SESSION_KEY = "mnemos.lastSessionId";
@@ -175,7 +184,19 @@ export default function ChatPage() {
   const [deleting, setDeleting] = useState(false);
   const [modelModalOnboarding, setModelModalOnboarding] = useState(false);
   const [sourceCount, setSourceCount] = useState<number | null>(null);
+  // File Focus Mode (web): the active file scope for the current session, the
+  // PIN modal for the `/do rag` write, and whether a Telegram chat is paired
+  // (so the sidebar can offer "Continue on phone").
+  const [focus, setFocusState] = useState<FocusFile[] | null>(null);
+  const [pinModal, setPinModal] = useState<{ mode: "verify" | "setup"; count: number } | null>(null);
+  const [telegramPaired, setTelegramPaired] = useState(false);
   const threadRef = useRef<HTMLDivElement | null>(null);
+  // Tracks which originating sessions have a rag-status poller in flight, so two
+  // concurrent `/do rag` adds each get their own completion handoff.
+  const ragPollRef = useRef<Set<string>>(new Set());
+  // When we open a fresh focused thread we seed its first bubble locally; this
+  // tells the message-loader effect to skip its fetch (which would clobber it).
+  const seededRef = useRef<string | null>(null);
 
   // ---- Load providers + configured agent + last session on mount ----
   useEffect(() => {
@@ -261,8 +282,9 @@ export default function ChatPage() {
     try {
       const res = await fetch("/api/sessions");
       if (res.ok) {
-        const data = (await res.json()) as { sessions: SessionRow[] };
+        const data = (await res.json()) as { sessions: SessionRow[]; telegramPaired?: boolean };
         setSessions(data.sessions);
+        setTelegramPaired(Boolean(data.telegramPaired));
       }
     } catch {
       // silent
@@ -315,11 +337,21 @@ export default function ChatPage() {
       setMessages([]);
       return;
     }
+    // A focus transition just seeded this new thread's first bubble — don't
+    // overwrite it with an (empty) history fetch.
+    if (seededRef.current === sessionId) {
+      seededRef.current = null;
+      return;
+    }
+    // Guard against a stale fetch resolving after the session changed again
+    // (e.g. a fast focus transition) and clobbering the newer thread.
+    let cancelled = false;
     void (async () => {
       try {
         const res = await fetch(`/api/sessions?id=${sessionId}`);
-        if (!res.ok) return;
+        if (cancelled || !res.ok) return;
         const data = (await res.json()) as { messages: StoredMessage[] };
+        if (cancelled) return;
         setMessages(
           data.messages.map((m) => ({
             role: m.role,
@@ -338,6 +370,32 @@ export default function ChatPage() {
         // silent
       }
     })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
+
+  // ---- Load the focus scope for the active session (shared with Telegram) ----
+  useEffect(() => {
+    if (!sessionId) {
+      setFocusState(null);
+      return;
+    }
+    // Guard against a stale focus fetch overwriting the chip after a fast switch.
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/focus?sessionId=${sessionId}`, { cache: "no-store" });
+        if (cancelled || !res.ok) return;
+        const data = (await res.json()) as { files: FocusFile[] | null };
+        if (!cancelled) setFocusState(data.files);
+      } catch {
+        // silent
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [sessionId]);
 
   // ---- Auto-scroll on new content ----
@@ -392,10 +450,310 @@ export default function ChatPage() {
     }
   }
 
+  // ── /do · /focus · /done · /reindex (the find→add→focus→chat workflow) ──────
+  // These mirror the Telegram bot exactly; state is keyed by the shared session
+  // id, so a thread continues seamlessly across phone and browser.
+
+  /** Append a plain user-echo bubble (the typed command). */
+  function pushUser(content: string) {
+    setMessages((prev) => [...prev, { role: "user", content }]);
+  }
+  /** Append an assistant "note" bubble — body only, no model chrome. */
+  function pushNote(content: string) {
+    setMessages((prev) => [...prev, { role: "assistant", content, note: true }]);
+  }
+
+  /** Ensure a real session row exists before running a /do command (so its
+   * working-set state and later queries share one id). */
+  async function ensureSessionId(): Promise<string> {
+    if (sessionId) return sessionId;
+    const res = await fetch("/api/sessions", { method: "POST" });
+    const data = (await res.json()) as { id: string };
+    // Keep the command bubbles we just pushed — don't let the message-loader
+    // effect replace them with this new session's (empty) history.
+    seededRef.current = data.id;
+    setSessionId(data.id);
+    if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_SESSION_KEY, data.id);
+    return data.id;
+  }
+
+  /** Open a fresh thread (after a focus transition) and seed its first bubble. */
+  function transitionTo(id: string, note: string, focused: FocusFile[] | null) {
+    seededRef.current = id;
+    setMessages([{ role: "assistant", content: note, note: true }]);
+    setFocusState(focused);
+    setSessionId(id);
+    if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_SESSION_KEY, id);
+    void refreshSessions();
+  }
+
+  function formatRagOutcome(detail: Record<string, unknown>): string {
+    const n = (k: string) => (typeof detail[k] === "number" ? (detail[k] as number) : 0);
+    const parts: string[] = [];
+    if (n("added")) parts.push(`added ${n("added")}`);
+    if (n("updated")) parts.push(`re-indexed ${n("updated")}`);
+    if (n("unchanged")) parts.push(`already up to date ${n("unchanged")}`);
+    if (n("failed")) parts.push(`failed ${n("failed")}`);
+    const head = parts.length ? parts.join(" · ") : "nothing to do";
+    const chunks = n("chunks") > 0 ? ` — ${n("chunks")} chunk(s) embedded, searchable now.` : ".";
+    return `${head}${chunks}`;
+  }
+
+  /** Poll the rag-ingest status started by `/do rag`, then report + auto-focus.
+   * Keyed by the originating session so two concurrent adds don't share a lock. */
+  function pollRag(startedFrom: string) {
+    if (ragPollRef.current.has(startedFrom)) return;
+    ragPollRef.current.add(startedFrom);
+    const deadline = Date.now() + 5 * 60 * 1000;
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/do?sessionId=${startedFrom}`, { cache: "no-store" });
+        const data = (await res.json()) as { status: RagStatusWire | null };
+        const st = data.status;
+        if (st && st.state !== "chunking") {
+          ragPollRef.current.delete(startedFrom);
+          if (st.state === "error") {
+            pushNote(`⚠️ ${String(st.detail.message ?? "ingest failed")}`);
+            return;
+          }
+          const summary = formatRagOutcome(st.detail);
+          const focusedId =
+            typeof st.detail.focusedSessionId === "string" ? st.detail.focusedSessionId : undefined;
+          const focusName = typeof st.detail.focusName === "string" ? st.detail.focusName : undefined;
+          if (focusedId) {
+            transitionTo(
+              focusedId,
+              `✅ ${summary}\n\n🎯 Now focused on **${focusName ?? "the file"}** — questions are scoped to it. Type \`/done\` to exit.`,
+              null, // the focus effect will load the real focus for the new session
+            );
+          } else {
+            pushNote(`✅ ${summary}`);
+            await refreshSessions();
+          }
+          return;
+        }
+      } catch {
+        // ignore a transient poll error; keep trying until the deadline
+      }
+      if (Date.now() < deadline) setTimeout(() => void tick(), 1500);
+      else ragPollRef.current.delete(startedFrom);
+    };
+    setTimeout(() => void tick(), 1200);
+  }
+
+  /** Submit a PIN (verify a parked write, or bootstrap a new PIN). */
+  async function submitPin(digits: string) {
+    if (!pinModal) return;
+    const sid = await ensureSessionId();
+    if (pinModal.mode === "setup") {
+      const res = await fetch("/api/do", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sessionId: sid, input: `pin ${digits}` }),
+      });
+      const data = (await res.json()) as DoResult;
+      setPinModal(null);
+      if (data.kind === "pin-set") pushNote("✅ PIN set. Run `/do rag <n>` again to add your files.");
+      else if (data.kind === "message") pushNote(data.text);
+      return;
+    }
+    // verify
+    const res = await fetch("/api/do", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sessionId: sid, pin: digits }),
+    });
+    const data = (await res.json()) as DoResult;
+    if (data.kind === "rag-started") {
+      setPinModal(null);
+      pushNote("⏳ Adding to the index — chunking now. I'll update when it's ready.");
+      pollRag(data.startedFrom);
+    } else if (data.kind === "pin-bad") {
+      const left =
+        data.lockedMs != null
+          ? `Locked for ${Math.ceil(data.lockedMs / 60000)} min.`
+          : data.attemptsLeft != null
+            ? `${data.attemptsLeft} attempt(s) left.`
+            : "Try again.";
+      setPinModal(null);
+      pushNote(`❌ Wrong PIN. ${left} Re-run \`/do rag\` to retry.`);
+    } else {
+      setPinModal(null);
+      if (data.kind === "message") pushNote(data.text);
+    }
+  }
+
+  /** "Continue on phone": bind the paired Telegram chat(s) to a session. */
+  async function bindToPhone(id: string) {
+    try {
+      const res = await fetch("/api/telegram/bind-session", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sessionId: id }),
+      });
+      const data = (await res.json()) as { ok: boolean; reason?: string };
+      if (data.ok) {
+        await refreshSessions();
+        setError(null);
+      } else {
+        setError(data.reason ?? "Couldn't bind this chat to Telegram.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  /** Dispatch a slash command. Returns true if it was a recognized command. */
+  async function runSlashCommand(raw: string): Promise<boolean> {
+    const m = /^\/(do|focus|done|reindex)(?:\s+([\s\S]*))?$/i.exec(raw);
+    if (!m) return false;
+    const verb = m[1]!.toLowerCase();
+    const rest = (m[2] ?? "").trim();
+    pushUser(raw);
+    const sid = await ensureSessionId();
+
+    try {
+      if (verb === "done") {
+        const res = await fetch("/api/focus", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sessionId: sid, done: true }),
+        });
+        const data = (await res.json()) as FocusResult;
+        if (data.kind === "off") {
+          if (data.wasFocused && data.sessionId) {
+            transitionTo(data.sessionId, "🌐 Focus off. Back to searching all your files.", null);
+          } else {
+            setFocusState(null);
+            pushNote("You're not focused on a file. `/focus <name>` to scope to one.");
+          }
+        }
+        return true;
+      }
+
+      if (verb === "focus") {
+        const res = await fetch("/api/focus", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sessionId: sid, arg: rest }),
+        });
+        const data = (await res.json()) as FocusResult;
+        if (data.kind === "focused") {
+          const note =
+            `🎯 Now focused on **${data.name}** — questions are scoped to this file. Type \`/done\` to exit.` +
+            (data.metadataOnly && data.metaText ? `\n\n${data.metaText}` : "");
+          transitionTo(data.sessionId, note, [{ fileId: -1, name: data.name }]);
+        } else if (data.kind === "choose") {
+          const list = data.matches.map((p) => `- \`${p}\``).join("\n");
+          const more = data.more > 0 ? `\n\n…and ${data.more} more.` : "";
+          pushNote(`Several indexed files match. Be more specific (e.g. include a parent folder):\n\n${list}${more}`);
+        } else if (data.kind === "current") {
+          pushNote(
+            data.files && data.files.length > 0
+              ? `🎯 Focused on **${data.files.map((f) => f.name).join(", ")}**. Type \`/done\` to exit.`
+              : "Not focused. `/focus <name>` to scope to an indexed file, or `/do fs <name>` to find a new one.",
+          );
+        } else if (data.kind === "none") {
+          pushNote(data.message);
+        } else if (data.kind === "error") {
+          pushNote(`⚠️ ${data.message}`);
+        }
+        return true;
+      }
+
+      if (verb === "reindex") {
+        pushNote('⏳ Re-extracting the focused file… (scanned PDFs run OCR — may take a moment)');
+        const res = await fetch("/api/reindex", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sessionId: sid }),
+        });
+        const data = (await res.json()) as ReindexResult;
+        if (data.kind === "readable") {
+          transitionTo(
+            data.sessionId,
+            `✅ Extracted text from **${data.name}** — it's readable now. Ask away.`,
+            [{ fileId: -1, name: data.name }],
+          );
+        } else if (data.kind === "still-empty") {
+          pushNote(`📄 Still no readable text in **${data.name}**. ${data.reason}`);
+        } else if (data.kind === "no-focus") {
+          pushNote("Focus on a file first (`/focus <name>`), then `/reindex` to re-extract it.");
+        } else {
+          pushNote(`⚠️ Couldn't re-extract${data.name ? ` "${data.name}"` : ""}: ${data.message}`);
+        }
+        return true;
+      }
+
+      // verb === "do"
+      const res = await fetch("/api/do", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sessionId: sid, input: rest }),
+      });
+      const data = (await res.json()) as DoResult;
+      switch (data.kind) {
+        case "verbs": {
+          const lines = data.verbs.map((v) => `- \`${v.name}\` — ${v.summary}`);
+          lines.push("- `rag` — add files you found to the index (PIN-gated)");
+          pushNote(
+            data.verbs.length === 0
+              ? "No Mnemos aliases available yet. Create one under `~/.mnemos/do/` (see docs/agent/do-spec.md), then `/do <verb>`."
+              : `**Mnemos aliases:**\n\n${lines.join("\n")}\n\nUse: \`/do fs <name>\`, then \`/do rag <n>\`.`,
+          );
+          break;
+        }
+        case "matches": {
+          const numbered = data.items.map((p, i) => `${i + 1}. \`${p}\``).join("\n");
+          const overflow = data.truncated ? "\n\n…more matches — narrow the pattern (e.g. add an extension)." : "";
+          pushNote(
+            `**${data.count} match(es)** for "${data.arg}":\n\n${numbered}${overflow}\n\nAdd to the index: \`/do rag <n>\` · \`1-3\` · \`all\``,
+          );
+          break;
+        }
+        case "rag-started":
+          pushNote("⏳ Adding to the index — chunking now. I'll update when it's ready.");
+          pollRag(data.startedFrom);
+          break;
+        case "rag-pin":
+          setPinModal({ mode: "verify", count: data.count });
+          break;
+        case "rag-setup":
+          setPinModal({ mode: "setup", count: 0 });
+          break;
+        case "rag-locked":
+          pushNote(`🔒 Too many wrong PINs. Try again in ${Math.ceil(data.ms / 60000)} min.`);
+          break;
+        case "pin-set":
+          pushNote("✅ PIN set. Run `/do rag <n>` again to add your files.");
+          break;
+        case "message":
+          pushNote(data.text);
+          break;
+        case "error":
+          pushNote(`⚠️ ${data.message}`);
+          break;
+      }
+      return true;
+    } catch (err) {
+      pushNote(`⚠️ ${err instanceof Error ? err.message : String(err)}`);
+      return true;
+    }
+  }
+
   async function send(e: FormEvent) {
     e.preventDefault();
     const raw = input.trim();
     if (!raw || streaming) return;
+
+    // The find → add → focus workflow commands (mirror the Telegram bot).
+    if (/^\/(do|focus|done|reindex)(\s|$)/i.test(raw)) {
+      setInput("");
+      setInputHistory((h) => (h[h.length - 1] === raw ? h : [...h, raw]));
+      setHistoryIdx(null);
+      await runSlashCommand(raw);
+      return;
+    }
 
     // Local help command — render the input shortcuts as a chat bubble without
     // calling the model (mirrors Telegram's /tips). Same source of truth.
@@ -574,6 +932,19 @@ export default function ChatPage() {
               }
               return next;
             });
+          } else if (ev.phase === "notice" && typeof ev.message === "string") {
+            // Focus is on a metadata-only file (no extractable text) — the server
+            // replies with an honest, located notice instead of letting the model
+            // improvise. Render it as the answer body.
+            assistantText = ev.message;
+            setMessages((prev) => {
+              const next = [...prev];
+              const last = next[next.length - 1];
+              if (last && last.role === "assistant") {
+                next[next.length - 1] = { ...last, content: assistantText, note: true };
+              }
+              return next;
+            });
           } else if (ev.phase === "done") {
             // Capture model + duration + token counts from the runQuery
             // 'done' event so the message footer can show "ollama · llama3.2:3b · 1.2s".
@@ -741,6 +1112,14 @@ export default function ChatPage() {
           onClose={() => setKeyDialogProvider(null)}
         />
       )}
+      {pinModal && (
+        <PinDialog
+          mode={pinModal.mode}
+          count={pinModal.count}
+          onSubmit={(digits) => void submitPin(digits)}
+          onClose={() => setPinModal(null)}
+        />
+      )}
       {activeModal === "model" && (
         <ModelSettingsModal
           providers={providers}
@@ -818,19 +1197,37 @@ export default function ChatPage() {
               <ul className="space-y-0.5">
                 {group.items.map((s) => {
                   const label = s.title ?? formatSessionPreview(s);
+                  // Right padding leaves room for the hover actions (phone + ×).
+                  const pad = telegramPaired ? "pr-12" : "pr-7";
                   return (
                     <li key={s.id} className="group/session relative">
                       <button
                         onClick={() => setSessionId(s.id)}
-                        className={`w-full text-left pl-2 pr-7 py-1.5 rounded text-xs truncate transition ${
+                        className={`w-full text-left pl-2 ${pad} py-1.5 rounded text-xs truncate transition ${
                           s.id === sessionId
                             ? "bg-cyan-500/15 text-cyan-700 dark:text-cyan-300"
                             : "text-fg/90 hover:bg-app"
                         }`}
-                        title={label}
+                        title={s.telegramActive ? `${label} — active on Telegram` : label}
                       >
+                        {s.telegramActive && (
+                          <span className="mr-1" aria-hidden title="Active on Telegram">📱</span>
+                        )}
                         {label}
                       </button>
+                      {/* "Continue on phone": re-point the paired Telegram chat at
+                          this session, so it can be picked up on the phone. Hidden
+                          for the session already live there. */}
+                      {telegramPaired && !s.telegramActive && (
+                        <button
+                          onClick={() => void bindToPhone(s.id)}
+                          className="absolute right-7 top-1/2 -translate-y-1/2 opacity-0 group-hover/session:opacity-100 transition rounded text-muted hover:text-amber-400 hover:bg-amber-500/10 w-5 h-5 flex items-center justify-center text-xs"
+                          title="Continue this chat on your phone (Telegram)"
+                          aria-label="Continue on phone"
+                        >
+                          📱
+                        </button>
+                      )}
                       <button
                         onClick={() => void deleteSession(s.id, label)}
                         className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/session:opacity-100 transition rounded text-muted hover:text-red-400 hover:bg-red-500/10 w-5 h-5 flex items-center justify-center text-xs"
@@ -941,6 +1338,22 @@ export default function ChatPage() {
           onSubmit={send}
           className="border-t border-line px-6 py-4 bg-surface"
         >
+          {focus && focus.length > 0 && (
+            <div className="mb-2 flex items-center gap-2 text-[11px]">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-amber-700 dark:text-amber-300">
+                <span aria-hidden>🎯</span> Focused on{" "}
+                <span className="font-medium">{focus.map((f) => f.name).join(", ")}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => void runSlashCommand("/done")}
+                className="text-muted hover:text-fg underline"
+                title="Back to searching all your files"
+              >
+                exit focus
+              </button>
+            </div>
+          )}
           {sourceCount === 0 && messages.length > 0 && (
             <div className="mb-2 text-[11px] text-muted flex items-center gap-1.5">
               <span aria-hidden>ℹ️</span>
@@ -978,7 +1391,13 @@ export default function ChatPage() {
                 setHistoryIdx(null);
               }}
               onKeyDown={onKeyDown}
-              placeholder={streaming ? "Streaming…" : "Ask your files… (see routing prefixes below)"}
+              placeholder={
+                streaming
+                  ? "Streaming…"
+                  : focus && focus.length > 0
+                    ? `Ask about ${focus[0]?.name ?? "this file"}… (/done to exit)`
+                    : "Ask your files… (or /do to find & add, see below)"
+              }
               disabled={streaming}
               rows={2}
               className="flex-1 bg-app border border-line rounded-md px-3 py-2 text-sm text-fg focus:outline-none focus:border-cyan-500 transition disabled:opacity-50 resize-none"
@@ -999,20 +1418,30 @@ export default function ChatPage() {
             const r = parseQueryRoute(input);
             if (!input.trim() || r.sigil === "") {
               return (
-                <div className="mt-1.5 text-[11px] text-muted flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                  {/* Rendered from INPUT_TIPS so the legend can't drift from
-                      /tips and Telegram /help — one source of truth. */}
-                  {INPUT_TIPS.map((t) => {
-                    const c = tipColor(t.syntax);
-                    const cls =
-                      c === "amber" ? "text-amber-400" : c === "sky" ? "text-sky-400" : "text-muted/70";
-                    return (
-                      <span key={t.syntax}>
-                        <code className={cls}>{t.syntax}</code> {t.short}
+                <div className="mt-1.5 space-y-0.5">
+                  {/* Rendered from INPUT_TIPS / INPUT_COMMANDS so the legend can't
+                      drift from /tips and Telegram /help — one source of truth. */}
+                  <div className="text-[11px] text-muted flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                    {INPUT_TIPS.map((t) => {
+                      const c = tipColor(t.syntax);
+                      const cls =
+                        c === "amber" ? "text-amber-400" : c === "sky" ? "text-sky-400" : "text-muted/70";
+                      return (
+                        <span key={t.syntax}>
+                          <code className={cls}>{t.syntax}</code> {t.short}
+                        </span>
+                      );
+                    })}
+                    <span className="text-muted/70">· <code>/tips</code> for details</span>
+                  </div>
+                  <div className="text-[11px] text-muted/80 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                    <span className="text-muted/60">find &amp; focus:</span>
+                    {INPUT_COMMANDS.filter((c) => c.cmd !== "/do").map((c) => (
+                      <span key={c.cmd}>
+                        <code className="text-emerald-500 dark:text-emerald-400">{c.cmd}</code> {c.short}
                       </span>
-                    );
-                  })}
-                  <span className="text-muted/70">· <code>/tips</code> for details</span>
+                    ))}
+                  </div>
                 </div>
               );
             }
@@ -1264,6 +1693,78 @@ function KeyDialog({
   );
 }
 
+/** 6-digit PIN dialog for the `/do rag` write — either confirming a parked add
+ * (verify) or setting the PIN the first time (setup). The PIN is a proof-of-human
+ * the model structurally can't supply; it never gates reads or chat. */
+function PinDialog({
+  mode,
+  count,
+  onSubmit,
+  onClose,
+}: {
+  mode: "verify" | "setup";
+  count: number;
+  onSubmit: (digits: string) => void;
+  onClose: () => void;
+}) {
+  const [pin, setPin] = useState("");
+  const ok = /^\d{6}$/.test(pin);
+  const setup = mode === "setup";
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="w-full max-w-sm rounded-xl border border-line bg-elevated text-fg p-5 shadow-2xl aurora-card"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2 mb-1">
+          <span aria-hidden>🔒</span>
+          <h2 className="text-sm font-semibold text-fg">
+            {setup ? "Set your write PIN" : "Confirm with your PIN"}
+          </h2>
+        </div>
+        <p className="text-xs text-muted leading-relaxed mb-3">
+          {setup
+            ? "Adding files to the index is guarded by a 6-digit PIN — a proof-of-human the model can't supply. Set it once; you'll re-enter it on a daily cadence (or on an unusually large add). It never gates reading or chatting."
+            : `Enter your 6-digit PIN to add ${count} file${count === 1 ? "" : "s"} to the index.`}
+        </p>
+        <input
+          type="password"
+          inputMode="numeric"
+          autoFocus
+          value={pin}
+          onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && ok) onSubmit(pin);
+            if (e.key === "Escape") onClose();
+          }}
+          placeholder="••••••"
+          className="w-full bg-surface border border-line rounded-md px-3 py-2 text-center text-lg tracking-[0.5em] font-mono text-fg focus:outline-none focus:border-cyan-500"
+        />
+        <div className="flex justify-end gap-2 mt-4">
+          <button
+            onClick={onClose}
+            className="rounded-md px-3 py-1.5 text-xs text-muted hover:bg-surface hover:text-fg transition"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onSubmit(pin)}
+            disabled={!ok}
+            className="rounded-md bg-cyan-500 px-4 py-1.5 text-xs font-semibold text-gray-900 hover:bg-cyan-400 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {setup ? "Set PIN" : "Confirm"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Actionable card shown when the selected provider has no API key on file.
  * Replaces the old raw-JSON error: explains why a key is needed, links out to
  * get one, points at the in-app place to add it, and warns against committing
@@ -1458,7 +1959,7 @@ function MessageBubble({
         ) : (
           <span className="text-sm text-muted italic">Thinking…</span>
         )}
-        {!isUser && !message.streaming && message.content && (
+        {!isUser && !message.streaming && message.content && !message.note && (
           <div className="flex items-center justify-between mt-2 text-xs text-muted gap-3">
             <span className="flex items-center gap-2 min-w-0">
               {message.direct ? (
