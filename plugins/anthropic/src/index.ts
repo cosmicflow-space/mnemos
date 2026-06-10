@@ -25,29 +25,36 @@ const credentialSchema: CredentialSchema = {
 
 // When the prices below were last set. Surfaced in the UI so a stale rate is
 // obvious — providers change pricing; verify before relying on it.
-const PRICED_AS_OF = "2026-05-30";
+const PRICED_AS_OF = "2026-06-10";
 
 const KNOWN_MODELS: readonly ModelInfo[] = [
-  {
-    id: "claude-opus-4-7",
-    displayName: "Claude Opus 4.7",
-    contextWindow: 200000,
-    inputCostPer1M: 15.0,
-    outputCostPer1M: 75.0,
-  },
-  {
-    id: "claude-sonnet-4-6",
-    displayName: "Claude Sonnet 4.6",
-    contextWindow: 200000,
-    inputCostPer1M: 3.0,
-    outputCostPer1M: 15.0,
-  },
   {
     id: "claude-haiku-4-5",
     displayName: "Claude Haiku 4.5",
     contextWindow: 200000,
-    inputCostPer1M: 0.8,
-    outputCostPer1M: 4.0,
+    inputCostPer1M: 1.0,
+    outputCostPer1M: 5.0,
+  },
+  {
+    id: "claude-sonnet-4-6",
+    displayName: "Claude Sonnet 4.6",
+    contextWindow: 1000000,
+    inputCostPer1M: 3.0,
+    outputCostPer1M: 15.0,
+  },
+  {
+    id: "claude-opus-4-8",
+    displayName: "Claude Opus 4.8",
+    contextWindow: 1000000,
+    inputCostPer1M: 5.0,
+    outputCostPer1M: 25.0,
+  },
+  {
+    id: "claude-fable-5",
+    displayName: "Claude Fable 5",
+    contextWindow: 1000000,
+    inputCostPer1M: 10.0,
+    outputCostPer1M: 50.0,
   },
 ];
 

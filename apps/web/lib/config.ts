@@ -17,6 +17,7 @@ import { getRegistry } from "@/lib/runtime";
 export type ProviderId =
   | "anthropic"
   | "openai"
+  | "codex"
   | "gemini"
   | "ollama"
   | "local";
@@ -24,6 +25,7 @@ export type ProviderId =
 export const PROVIDER_IDS: ProviderId[] = [
   "anthropic",
   "openai",
+  "codex",
   "gemini",
   "ollama",
   "local",
@@ -32,10 +34,19 @@ export const PROVIDER_IDS: ProviderId[] = [
 const ENV_KEY_FOR_PROVIDER: Record<ProviderId, string | null> = {
   anthropic: "ANTHROPIC_API_KEY",
   openai: "OPENAI_API_KEY",
+  codex: "CODEX_API_KEY",
   gemini: "GEMINI_API_KEY",
   ollama: null,
   local: null,
 };
+
+/** Codex is dual-auth: an existing `codex login` session (~/.codex/auth.json,
+ * ChatGPT-plan usage) counts as configured even with no CODEX_API_KEY set.
+ * The env key remains the future swap path to metered API billing. */
+function hasCodexLoginSession(): boolean {
+  const codexHome = process.env.CODEX_HOME ?? join(homedir(), ".codex");
+  return existsSync(join(codexHome, "auth.json"));
+}
 
 /** The env var that holds a provider's API key, or null for providers that
  * need no credential (ollama, local). Used by routes to name the exact var a
@@ -48,6 +59,7 @@ export function envKeyForProvider(provider: string): string | null {
  * ~/.mnemos/.env). Providers that need no key (ollama, local) are always
  * "configured". Lets the UI badge each provider before the user picks it. */
 export function isProviderConfigured(provider: string): boolean {
+  if (provider === "codex" && hasCodexLoginSession()) return true;
   const envKey = ENV_KEY_FOR_PROVIDER[provider as ProviderId] ?? null;
   if (envKey === null) return true;
   const merged = readEnvFile();
@@ -142,6 +154,7 @@ function currentEmbedding(merged: Record<string, string>): string {
 }
 
 function hasKey(provider: ProviderId, merged: Record<string, string>): boolean {
+  if (provider === "codex" && hasCodexLoginSession()) return true;
   const envKey = ENV_KEY_FOR_PROVIDER[provider];
   if (envKey === null) return true;
   return Boolean((process.env[envKey] ?? merged[envKey] ?? "").trim());
@@ -172,7 +185,7 @@ export function getConfigStatus(): ConfigStatus {
       hasCredential: hasKey(provider, merged),
       embedding,
       ready: false,
-      reason: `Provider "${provider}" isn't wired up yet in this build (coming soon). Pick anthropic, openai, or ollama for now.`,
+      reason: `Provider "${provider}" isn't wired up yet in this build (coming soon). Pick anthropic, openai, codex, gemini, or ollama for now.`,
       registeredChatProviders,
     };
   }
@@ -299,6 +312,9 @@ export function credentialsForProvider(providerId: string): Record<string, strin
     c.apiKey = process.env.ANTHROPIC_API_KEY;
   } else if (providerId === "openai" && process.env.OPENAI_API_KEY) {
     c.apiKey = process.env.OPENAI_API_KEY;
+  } else if (providerId === "codex") {
+    // No key → the plugin falls back to the operator's `codex login` session.
+    if (process.env.CODEX_API_KEY) c.apiKey = process.env.CODEX_API_KEY;
   } else if (providerId === "gemini") {
     const key = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
     if (key) c.apiKey = key;

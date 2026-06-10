@@ -39,6 +39,10 @@ const PROVIDER_CREDENTIAL_ENV: Record<string, (creds: Record<string, string>) =>
   openai: (c) => {
     if (process.env.OPENAI_API_KEY) c.apiKey = process.env.OPENAI_API_KEY;
   },
+  codex: (c) => {
+    // No key → the plugin uses the operator's `codex login` session.
+    if (process.env.CODEX_API_KEY) c.apiKey = process.env.CODEX_API_KEY;
+  },
   gemini: (c) => {
     const key = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
     if (key) c.apiKey = key;

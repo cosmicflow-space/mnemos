@@ -19,6 +19,7 @@ import type {
 import embedLocalPlugin from "@mnemos/plugin-embed-local";
 import anthropicPlugin from "@mnemos/plugin-anthropic";
 import openaiPlugin from "@mnemos/plugin-openai";
+import codexPlugin from "@mnemos/plugin-codex";
 import geminiPlugin from "@mnemos/plugin-gemini";
 import ollamaPlugin from "@mnemos/plugin-ollama";
 import llamaCppPlugin from "@mnemos/plugin-llama-cpp";
@@ -36,6 +37,7 @@ const BUNDLED_PLUGINS: readonly Plugin[] = [
   embedLocalPlugin,
   anthropicPlugin,
   openaiPlugin,
+  codexPlugin,
   geminiPlugin,
   ollamaPlugin,
   llamaCppPlugin,

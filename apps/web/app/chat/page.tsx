@@ -1083,7 +1083,9 @@ export default function ChatPage() {
     currentModelInfo && (currentModelInfo.inputCostPer1M != null || currentModelInfo.outputCostPer1M != null)
       ? `$${currentModelInfo.inputCostPer1M ?? "?"}/$${currentModelInfo.outputCostPer1M ?? "?"} per 1M`
       : currentModelInfo
-        ? "free (local)"
+        ? providerId === "codex"
+          ? "ChatGPT plan"
+          : "free (local)"
         : null,
   ]
     .filter(Boolean)

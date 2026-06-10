@@ -260,17 +260,19 @@ describe("smoke: db + registry + crypto", () => {
 });
 
 describe("smoke: plugin registry", () => {
-  it("loads all 14 bundled plugins without validation errors", () => {
+  it("loads all 15 bundled plugins without validation errors", () => {
     const registry = loadBundledPlugins();
-    expect(registry.plugins.length).toBe(14);
+    expect(registry.plugins.length).toBe(15);
   });
 
-  it("registers chat providers (anthropic, openai, ollama)", () => {
+  it("registers chat providers (anthropic, openai, codex, gemini, ollama)", () => {
     const registry = loadBundledPlugins();
-    // anthropic + openai + ollama are real; gemini + llama-cpp are stubs without chatProviders
-    expect(registry.chatProviders.size).toBeGreaterThanOrEqual(3);
+    // llama-cpp remains a stub without chatProviders
+    expect(registry.chatProviders.size).toBeGreaterThanOrEqual(5);
     expect(registry.chatProviders.has("anthropic")).toBe(true);
     expect(registry.chatProviders.has("openai")).toBe(true);
+    expect(registry.chatProviders.has("codex")).toBe(true);
+    expect(registry.chatProviders.has("gemini")).toBe(true);
     expect(registry.chatProviders.has("ollama")).toBe(true);
   });
 

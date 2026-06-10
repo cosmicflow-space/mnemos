@@ -21,3 +21,4 @@ allowBuilds:
   # tesseract.js's only postinstall is `opencollective-postinstall` (a donation
   # nag, no native build) — intentionally skipped. OCR works fully without it.
   tesseract.js: false
+  '@google/genai': set this to true or false

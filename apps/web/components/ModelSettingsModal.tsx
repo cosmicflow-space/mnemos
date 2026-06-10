@@ -71,8 +71,12 @@ function extractUrl(text: string | null): string | null {
   return m ? m[0] : null;
 }
 
-function priceLabel(m: ModelInfo): string {
-  if (m.inputCostPer1M == null && m.outputCostPer1M == null) return "free (local)";
+function priceLabel(m: ModelInfo, providerId?: string): string {
+  if (m.inputCostPer1M == null && m.outputCostPer1M == null) {
+    // Codex bills against the operator's ChatGPT plan, not per token — calling
+    // it "free (local)" would misstate both where it runs and what it costs.
+    return providerId === "codex" ? "ChatGPT plan (no per-token cost)" : "free (local)";
+  }
   return `$${m.inputCostPer1M ?? "?"} in / $${m.outputCostPer1M ?? "?"} out per 1M`;
 }
 
@@ -426,7 +430,7 @@ export function ModelSettingsModal({
                     <div className="text-sm text-fg font-medium truncate">{m.displayName}</div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted">
                       <span className="font-mono">{ctxLabel(m.contextWindow)}</span>
-                      <span>{priceLabel(m)}</span>
+                      <span>{priceLabel(m, provider)}</span>
                     </div>
                   </button>
                 );

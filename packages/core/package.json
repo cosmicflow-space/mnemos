@@ -23,6 +23,7 @@
     "@mnemos/plugin-embed-local": "workspace:*",
     "@mnemos/plugin-anthropic": "workspace:*",
     "@mnemos/plugin-openai": "workspace:*",
+    "@mnemos/plugin-codex": "workspace:*",
     "@mnemos/plugin-gemini": "workspace:*",
     "@mnemos/plugin-ollama": "workspace:*",
     "@mnemos/plugin-llama-cpp": "workspace:*",

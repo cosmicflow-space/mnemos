@@ -23,7 +23,7 @@ Telegraph style — root rules only. No scoped `AGENTS.md` files exist yet; if o
 - SQLite + sqlite-vec: `packages/db/` (`schema.sql` is the source of truth; `crud.ts` is the typed access layer)
 - Plugin SDK barrel (the only surface plugins can import): `packages/plugin-sdk/` — single `src/index.ts`
 - CLI: `packages/cli/` — **v0.1 scaffold only**; commands print help or exit 1 (not yet wired)
-- Bundled plugins: `plugins/*/` (chat: anthropic/openai/gemini/ollama/llama-cpp; embed: embed-local; loaders: pdf/docx/xlsx/ocr/markdown/plaintext/web/code)
+- Bundled plugins: `plugins/*/` (chat: anthropic/openai/codex/gemini/ollama/llama-cpp; embed: embed-local; loaders: pdf/docx/xlsx/ocr/markdown/plaintext/web/code)
 - Spec docs: `docs/` (`architecture.md`); synthetic eval fixtures + demo corpus: `evals/`
 
 ## Architecture invariants

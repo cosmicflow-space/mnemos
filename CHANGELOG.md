@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Codex chat provider — answer with your ChatGPT plan, no API key.** New bundled `plugins/codex` rides the official `@openai/codex-sdk`: with a `codex login` session on the machine (`~/.codex/auth.json`) the provider shows up configured automatically; answers are metered against the plan's rate windows instead of per-token billing, and the model picker labels them "ChatGPT plan (no per-token cost)". An optional `CODEX_API_KEY` swaps the same provider to metered API billing — the future-proof path if subscription SDK access ever changes. Privacy posture preserved: every turn runs in a dedicated **empty** workdir (`~/.mnemos/workspace/codex`) with a read-only sandbox, web search disabled, and no approvals — the agent runtime can never see anything beyond the retrieved chunks in its prompt.
+- **Gemini chat provider is real now (was a v0.1 stub).** AI Studio API key via the official `@google/genai` SDK — streaming answers, usage metadata on the final chunk, and a priced model ladder (2.5 Flash-Lite $0.10/$0.40 → 2.5 Flash → 2.5 Pro, plus unpriced Gemini 3 previews). Deliberately NOT the Gemini CLI OAuth login: that credential only speaks to the private Code Assist endpoint, reusing it outside the CLI violates Google's ToS, and Google is retiring the tier — the API key is the sanctioned programmatic path.
+
+### Changed
+- **Claude model catalog refreshed** with current tiers and rates: Haiku 4.5 ($1/$5), Sonnet 4.6 ($3/$15), Opus 4.8 ($5/$25), Fable 5 ($10/$50) — the picker now tells the "cheapest model that can do the job" story accurately across all frontier providers, and corrects Opus pricing that was 3× stale.
+
 ## [0.19.0] - 2026-06-08
 
 ### Added
