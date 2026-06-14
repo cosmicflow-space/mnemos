@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node: 22+](https://img.shields.io/badge/Node-22%2B-339933.svg)](https://nodejs.org/)
-[![Status: v0.19](https://img.shields.io/badge/Status-v0.19-cyan.svg)](CHANGELOG.md)
+[![Status: v0.20](https://img.shields.io/badge/Status-v0.20-cyan.svg)](CHANGELOG.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-cyan.svg)](CONTRIBUTING.md)
 
 Built by **[Sam Muthu](https://sammuthu.com)** · [Read the project write-up →](https://sammuthu.com/ai-ml/mnemos)
