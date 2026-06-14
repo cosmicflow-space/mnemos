@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node: 22+](https://img.shields.io/badge/Node-22%2B-339933.svg)](https://nodejs.org/)
-[![Status: v0.18](https://img.shields.io/badge/Status-v0.18-cyan.svg)](CHANGELOG.md)
+[![Status: v0.19](https://img.shields.io/badge/Status-v0.19-cyan.svg)](CHANGELOG.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-cyan.svg)](CONTRIBUTING.md)
 
 Built by **[Sam Muthu](https://sammuthu.com)** · [Read the project write-up →](https://sammuthu.com/ai-ml/mnemos)
@@ -22,7 +22,7 @@ Built from scratch in TypeScript + Next.js. Opinionated single-pane UI — no dr
 <p align="center">
   <img src="docs/demo/hero.gif" alt="Mnemos — cited answers from your own files, on your desktop and from your phone" width="900"/>
   <br/>
-  <em>One brain, two surfaces: ask on your desktop, or from your phone via a private Telegram bot — every answer cited to your own files. 100% local by default.</em>
+  <em>One brain, two surfaces: ask on your desktop, or from your phone via a private Telegram bot — every answer cited to your own files. 100% local by default. (Shown in the Cosmic dark theme; the app opens in <strong>Zen-Light</strong> by default — see <a href="#light-or-dark--your-call">Light or dark</a>.)</em>
 </p>
 
 ## Quick start
@@ -58,8 +58,8 @@ Prefer Docker? `docker compose up -d`. Prefer manual? `pnpm install && pnpm dev`
 <table>
   <tr>
     <td width="50%">
-      <img src="docs/screenshots/01-chat-cited-answer.png" alt="Mnemos chat — cited cross-document answer" />
-      <p align="center"><sub><strong>1. Ask</strong> — one chat pane, no chrome. Answers stream in with inline numbered citations, a metrics line (provider · model · tokens · duration), and inline actions to inspect <em>Sources</em>, see exactly what was sent to the model (<em>Data sent</em>), and mark an answer <em>✓ verified</em>. This answer fuses facts from a Markdown spec and a PDF report.</sub></p>
+      <img src="docs/screenshots/01-chat-cited-answer.png" alt="Mnemos chat — a grounded, cited answer in the Zen-Light theme" />
+      <p align="center"><sub><strong>1. Ask</strong> — one chat pane, no chrome (shown here in the default <strong>Zen-Light</strong> theme). Answers stream in grounded in your files, with a metrics line (provider · model · tokens · duration) and inline actions to inspect <em>Sources</em>, see exactly what was sent to the model (<em>Data sent</em>), and mark an answer <em>✓ Save verified</em>. This answer fuses facts from a Markdown spec and a PDF report.</sub></p>
     </td>
     <td width="50%">
       <img src="docs/screenshots/03-ai-model-local.png" alt="Mnemos AI model picker — Ollama models ranked by speed and accuracy, frontier providers with dated pricing" />
@@ -77,6 +77,34 @@ Prefer Docker? `docker compose up -d`. Prefer manual? `pnpm install && pnpm dev`
     </td>
   </tr>
 </table>
+
+## Light or dark — your call
+
+Mnemos ships with two hand-tuned themes and **opens in the calm "Zen-Light" theme by default** (mint page, white cards, deep-teal ink, a soft pastel-aurora wash); the original **"Cosmic" dark** theme is one tap away. Switch it two ways:
+
+- a **floating quick-toggle** just above the composer — **Light / Dark / Hide**, and
+- the canonical control in the **bottom-left Settings menu**.
+
+Your choice persists per browser (`localStorage`, never the SQLite knowledge store) and **syncs across open tabs**. Hide the floating toggle and it tucks away — restore it any time from Settings. Accessibility is treated as a feature, not an afterthought: every accent, link, and placeholder is tuned to clear **WCAG AA (and AAA where it counts)** in *both* themes — measured, not eyeballed.
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/01-chat-cited-answer.png" alt="Mnemos chat in the Zen-Light theme" />
+      <p align="center"><sub><strong>Zen-Light</strong> (default) — mint/white/deep-teal, calm and high-contrast.</sub></p>
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/07-theme-cosmic-dark.png" alt="The same Mnemos answer in the Cosmic dark theme" />
+      <p align="center"><sub><strong>Cosmic</strong> dark — the same answer, one tap away.</sub></p>
+    </td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="docs/screenshots/08-theme-switcher.png" alt="Mnemos floating theme switcher — Light, Dark, or Hide (restore in Settings)" width="760"/>
+  <br/>
+  <em>The floating quick-toggle above the composer: Light · Dark · Hide (restorable from Settings). Same control mirrored in the Settings menu; both stay in sync.</em>
+</p>
 
 ## Ask from your phone (Telegram)
 
