@@ -2,7 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { getTheme, setTheme, type Theme } from "@/lib/theme";
+import {
+  getTheme,
+  setTheme,
+  isThemeFabHidden,
+  setThemeFabHidden,
+  applyStoredTheme,
+  THEME_EVENT,
+  THEME_FAB_EVENT,
+  THEME_KEY,
+  THEME_FAB_KEY,
+  type Theme,
+} from "@/lib/theme";
 
 type IngestStatus = {
   overall: "running" | "paused" | "error" | "idle";
@@ -34,11 +45,33 @@ export function SettingsMenu({
 }) {
   const [open, setOpen] = useState(false);
   const [theme, setThemeState] = useState<Theme>("dark");
+  const [fabHidden, setFabHidden] = useState(false);
   const [ingest, setIngest] = useState<IngestStatus>({ overall: "idle", sources: [] });
   const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setThemeState(getTheme());
+    setFabHidden(isThemeFabHidden());
+    // Keep in sync when theme / toggle-visibility change elsewhere (floating toggle).
+    const syncTheme = () => setThemeState(getTheme());
+    const syncFab = () => setFabHidden(isThemeFabHidden());
+    // Cross-tab: `storage` fires only in other tabs; re-apply the class there.
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === THEME_KEY) {
+        applyStoredTheme();
+        syncTheme();
+      } else if (e.key === THEME_FAB_KEY) {
+        syncFab();
+      }
+    };
+    window.addEventListener(THEME_EVENT, syncTheme);
+    window.addEventListener(THEME_FAB_EVENT, syncFab);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(THEME_EVENT, syncTheme);
+      window.removeEventListener(THEME_FAB_EVENT, syncFab);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   // Poll live ingestion status so the launcher ring reflects running/paused.
@@ -118,6 +151,18 @@ export function SettingsMenu({
               <span aria-hidden>{toNextIcon}</span> {toNext}
             </span>
           </button>
+          {fabHidden && (
+            <button
+              onClick={() => {
+                setThemeFabHidden(false);
+                setOpen(false);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-muted hover:bg-surface hover:text-fg transition"
+              title="Show the floating quick theme toggle above the composer"
+            >
+              <span aria-hidden>👁️</span> Show quick theme toggle
+            </button>
+          )}
           <div className="border-t border-line" />
           <button
             onClick={() => {

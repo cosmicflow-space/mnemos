@@ -36,16 +36,39 @@
   --muted: #9aa3b4;
 }
 
-/* Light: white cards on a faintly tinted app bg so surfaces separate; borders
-   dark enough to read (the old value looked disabled); muted text darker. */
+/* Light = "Zen-Light": a calm mint page with crisp white cards and deep teal
+   ink. Tokens re-point here; the whole UI follows (it's all semantic utilities).
+   Cards get a soft green + pastel-aurora bloom via `.light .aurora-card` below. */
 .light {
-  --app: #eef1f6;
-  --surface: #ffffff;
-  --elevated: #ffffff;
-  --line: #c2c9d6;
-  --line-strong: #9ba4b6;
-  --fg: #161922;
-  --muted: #586072;
+  --app: #e4f3e9;        /* mint page base */
+  --surface: #ffffff;    /* crisp white cards */
+  --elevated: #f3faf6;   /* faint mint for raised surfaces */
+  --line: #cfe6da;       /* soft teal-green hairline */
+  --line-strong: #a7c4b8;
+  --fg: #0c2f28;         /* deep teal ink (~10:1 on white) */
+  --muted: #496257;      /* readable secondary (clears AA) */
+}
+
+/* ── Zen-Light accent legibility ─────────────────────────────────────────────
+   The UI's bright accent utilities (amber/sky/cyan/emerald/orange -400/-500) were
+   tuned to GLOW on the near-black dark theme. On the mint/white zen-light surfaces
+   those same hues wash out — saturated mid-brightness on white lands at ~1.7–2.5:1,
+   well under the WCAG AA 4.5:1 floor for the small command-legend + meta text.
+   Re-point them to deeper, same-hue shades ONLY under `.light` (dark is untouched).
+   `:where()` keeps specificity at the (0,2,0) of the `.light` class so these are
+   easy to override locally if ever needed. Verified ≥4.5:1 on white via the
+   gradient-aware contrast probe. */
+.light :where(.text-amber-400, .text-amber-500) { color: #7c4500; }   /* ~7.0:1 */
+.light :where(.text-orange-400, .text-orange-500) { color: #8a3f08; } /* ~7.0:1 */
+.light :where(.text-sky-400, .text-sky-500) { color: #045888; }       /* ~7.0:1 */
+.light :where(.text-cyan-400, .text-cyan-500) { color: #0d5b6e; }     /* ~7.0:1 */
+.light :where(.text-emerald-400, .text-emerald-500,
+              .text-green-400, .text-green-500) { color: #03634a; }    /* ~7.0:1 */
+/* Muted text set with an opacity modifier (e.g. `text-muted/70`) lightens toward
+   white in light mode — the opposite of dark — dropping below AA. Pin those to a
+   solid readable teal-gray under `.light`. */
+.light :where(.text-muted\/80, .text-muted\/70, .text-muted\/60, .text-muted\/50) {
+  color: #41594f;   /* ~6.6:1 on white, solid (no alpha) */
 }
 
 @layer base {
@@ -63,11 +86,13 @@
       var(--app);
     background-attachment: fixed;
   }
+  /* Zen-Light page wash — mint with teal / sky / lavender aurora corners. */
   .light body {
     background:
-      radial-gradient(55rem 55rem at 108% -8%, rgba(99, 102, 241, 0.06), transparent 60%),
-      radial-gradient(48rem 48rem at -8% 108%, rgba(6, 182, 212, 0.05), transparent 60%),
-      var(--app);
+      radial-gradient(55rem 30rem at 10% -8%, rgba(52, 211, 153, 0.30), transparent 60%),
+      radial-gradient(48rem 28rem at 96% 0%, rgba(125, 211, 252, 0.24), transparent 55%),
+      radial-gradient(44rem 30rem at 50% 116%, rgba(196, 181, 253, 0.16), transparent 60%),
+      linear-gradient(170deg, #e4f3e9 0%, #daeede 50%, #e2f1ea 100%);
     background-attachment: fixed;
   }
 }
@@ -81,6 +106,13 @@
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 0 28px -18px rgba(99, 102, 241, 0.65);
+}
+/* Zen-Light cards: a soft green lift + pastel-aurora breathing edge. */
+.light .aurora-card {
+  box-shadow:
+    0 10px 26px -14px rgba(16, 75, 60, 0.18),
+    0 0 24px -10px rgba(94, 234, 212, 0.5),
+    0 0 0 1px rgba(125, 211, 252, 0.16);
 }
 
 /* Settings-launcher ingestion ring (background-ingestion observability).

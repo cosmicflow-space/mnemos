@@ -16,6 +16,7 @@ import remarkGfm from "remark-gfm";
 import { Modal } from "@/components/Modal";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { SettingsMenu } from "@/components/SettingsMenu";
+import { FloatingThemeToggle } from "@/components/FloatingThemeToggle";
 import { ModelSettingsModal } from "@/components/ModelSettingsModal";
 import { SourcesModal } from "@/components/SourcesModal";
 import { parseQueryRoute, type RouteTier } from "@/lib/query-routing";
@@ -1384,7 +1385,8 @@ export default function ChatPage() {
           {error && (
             <div className="mb-2 text-xs text-red-400">{error}</div>
           )}
-          <div className="flex gap-2 items-end">
+          <div className="relative flex gap-2 items-end">
+            <FloatingThemeToggle />
             <textarea
               value={input}
               onChange={(e) => {
@@ -1402,7 +1404,7 @@ export default function ChatPage() {
               }
               disabled={streaming}
               rows={2}
-              className="flex-1 bg-app border border-line rounded-md px-3 py-2 text-sm text-fg focus:outline-none focus:border-cyan-500 transition disabled:opacity-50 resize-none"
+              className="flex-1 bg-app border border-line rounded-md px-3 py-2 text-sm text-fg placeholder:text-muted focus:outline-none focus:border-cyan-500 transition disabled:opacity-50 resize-none"
             />
             <button
               type="submit"
@@ -1427,17 +1429,17 @@ export default function ChatPage() {
                     {INPUT_TIPS.map((t) => {
                       const c = tipColor(t.syntax);
                       const cls =
-                        c === "amber" ? "text-amber-400" : c === "sky" ? "text-sky-400" : "text-muted/70";
+                        c === "amber" ? "text-amber-400" : c === "sky" ? "text-sky-400" : "text-muted";
                       return (
                         <span key={t.syntax}>
                           <code className={cls}>{t.syntax}</code> {t.short}
                         </span>
                       );
                     })}
-                    <span className="text-muted/70">· <code>/tips</code> for details</span>
+                    <span className="text-muted">· <code>/tips</code> for details</span>
                   </div>
-                  <div className="text-[11px] text-muted/80 flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                    <span className="text-muted/60">find &amp; focus:</span>
+                  <div className="text-[11px] text-muted flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                    <span className="text-muted">find &amp; focus:</span>
                     {INPUT_COMMANDS.filter((c) => c.cmd !== "/do").map((c) => (
                       <span key={c.cmd}>
                         <code className="text-emerald-500 dark:text-emerald-400">{c.cmd}</code> {c.short}
@@ -1460,7 +1462,7 @@ export default function ChatPage() {
               </div>
             );
           })()}
-          <div className="mt-1 text-[10px] text-muted/70">
+          <div className="mt-1 text-[10px] text-muted">
             ⏎ send · ⇧⏎ newline · ↑ history · ⌃C clear
           </div>
         </form>
@@ -1938,7 +1940,7 @@ function MessageBubble({
       <div
         className={`max-w-3xl rounded-lg px-4 py-3 relative aurora-card ${
           isUser
-            ? "bg-cyan-900/30 border border-cyan-900/50 text-fg"
+            ? "bg-cyan-50 border border-cyan-300 text-fg dark:bg-cyan-900/30 dark:border-cyan-900/50"
             : "bg-surface border border-line"
         }`}
       >
@@ -1977,10 +1979,16 @@ function MessageBubble({
                 // persisted (frontier) provider on reload — so `+`/`++` turns
                 // keep the badge after a refresh, not just `!` turns.
                 <span
-                  className="text-sky-400 shrink-0"
+                  className="text-sky-400 shrink-0 inline-flex items-center gap-1"
                   title="Searched your files, answered by a frontier model"
                 >
-                  ☁️ Frontier
+                  {/* Inline SVG (not the ☁️ emoji): the emoji is a fixed-color
+                      glyph that's near-invisible on the white zen-light card. This
+                      tints with currentColor, so it reads in both themes. */}
+                  <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden>
+                    <path d="M6.6 19a4.6 4.6 0 0 1-.62-9.16 6 6 0 0 1 11.65 1.07A3.85 3.85 0 0 1 17.3 19H6.6Z" />
+                  </svg>
+                  Frontier
                 </span>
               ) : null}
               {message.verifiedUsed && (
@@ -1997,14 +2005,14 @@ function MessageBubble({
                   <span aria-hidden>·</span>
                   <button
                     onClick={() => void openPanel("sources")}
-                    className="text-cyan-400 hover:text-cyan-300 shrink-0"
+                    className="text-cyan-400 hover:text-cyan-300 shrink-0 underline underline-offset-2 decoration-1"
                     title="Files this answer drew from"
                   >
                     Sources
                   </button>
                   <button
                     onClick={() => void openPanel("audit")}
-                    className="text-cyan-400 hover:text-cyan-300 shrink-0"
+                    className="text-cyan-400 hover:text-cyan-300 shrink-0 underline underline-offset-2 decoration-1"
                     title="Exactly what was sent to the model"
                   >
                     Data sent
@@ -2013,7 +2021,7 @@ function MessageBubble({
                     <button
                       onClick={() => void saveVerified()}
                       disabled={verifyState !== "idle"}
-                      className="text-emerald-400 hover:text-emerald-300 shrink-0 disabled:opacity-60"
+                      className="text-emerald-400 hover:text-emerald-300 shrink-0 underline underline-offset-2 decoration-1 disabled:opacity-60 disabled:no-underline"
                       title="Confirm this answer is correct — similar future questions will reuse it"
                     >
                       {verifyState === "saved"

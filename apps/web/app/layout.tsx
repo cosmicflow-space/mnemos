@@ -3,8 +3,8 @@ import "./globals.css";
 
 // No-FOUC theme bootstrap. Static, developer-authored, zero user input — the
 // standard Next.js pattern for applying the persisted theme before first paint.
-// Defaults to dark when no choice is stored.
-const themeInit = `(function(){try{var t=localStorage.getItem('mnemos.theme');var d=document.documentElement;if(t==='light'){d.classList.add('light');d.classList.remove('dark');}else{d.classList.add('dark');d.classList.remove('light');}}catch(e){document.documentElement.classList.add('dark');}})();`;
+// Defaults to light (Zen-Light) when no choice is stored; dark is opt-in.
+const themeInit = `(function(){try{var t=localStorage.getItem('mnemos.theme');var d=document.documentElement;if(t==='dark'){d.classList.add('dark');d.classList.remove('light');}else{d.classList.add('light');d.classList.remove('dark');}}catch(e){document.documentElement.classList.add('light');}})();`;
 
 export const metadata: Metadata = {
   title: "Mnemos — Personal RAG",
