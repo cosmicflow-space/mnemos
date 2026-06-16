@@ -45,8 +45,8 @@
   --elevated: #f3faf6;   /* faint mint for raised surfaces */
   --line: #cfe6da;       /* soft teal-green hairline */
   --line-strong: #a7c4b8;
-  --fg: #0c2f28;         /* deep teal ink (~10:1 on white) */
-  --muted: #496257;      /* readable secondary (clears AA) */
+  --fg: #0c2f28;         /* deep teal ink (~13:1 on white) */
+  --muted: #33504a;      /* secondary — deepened to ~8:1 on white / elevated */
 }
 
 /* ── Zen-Light accent legibility ─────────────────────────────────────────────
@@ -58,17 +58,20 @@
    `:where()` keeps specificity at the (0,2,0) of the `.light` class so these are
    easy to override locally if ever needed. Verified ≥4.5:1 on white via the
    gradient-aware contrast probe. */
-.light :where(.text-amber-400, .text-amber-500) { color: #7c4500; }   /* ~7.0:1 */
-.light :where(.text-orange-400, .text-orange-500) { color: #8a3f08; } /* ~7.0:1 */
-.light :where(.text-sky-400, .text-sky-500) { color: #045888; }       /* ~7.0:1 */
-.light :where(.text-cyan-400, .text-cyan-500) { color: #0d5b6e; }     /* ~7.0:1 */
-.light :where(.text-emerald-400, .text-emerald-500,
-              .text-green-400, .text-green-500) { color: #03634a; }    /* ~7.0:1 */
+.light :where(.text-amber-200, .text-amber-300, .text-amber-400, .text-amber-500) { color: #7c4500; }   /* ~7.0:1 */
+.light :where(.text-orange-200, .text-orange-300, .text-orange-400, .text-orange-500) { color: #8a3f08; } /* ~7.0:1 */
+.light :where(.text-sky-200, .text-sky-300, .text-sky-400, .text-sky-500) { color: #045888; }       /* ~7.0:1 */
+.light :where(.text-cyan-200, .text-cyan-300, .text-cyan-400, .text-cyan-500) { color: #0d5b6e; }     /* ~7.0:1 */
+.light :where(.text-emerald-200, .text-emerald-300, .text-emerald-400, .text-emerald-500,
+              .text-green-200, .text-green-300, .text-green-400, .text-green-500) { color: #03634a; }    /* ~7.0:1 */
+.light :where(.text-red-200, .text-red-300, .text-red-400) { color: #b3261e; }                        /* ~6.5:1 */
+.light :where(.text-purple-200, .text-purple-300, .text-purple-400, .text-purple-500,
+              .text-pink-300, .text-pink-400) { color: #7b2da8; }      /* ~6.0:1 */
 /* Muted text set with an opacity modifier (e.g. `text-muted/70`) lightens toward
    white in light mode — the opposite of dark — dropping below AA. Pin those to a
    solid readable teal-gray under `.light`. */
 .light :where(.text-muted\/80, .text-muted\/70, .text-muted\/60, .text-muted\/50) {
-  color: #41594f;   /* ~6.6:1 on white, solid (no alpha) */
+  color: #3c574e;   /* ~7.8:1 on white, solid (no alpha) — tertiary hints, still readable */
 }
 
 @layer base {

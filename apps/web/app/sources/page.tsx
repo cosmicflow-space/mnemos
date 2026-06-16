@@ -359,32 +359,32 @@ export default function SourcesPage() {
           <span className="text-2xl">←</span>
           <span className="text-lg">mnemos</span>
         </Link>
-        <h1 className="text-2xl font-semibold text-gray-100">Sources</h1>
+        <h1 className="text-2xl font-semibold text-fg">Sources</h1>
       </header>
 
       {/* Registered sources */}
       <section className="mb-12">
         <div className="flex items-baseline justify-between mb-3">
-          <h2 className="text-sm uppercase tracking-wider text-gray-400">
+          <h2 className="text-sm uppercase tracking-wider text-muted">
             Registered ({sources.length})
           </h2>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-muted">
             Ingestion uses local embeddings (no API key needed). Chat requires an agent — see <Link href="/agent" className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2">/agent</Link>.
           </p>
         </div>
         {sources.length === 0 ? (
-          <p className="text-gray-500 text-sm">No sources registered yet. Add one below.</p>
+          <p className="text-muted text-sm">No sources registered yet. Add one below.</p>
         ) : (
           <ul className="space-y-2">
             {sources.map((s) => {
               const isThisRowIngesting = ingestingPath === s.path;
               const needsFirstIngest = s.chunkCount === 0;
               return (
-                <li key={s.id} className="rounded-lg border border-gray-800 bg-gray-900/40 px-4 py-3">
+                <li key={s.id} className="rounded-lg border border-line bg-surface px-4 py-3">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <div className="font-mono text-sm text-gray-100 truncate">{s.path}</div>
-                      <div className="text-xs text-gray-400 mt-0.5">
+                      <div className="font-mono text-sm text-fg truncate">{s.path}</div>
+                      <div className="text-xs text-muted mt-0.5">
                         {s.kind} · {s.scope} · {s.chunkCount.toLocaleString()} chunks
                         {s.fileCount !== undefined && s.fileCount > 0 && (
                           <span> · {s.fileCount.toLocaleString()} files</span>
@@ -392,7 +392,7 @@ export default function SourcesPage() {
                         {needsFirstIngest ? (
                           <span className="ml-2 text-amber-300">— not ingested yet</span>
                         ) : (
-                          <span className="ml-2 text-gray-500">— last ingested {formatRelative(s.lastIngestedAt)}</span>
+                          <span className="ml-2 text-muted">— last ingested {formatRelative(s.lastIngestedAt)}</span>
                         )}
                       </div>
                     </div>
@@ -418,7 +418,7 @@ export default function SourcesPage() {
                     </div>
                   </div>
                   {isThisRowIngesting && currentProgress && (
-                    <div className="mt-3 border-t border-gray-800 pt-3">
+                    <div className="mt-3 border-t border-line pt-3">
                       <ProgressDisplay current={currentProgress} done={doneEvent} />
                     </div>
                   )}
@@ -431,7 +431,7 @@ export default function SourcesPage() {
 
       {/* Add new source */}
       <section className="mb-12">
-        <h2 className="text-sm uppercase tracking-wider text-gray-400 mb-3">
+        <h2 className="text-sm uppercase tracking-wider text-muted mb-3">
           Add a source
         </h2>
         <form onSubmit={handleScan} className="flex flex-col gap-3">
@@ -442,7 +442,7 @@ export default function SourcesPage() {
               onChange={(e) => setPath(e.target.value)}
               placeholder={systemPaths?.placeholder ?? "Documents/notes"}
               disabled={scanning || ingesting}
-              className="flex-1 rounded-md bg-gray-900 border border-gray-700 px-4 py-2.5 text-gray-100 font-mono text-sm focus:outline-none focus:border-cyan-500 transition disabled:opacity-50"
+              className="flex-1 rounded-md bg-app border border-line px-4 py-2.5 text-fg font-mono text-sm focus:outline-none focus:border-cyan-500 transition disabled:opacity-50"
             />
             <button
               type="submit"
@@ -453,7 +453,7 @@ export default function SourcesPage() {
             </button>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <span className="text-xs text-gray-500 self-center mr-1">Suggestions:</span>
+            <span className="text-xs text-muted self-center mr-1">Suggestions:</span>
             {(systemPaths?.common ?? [
               { label: "Documents", path: "" },
               { label: "Downloads", path: "" },
@@ -466,7 +466,7 @@ export default function SourcesPage() {
                 onClick={() => setPath(suggestion.path || suggestion.label)}
                 disabled={scanning || ingesting || !suggestion.path}
                 title={suggestion.path}
-                className="text-xs font-mono text-gray-400 hover:text-cyan-300 transition disabled:opacity-50"
+                className="text-xs font-mono text-muted hover:text-cyan-300 transition disabled:opacity-50"
               >
                 {suggestion.label}
               </button>
@@ -480,34 +480,34 @@ export default function SourcesPage() {
 
       {/* Scan result */}
       {scanResult && (
-        <section className="mb-12 rounded-lg border border-gray-800 bg-gray-900/40 p-6">
-          <h2 className="text-sm uppercase tracking-wider text-gray-400 mb-3">
+        <section className="mb-12 rounded-lg border border-line bg-surface p-6">
+          <h2 className="text-sm uppercase tracking-wider text-muted mb-3">
             Scan result
           </h2>
           <div className="mb-4">
             <div className="font-mono text-sm text-cyan-300">{scanResult.rootPath}</div>
-            <div className="text-xs text-gray-400 mt-1">
+            <div className="text-xs text-muted mt-1">
               {scanResult.summary.totalFiles.toLocaleString()} files · {formatBytes(scanResult.summary.totalBytes)} total
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-4 mb-6">
-            <div className="rounded bg-gray-950/50 p-3 border border-cyan-900/50">
+            <div className="rounded bg-elevated p-3 border border-cyan-500/30">
               <div className="text-xs uppercase text-cyan-400 mb-1">Will ingest</div>
-              <div className="text-2xl font-semibold text-gray-100">{scanResult.summary.byCategory.supported}</div>
+              <div className="text-2xl font-semibold text-fg">{scanResult.summary.byCategory.supported}</div>
             </div>
-            <div className="rounded bg-gray-950/50 p-3 border border-amber-900/50">
+            <div className="rounded bg-elevated p-3 border border-amber-500/30">
               <div className="text-xs uppercase text-amber-400 mb-1">Deferred</div>
-              <div className="text-2xl font-semibold text-gray-100">{scanResult.summary.byCategory.deferred}</div>
+              <div className="text-2xl font-semibold text-fg">{scanResult.summary.byCategory.deferred}</div>
             </div>
-            <div className="rounded bg-gray-950/50 p-3 border border-gray-800">
-              <div className="text-xs uppercase text-gray-500 mb-1">Skipped</div>
-              <div className="text-2xl font-semibold text-gray-400">{scanResult.summary.byCategory.unsupported}</div>
+            <div className="rounded bg-elevated p-3 border border-line">
+              <div className="text-xs uppercase text-muted mb-1">Skipped</div>
+              <div className="text-2xl font-semibold text-muted">{scanResult.summary.byCategory.unsupported}</div>
             </div>
           </div>
 
-          <h3 className="text-xs uppercase tracking-wider text-gray-500 mb-2">By type — uncheck to skip</h3>
-          <ul className="text-sm text-gray-300 space-y-1 mb-4">
+          <h3 className="text-xs uppercase tracking-wider text-muted mb-2">By type — uncheck to skip</h3>
+          <ul className="text-sm text-fg/90 space-y-1 mb-4">
             {Object.entries(scanResult.summary.byLabel)
               .filter(([label]) => {
                 // Only show supported labels here; deferred/unsupported are split out below
@@ -521,7 +521,7 @@ export default function SourcesPage() {
               .map(([label, count]) => {
                 const checked = !excludedLabels.has(label);
                 return (
-                  <li key={label} className="flex items-center justify-between rounded px-2 py-1 hover:bg-gray-900/50">
+                  <li key={label} className="flex items-center justify-between rounded px-2 py-1 hover:bg-elevated">
                     <label className="flex items-center gap-2 cursor-pointer flex-1">
                       <input
                         type="checkbox"
@@ -536,20 +536,20 @@ export default function SourcesPage() {
                         }}
                         className="accent-cyan-500"
                       />
-                      <span className={checked ? "" : "text-gray-500 line-through"}>{label}</span>
+                      <span className={checked ? "" : "text-muted line-through"}>{label}</span>
                     </label>
-                    <span className={`font-mono text-xs ${checked ? "text-gray-400" : "text-gray-600"}`}>{count}</span>
+                    <span className={`font-mono text-xs ${checked ? "text-muted" : "text-muted"}`}>{count}</span>
                   </li>
                 );
               })}
           </ul>
 
           {scanResult.defaultExcluded.totalCount > 0 && (
-            <div className="mb-4 rounded-md border border-gray-800 bg-gray-950/50 p-3">
-              <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">
+            <div className="mb-4 rounded-md border border-line bg-elevated p-3">
+              <div className="text-xs uppercase tracking-wider text-muted mb-2">
                 Hidden by defaults — {scanResult.defaultExcluded.totalCount} files
               </div>
-              <p className="text-xs text-gray-500 mb-2">
+              <p className="text-xs text-muted mb-2">
                 Mnemos auto-skips noise that hurts RAG quality. Toggle a tier on if you really want it indexed.
               </p>
               <ul className="space-y-1.5">
@@ -567,9 +567,9 @@ export default function SourcesPage() {
                           }
                           className="accent-cyan-500"
                         />
-                        <span className="text-gray-400">Include {INCLUDE_REASON_LABELS[reason]}</span>
+                        <span className="text-muted">Include {INCLUDE_REASON_LABELS[reason]}</span>
                       </label>
-                      <span className="font-mono text-gray-500">{count}</span>
+                      <span className="font-mono text-muted">{count}</span>
                     </li>
                   );
                 })}
@@ -578,11 +578,11 @@ export default function SourcesPage() {
           )}
 
           {scanResult.securityExcluded.totalCount > 0 && (
-            <div className="mb-4 rounded-md border border-red-900/40 bg-red-950/20 p-3">
+            <div className="mb-4 rounded-md border border-red-500/30 bg-red-500/10 p-3">
               <div className="text-xs uppercase tracking-wider text-red-300 mb-1">
                 Security-blocked — {scanResult.securityExcluded.totalCount} file(s)
               </div>
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-muted">
                 Credential-like files (.env, keys, certs) — never ingested, even if explicitly requested.
                 {" "}
                 {Object.entries(scanResult.securityExcluded.byLabel).map(([label, n]) => `${n} ${label}`).join(", ")}.
@@ -591,7 +591,7 @@ export default function SourcesPage() {
           )}
 
           {scanResult.largeFiles.count > 0 && (
-            <div className="mb-4 rounded-md border border-amber-900/40 bg-amber-950/20 p-3">
+            <div className="mb-4 rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
               <div className="flex items-center justify-between text-xs">
                 <label className="flex items-center gap-2 cursor-pointer flex-1">
                   <input
@@ -604,13 +604,13 @@ export default function SourcesPage() {
                     Include {scanResult.largeFiles.count} file{scanResult.largeFiles.count === 1 ? "" : "s"} over 10 MB
                   </span>
                 </label>
-                <span className="font-mono text-amber-300/70">{formatBytes(scanResult.largeFiles.totalBytes)}</span>
+                <span className="font-mono text-amber-500">{formatBytes(scanResult.largeFiles.totalBytes)}</span>
               </div>
             </div>
           )}
 
           {scanResult.summary.deferredNotes.length > 0 && (
-            <div className="text-xs text-amber-300/80 mb-4 space-y-1">
+            <div className="text-xs text-amber-500 mb-4 space-y-1">
               {scanResult.summary.deferredNotes.map((n) => (
                 <div key={n.label}>
                   {n.count} {n.label} — {n.note}
@@ -620,8 +620,8 @@ export default function SourcesPage() {
           )}
 
           {scanResult.skippedDirs.length > 0 && (
-            <details className="text-xs text-gray-500 mb-4">
-              <summary className="cursor-pointer hover:text-gray-300">
+            <details className="text-xs text-muted mb-4">
+              <summary className="cursor-pointer hover:text-fg/90">
                 {scanResult.skippedDirs.length} dirs auto-skipped (node_modules, .git, etc.)
               </summary>
               <ul className="font-mono mt-2 space-y-0.5 pl-4">
@@ -650,7 +650,7 @@ export default function SourcesPage() {
             );
           })()}
           {agentStatus && !agentStatus.ready && (
-            <p className="text-xs text-gray-500 mt-2 text-center">
+            <p className="text-xs text-muted mt-2 text-center">
               Ingestion will run now (no LLM needed). Chat will be available once you{" "}
               <Link href="/agent" className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2">configure an agent</Link>.
             </p>
@@ -660,8 +660,8 @@ export default function SourcesPage() {
 
       {/* Ingestion progress */}
       {(ingesting || currentProgress) && (
-        <section className="mb-12 rounded-lg border border-gray-800 bg-gray-900/40 p-6">
-          <h2 className="text-sm uppercase tracking-wider text-gray-400 mb-3">
+        <section className="mb-12 rounded-lg border border-line bg-surface p-6">
+          <h2 className="text-sm uppercase tracking-wider text-muted mb-3">
             Progress
           </h2>
           <ProgressDisplay current={currentProgress} done={doneEvent} />
@@ -682,7 +682,7 @@ function ProgressDisplay({
     return (
       <div className="space-y-2">
         <div className="text-cyan-300 font-medium">✓ Ingestion complete</div>
-        <div className="text-sm text-gray-300 grid grid-cols-2 gap-2">
+        <div className="text-sm text-fg/90 grid grid-cols-2 gap-2">
           <div>Files processed</div>
           <div className="text-right font-mono">{done.filesProcessed}</div>
           <div>Files skipped (unchanged)</div>
@@ -696,17 +696,17 @@ function ProgressDisplay({
     );
   }
   if (!current) {
-    return <div className="text-sm text-gray-500">Waiting…</div>;
+    return <div className="text-sm text-muted">Waiting…</div>;
   }
   if (current.phase === "error") {
     return <div className="text-sm text-red-400">Error: {current.message}</div>;
   }
   if (current.phase === "scan-start") {
-    return <div className="text-sm text-gray-300">Scanning {current.rootPath}…</div>;
+    return <div className="text-sm text-fg/90">Scanning {current.rootPath}…</div>;
   }
   if (current.phase === "scan-complete") {
     return (
-      <div className="text-sm text-gray-300">
+      <div className="text-sm text-fg/90">
         Found {current.supportedFiles} supported files out of {current.totalFiles} total. Starting embed…
       </div>
     );
@@ -719,19 +719,19 @@ function ProgressDisplay({
 
   return (
     <div className="space-y-2">
-      <div className="flex justify-between text-xs text-gray-400">
+      <div className="flex justify-between text-xs text-muted">
         <span>{current.phase}</span>
         <span>
           {"current" in current ? `${current.current}/${current.total}` : ""} · {pct}%
         </span>
       </div>
-      <div className="h-2 bg-gray-800 rounded overflow-hidden">
+      <div className="h-2 bg-line rounded overflow-hidden">
         <div
           className="h-full bg-gradient-to-r from-cyan-500 to-amber-500 transition-all duration-200"
           style={{ width: `${pct}%` }}
         />
       </div>
-      <div className="text-sm text-gray-300 font-mono truncate" title={label}>
+      <div className="text-sm text-fg/90 font-mono truncate" title={label}>
         {label}
       </div>
       {"chunkCount" in current && (

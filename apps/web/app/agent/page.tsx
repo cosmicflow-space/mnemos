@@ -264,13 +264,13 @@ export default function AgentPage() {
           <span className="text-2xl">←</span>
           <span className="text-lg">mnemos</span>
         </Link>
-        <h1 className="text-2xl font-semibold text-gray-100">Agent</h1>
+        <h1 className="text-2xl font-semibold text-fg">Agent</h1>
       </header>
 
-      <section className="mb-8 rounded-lg border border-gray-800 bg-gray-900/40 p-5">
-        <h2 className="text-sm uppercase tracking-wider text-gray-400 mb-3">Current status</h2>
+      <section className="mb-8 rounded-lg border border-line bg-surface p-5">
+        <h2 className="text-sm uppercase tracking-wider text-muted mb-3">Current status</h2>
         {!status ? (
-          <p className="text-sm text-gray-500">Loading…</p>
+          <p className="text-sm text-muted">Loading…</p>
         ) : status.ready ? (
           <p className="text-sm text-cyan-300">
             ✓ Ready — chat via <span className="font-mono">{status.provider}</span>, embeddings via{" "}
@@ -284,7 +284,7 @@ export default function AgentPage() {
       {scan && scan.found.length > 0 && (
         <section className="mb-8 rounded-lg border border-cyan-700/40 bg-cyan-500/5 p-5">
           <h2 className="text-sm uppercase tracking-wider text-cyan-300 mb-1">Detected on your machine</h2>
-          <p className="text-xs text-gray-400 mb-4">
+          <p className="text-xs text-muted mb-4">
             Mnemos scanned standard credential locations. Nothing has been imported — click <em>Use this</em> on a row to copy it into <span className="font-mono">~/.mnemos/.env</span>.
           </p>
           <ul className="space-y-2">
@@ -293,21 +293,21 @@ export default function AgentPage() {
               return (
                 <li
                   key={id}
-                  className="flex items-start justify-between gap-3 rounded-md border border-gray-800 bg-gray-950/50 px-3 py-2"
+                  className="flex items-start justify-between gap-3 rounded-md border border-line bg-surface px-3 py-2"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="rounded bg-gray-800 px-2 py-0.5 text-xs uppercase text-gray-300">
                         {providerLabel(hit.provider)}
                       </span>
-                      <span className="font-mono text-xs text-gray-400 truncate">{hit.location}</span>
+                      <span className="font-mono text-xs text-muted truncate">{hit.location}</span>
                     </div>
                     {hit.note && (
-                      <p className="mt-1 text-xs text-gray-400">{hit.note}</p>
+                      <p className="mt-1 text-xs text-muted">{hit.note}</p>
                     )}
                   </div>
                   {!hit.importable ? (
-                    <span className="rounded-md border border-gray-700 px-3 py-1 text-xs text-gray-500">
+                    <span className="rounded-md border border-line px-3 py-1 text-xs text-muted">
                       Cannot reuse
                     </span>
                   ) : hit.provider !== "anthropic-oauth" && !registered.has(hit.provider) ? (
@@ -336,7 +336,7 @@ export default function AgentPage() {
 
       <form onSubmit={handleSave} className="space-y-6">
         <fieldset>
-          <legend className="text-sm uppercase tracking-wider text-gray-400 mb-3">Chat provider</legend>
+          <legend className="text-sm uppercase tracking-wider text-muted mb-3">Chat provider</legend>
           <div className="space-y-2">
             {PROVIDERS.map((p) => {
               const wired = isWired(p.id);
@@ -345,10 +345,10 @@ export default function AgentPage() {
                 key={p.id}
                 className={`flex items-start gap-3 rounded-md border px-4 py-3 transition ${
                   !wired
-                    ? "border-gray-800 bg-gray-900/20 opacity-60 cursor-not-allowed"
+                    ? "border-line bg-surface opacity-60 cursor-not-allowed"
                     : choice === p.id
                     ? "border-cyan-500 bg-cyan-500/10 cursor-pointer"
-                    : "border-gray-800 bg-gray-900/40 hover:border-gray-700 cursor-pointer"
+                    : "border-line bg-surface hover:border-line cursor-pointer"
                 }`}
               >
                 <input
@@ -361,7 +361,7 @@ export default function AgentPage() {
                   className="mt-1 accent-cyan-500"
                 />
                 <div className="flex-1">
-                  <div className="text-sm font-medium text-gray-100 flex items-center gap-2">
+                  <div className="text-sm font-medium text-fg flex items-center gap-2">
                     {p.name}
                     {!wired && (
                       <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-amber-300">
@@ -369,7 +369,7 @@ export default function AgentPage() {
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-gray-400 mt-0.5">{p.blurb}</div>
+                  <div className="text-xs text-muted mt-0.5">{p.blurb}</div>
                   {choice === p.id && p.consoleUrl && (
                     <div className="mt-2 text-xs">
                       <a
@@ -381,7 +381,7 @@ export default function AgentPage() {
                         Get an API key → {p.consoleLabel}
                       </a>
                       {p.howTo && (
-                        <p className="text-gray-500 mt-1">{p.howTo}</p>
+                        <p className="text-muted mt-1">{p.howTo}</p>
                       )}
                     </div>
                   )}
@@ -392,18 +392,18 @@ export default function AgentPage() {
                       ) : (
                         <div className="space-y-1">
                           <span className="text-amber-300">✗ Not reachable.</span>
-                          <pre className="rounded bg-gray-950 border border-gray-800 px-2 py-1 text-gray-300 inline-block">ollama serve</pre>
+                          <pre className="rounded bg-gray-950 border border-line px-2 py-1 text-gray-300 inline-block">ollama serve</pre>
                         </div>
                       )}
                       {ollamaModels && ollamaModels.reachable && (
                         <div>
-                          <label htmlFor="ollama-model" className="block text-gray-400 mb-1">
+                          <label htmlFor="ollama-model" className="block text-muted mb-1">
                             Model {ollamaModels.models.length === 0 && "(none installed)"}
                           </label>
                           {ollamaModels.models.length === 0 ? (
                             <div className="text-amber-300">
                               No models pulled yet. Try{" "}
-                              <code className="rounded bg-gray-950 border border-gray-800 px-1.5 py-0.5">ollama pull llama3.2:3b</code>
+                              <code className="rounded bg-gray-950 border border-line px-1.5 py-0.5">ollama pull llama3.2:3b</code>
                               {" "}then refresh.
                             </div>
                           ) : (
@@ -411,7 +411,7 @@ export default function AgentPage() {
                               id="ollama-model"
                               value={ollamaModel}
                               onChange={(e) => setOllamaModel(e.target.value)}
-                              className="w-full rounded-md bg-gray-900 border border-gray-700 px-3 py-2 font-mono text-gray-100 focus:outline-none focus:border-cyan-500"
+                              className="w-full rounded-md bg-app border border-line px-3 py-2 font-mono text-fg focus:outline-none focus:border-cyan-500"
                             >
                               {ollamaModels.models.map((m) => (
                                 <option key={m.name} value={m.name}>
@@ -425,7 +425,7 @@ export default function AgentPage() {
                     </div>
                   )}
                   {choice === p.id && p.id === "local" && (
-                    <p className="mt-2 text-xs text-gray-500">
+                    <p className="mt-2 text-xs text-muted">
                       Default model: Qwen 2.5 0.5B (Q4_K_M, ~400 MB, Apache 2.0). Auto-download on first Save (UI in next pass).
                     </p>
                   )}
@@ -438,16 +438,16 @@ export default function AgentPage() {
 
         {meta.needsKey && (
           <div>
-            <label className="block text-sm uppercase tracking-wider text-gray-400 mb-2">API key</label>
+            <label className="block text-sm uppercase tracking-wider text-muted mb-2">API key</label>
             <input
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder={status?.hasCredential && status.provider === choice ? "•••••••• (already saved — leave blank to keep)" : meta.keyHint ?? ""}
               autoComplete="off"
-              className="w-full rounded-md bg-gray-900 border border-gray-700 px-4 py-2.5 text-gray-100 font-mono text-sm focus:outline-none focus:border-cyan-500 transition"
+              className="w-full rounded-md bg-app border border-line px-4 py-2.5 text-fg font-mono text-sm focus:outline-none focus:border-cyan-500 transition"
             />
-            <p className="text-xs text-gray-500 mt-1.5">
+            <p className="text-xs text-muted mt-1.5">
               Stored at <span className="font-mono">~/.mnemos/.env</span> (chmod 600). Never sent to any third party.
             </p>
           </div>
@@ -455,13 +455,13 @@ export default function AgentPage() {
 
         {meta.needsBaseUrl && (
           <div>
-            <label className="block text-sm uppercase tracking-wider text-gray-400 mb-2">Ollama base URL</label>
+            <label className="block text-sm uppercase tracking-wider text-muted mb-2">Ollama base URL</label>
             <input
               type="text"
               value={ollamaUrl}
               onChange={(e) => setOllamaUrl(e.target.value)}
               placeholder="http://localhost:11434"
-              className="w-full rounded-md bg-gray-900 border border-gray-700 px-4 py-2.5 text-gray-100 font-mono text-sm focus:outline-none focus:border-cyan-500 transition"
+              className="w-full rounded-md bg-app border border-line px-4 py-2.5 text-fg font-mono text-sm focus:outline-none focus:border-cyan-500 transition"
             />
           </div>
         )}

@@ -46,8 +46,8 @@ export function AgentBanner() {
 
   const tone =
     status.provider === null
-      ? "border-amber-500/40 bg-amber-500/10 text-amber-100"
-      : "border-red-500/40 bg-red-500/10 text-red-100";
+      ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
+      : "border-red-500/40 bg-red-500/10 text-red-300";
 
   const label =
     status.provider === null ? "Configure your AI agent" : "Agent needs attention";
@@ -65,7 +65,7 @@ export function AgentBanner() {
         </div>
         <Link
           href="/agent"
-          className="rounded-md bg-white/15 px-3 py-1 text-sm font-medium hover:bg-white/25 transition"
+          className="rounded-md bg-fg/10 px-3 py-1 text-sm font-medium hover:bg-fg/20 transition"
         >
           Open settings →
         </Link>
