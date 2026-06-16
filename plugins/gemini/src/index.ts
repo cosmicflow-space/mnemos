@@ -33,15 +33,14 @@ const credentialSchema: CredentialSchema = {
 
 // USD per 1M tokens — indicative for the UI's cost display, same caveat as the
 // other frontier plugins: billing is whatever Google actually charges.
-const PRICED_AS_OF = "2026-06-10";
+const PRICED_AS_OF = "2026-06-16";
 
 const CHAT_MODELS: readonly ModelInfo[] = [
   { id: "gemini-2.5-flash-lite", displayName: "Gemini 2.5 Flash-Lite", contextWindow: 1000000, inputCostPer1M: 0.1, outputCostPer1M: 0.4 },
   { id: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash", contextWindow: 1000000, inputCostPer1M: 0.3, outputCostPer1M: 2.5 },
   { id: "gemini-2.5-pro", displayName: "Gemini 2.5 Pro", contextWindow: 1000000, inputCostPer1M: 1.25, outputCostPer1M: 10.0 },
-  // Gemini 3 previews — listed unpriced; preview rates move too often to pin.
-  { id: "gemini-3-flash-preview", displayName: "Gemini 3 Flash (preview)", contextWindow: 1000000 },
-  { id: "gemini-3-pro-preview", displayName: "Gemini 3 Pro (preview)", contextWindow: 1000000 },
+  { id: "gemini-3-flash-preview", displayName: "Gemini 3 Flash (preview)", contextWindow: 1000000, inputCostPer1M: 0.5, outputCostPer1M: 3.0 },
+  { id: "gemini-3.1-pro-preview", displayName: "Gemini 3.1 Pro (preview)", contextWindow: 1000000, inputCostPer1M: 2.0, outputCostPer1M: 12.0 },
 ];
 
 // Cheapest capable model is the default — see the Anthropic plugin's rationale.

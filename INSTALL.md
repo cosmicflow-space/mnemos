@@ -118,7 +118,7 @@ This is the *one* interactive choice you make. The installer prompts you to
 pick a chat provider and (if needed) writes the API key to `~/.mnemos/.env`:
 
 - **anthropic** — Claude (requires `ANTHROPIC_API_KEY`)
-- **openai** — GPT-4o etc. (requires `OPENAI_API_KEY`)
+- **openai** — GPT-5.5 / GPT-5.4 family (requires `OPENAI_API_KEY`)
 - **gemini** — Google Gemini (requires `GEMINI_API_KEY`)
 - **ollama** — fully local via Ollama (requires `ollama serve` running on
   `localhost:11434`; no key)

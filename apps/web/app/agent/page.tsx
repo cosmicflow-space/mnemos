@@ -297,7 +297,7 @@ export default function AgentPage() {
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="rounded bg-gray-800 px-2 py-0.5 text-xs uppercase text-gray-300">
+                      <span className="rounded border border-line bg-elevated px-2 py-0.5 text-xs uppercase text-fg/80">
                         {providerLabel(hit.provider)}
                       </span>
                       <span className="font-mono text-xs text-muted truncate">{hit.location}</span>
@@ -392,7 +392,7 @@ export default function AgentPage() {
                       ) : (
                         <div className="space-y-1">
                           <span className="text-amber-300">✗ Not reachable.</span>
-                          <pre className="rounded bg-gray-950 border border-line px-2 py-1 text-gray-300 inline-block">ollama serve</pre>
+                          <pre className="rounded bg-app border border-line px-2 py-1 text-fg inline-block">ollama serve</pre>
                         </div>
                       )}
                       {ollamaModels && ollamaModels.reachable && (
@@ -403,7 +403,7 @@ export default function AgentPage() {
                           {ollamaModels.models.length === 0 ? (
                             <div className="text-amber-300">
                               No models pulled yet. Try{" "}
-                              <code className="rounded bg-gray-950 border border-line px-1.5 py-0.5">ollama pull llama3.2:3b</code>
+                              <code className="rounded bg-app border border-line px-1.5 py-0.5 text-fg">ollama pull llama3.2:3b</code>
                               {" "}then refresh.
                             </div>
                           ) : (

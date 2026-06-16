@@ -25,7 +25,7 @@ const credentialSchema: CredentialSchema = {
 
 // When the prices below were last set. Surfaced in the UI so a stale rate is
 // obvious — providers change pricing; verify before relying on it.
-const PRICED_AS_OF = "2026-06-10";
+const PRICED_AS_OF = "2026-06-16";
 
 const KNOWN_MODELS: readonly ModelInfo[] = [
   {
@@ -48,13 +48,6 @@ const KNOWN_MODELS: readonly ModelInfo[] = [
     contextWindow: 1000000,
     inputCostPer1M: 5.0,
     outputCostPer1M: 25.0,
-  },
-  {
-    id: "claude-fable-5",
-    displayName: "Claude Fable 5",
-    contextWindow: 1000000,
-    inputCostPer1M: 10.0,
-    outputCostPer1M: 50.0,
   },
 ];
 

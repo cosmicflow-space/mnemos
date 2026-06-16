@@ -36,17 +36,17 @@ const credentialSchema: CredentialSchema = {
 // UI's cost display — verify against platform.openai.com/pricing. Used only for
 // indicative cost; billing is whatever OpenAI actually charges.
 // When the prices below were last set — surfaced in the UI so a stale rate shows.
-const PRICED_AS_OF = "2026-05-30";
+const PRICED_AS_OF = "2026-06-16";
 
 const CHAT_MODELS: readonly ModelInfo[] = [
-  { id: "gpt-5.5", displayName: "GPT-5.5", contextWindow: 200000, inputCostPer1M: 1.25, outputCostPer1M: 10.0 },
-  { id: "gpt-5.4", displayName: "GPT-5.4", contextWindow: 200000, inputCostPer1M: 1.25, outputCostPer1M: 10.0 },
-  { id: "gpt-4o", displayName: "GPT-4o", contextWindow: 128000, inputCostPer1M: 2.5, outputCostPer1M: 10.0 },
-  { id: "gpt-4o-mini", displayName: "GPT-4o mini", contextWindow: 128000, inputCostPer1M: 0.15, outputCostPer1M: 0.6 },
+  { id: "gpt-5.5", displayName: "GPT-5.5", contextWindow: 200000, inputCostPer1M: 5.0, outputCostPer1M: 30.0 },
+  { id: "gpt-5.4", displayName: "GPT-5.4", contextWindow: 200000, inputCostPer1M: 2.5, outputCostPer1M: 15.0 },
+  { id: "gpt-5.4-mini", displayName: "GPT-5.4 mini", contextWindow: 200000, inputCostPer1M: 0.75, outputCostPer1M: 4.5 },
+  { id: "gpt-5.4-nano", displayName: "GPT-5.4 nano", contextWindow: 200000, inputCostPer1M: 0.2, outputCostPer1M: 1.25 },
 ];
 
 // Cheapest capable model is the default — see the Anthropic plugin's rationale.
-const DEFAULT_CHAT_MODEL = "gpt-4o-mini";
+const DEFAULT_CHAT_MODEL = "gpt-5.4-nano";
 const DEFAULT_MAX_TOKENS = 2048;
 
 class OpenAIChatProvider implements ChatProvider {

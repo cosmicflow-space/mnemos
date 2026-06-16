@@ -269,9 +269,9 @@ async function configureProvider(rl) {
   // plugins land, add them back to this list.
   const tag = (p, fallback) => (detectedByProvider[p] ? green('✓ key detected') : fallback);
   console.log(`    ${bold('1')}) ollama      local daemon on :11434          ${green('no key · fully local · recommended')}`);
-  console.log(`    ${bold('2')}) anthropic   Claude (Sonnet 4.6, Opus 4.7)   ${tag('anthropic', 'needs ANTHROPIC_API_KEY')}`);
-  console.log(`    ${bold('3')}) openai      GPT-4o / o-series                ${tag('openai', 'needs OPENAI_API_KEY')}`);
-  console.log(dim(`    (gemini + bundled local llama.cpp are stubs — not yet wired)`));
+  console.log(`    ${bold('2')}) anthropic   Claude (Sonnet 4.6, Opus 4.8)   ${tag('anthropic', 'needs ANTHROPIC_API_KEY')}`);
+  console.log(`    ${bold('3')}) openai      GPT-5.5 / 5.4 family             ${tag('openai', 'needs OPENAI_API_KEY')}`);
+  console.log(dim(`    (gemini is configured in the web UI; bundled local llama.cpp is still a stub)`));
   const choices = { 1: 'ollama', 2: 'anthropic', 3: 'openai' };
   let provider = '';
   while (!provider) {

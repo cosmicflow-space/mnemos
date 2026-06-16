@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Model catalog accuracy pass — every frontier provider re-verified against live pricing.** Removed a non-existent Claude model that had slipped into the catalog; corrected OpenAI's two current tiers to their real rates (GPT-5.5 $5/$30, GPT-5.4 $2.50/$15) and replaced two delisted models with the current small/nano tiers (GPT-5.4 mini $0.75/$4.50, GPT-5.4 nano $0.20/$1.25); priced the Gemini 3 Flash preview and swapped the retired Gemini 3 Pro preview ID for the current one. Each provider's `PRICED_AS_OF` stamp was bumped so the UI shows the rates were freshly checked.
+- **Readability across every page and modal in Zen-Light, not just the chat surface.** Standalone pages (home, agent/settings, sources) and the settings modals had carried dark-only colors that washed out on the mint/white theme; they now follow the same semantic tokens as the chat pane, and the light `--muted` ink was deepened so secondary text clears WCAG AA everywhere.
+
 ## [0.20.0] - 2026-06-14
 
 ### Added
