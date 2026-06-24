@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-06-24
+
 ### Added
 - **`/do dev clear` — a one-line clean slate for demos (web only).** Wipes every chunk, vector, source/file registration, and chat + audit history from the database in a single transaction, then resets the chat UI in place (sidebar, sources, focus, and the all-time cost readout) with no browser reload. Two-step by design — the command warns first and only runs when you reply `--confirmed` — and it **never** touches your source files on disk, your encrypted credentials, your PIN, or your Telegram pairing (only the active-session link is cleared). The `dev` namespace is intentionally web-only: the Telegram poller is query-only and has no path to it.
 
@@ -367,7 +369,8 @@ Roughly 90 seconds from clone to first answer on a typical laptop.
 
 <!-- Version links: each header above is a GitHub compare view of that release's diff.
      [Unreleased] is a live diff of everything on `main` since the latest tag. -->
-[Unreleased]: https://github.com/cosmicflow-space/mnemos/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/cosmicflow-space/mnemos/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.20.1...v0.21.0
 [0.16.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/cosmicflow-space/mnemos/compare/v0.14.2...v0.15.0
 [0.14.2]: https://github.com/cosmicflow-space/mnemos/compare/v0.14.1...v0.14.2
