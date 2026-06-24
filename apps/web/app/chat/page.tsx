@@ -731,6 +731,18 @@ export default function ChatPage() {
         case "message":
           pushNote(data.text);
           break;
+        case "dev-confirm":
+          pushNote(data.text);
+          break;
+        case "dev-cleared":
+          // Reset the UI to a clean slate in place — no full reload, no flicker.
+          setSessions([]);
+          setSessionId(null);
+          setFocusState(null);
+          setSourceCount(0);
+          setMessages([]);
+          pushNote(data.text);
+          break;
         case "error":
           pushNote(`⚠️ ${data.message}`);
           break;

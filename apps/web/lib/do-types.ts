@@ -20,6 +20,8 @@ export type DoResult =
   | { kind: "pin-set" }
   | { kind: "pin-bad"; attemptsLeft?: number; lockedMs?: number }
   | { kind: "message"; text: string } // generic info (empty buffer, nothing selected…)
+  | { kind: "dev-confirm"; text: string } // destructive op — needs `--confirmed`
+  | { kind: "dev-cleared"; removed: { chunks: number; sources: number; sessions: number }; text: string }
   | { kind: "error"; message: string };
 
 /** rag-status row, plus the session the auto-focus moved to (if any) so the

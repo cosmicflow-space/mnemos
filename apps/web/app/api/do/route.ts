@@ -11,7 +11,7 @@
 
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import { appendAudit, createSession } from "@mnemos/db";
+import { appendAudit, createSession, clearDevIndex } from "@mnemos/db";
 import { getDb } from "@/lib/runtime";
 import { listVerbs, runVerb } from "@/lib/do-runner";
 import { resolveRag, ragGate } from "@/lib/do-commands";
@@ -200,6 +200,9 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ kind: "message", text: statusText(status) } satisfies DoResult);
   }
 
+  // ── /do dev … — DEV-mode maintenance (web-only; never over Telegram) ────────
+  if (verb === "dev") return Response.json(handleDev(sessionId, arg));
+
   // ── A read-tier script verb (e.g. fs) — its output fills the buffer ─────────
   const res = await runVerb(verb, arg);
   if (!res.ok) return Response.json({ kind: "error", message: res.error } satisfies DoResult);
@@ -216,6 +219,42 @@ export async function POST(req: Request): Promise<Response> {
     items: res.lines.slice(0, DO_WEB_LIMIT),
     truncated: res.truncated || res.lines.length > DO_WEB_LIMIT,
   } satisfies DoResult);
+}
+
+/**
+ * `/do dev <sub>` — destructive DEV-mode maintenance, guarded by a two-step
+ * `--confirmed`. Web-only (the dispatcher for Telegram never routes here), and
+ * it never touches source files on disk. The `dev` namespace is intentionally
+ * open for future subcommands (e.g. `dev remove <file>` to drop one file).
+ */
+function handleDev(sessionId: string, arg: string): DoResult {
+  const parts = arg.split(/\s+/).filter(Boolean);
+  const sub = (parts[0] ?? "").toLowerCase();
+  const confirmed = parts.slice(1).includes("--confirmed");
+
+  if (sub === "clear") {
+    if (!confirmed) {
+      return {
+        kind: "dev-confirm",
+        text:
+          "⚠️ This will remove ALL your chat history, every chunk in the RAG, and all source/file references in the database. " +
+          "Use this only when experimenting in DEV mode. It will NOT delete your source files.\n\n" +
+          "To proceed, run:  /do dev clear --confirmed",
+      } satisfies DoResult;
+    }
+    const before = clearDevIndex(getDb());
+    audit(sessionId, "do_dev_clear", { ...before, via: "web" });
+    return {
+      kind: "dev-cleared",
+      removed: { chunks: before.chunks, sources: before.sources, sessions: before.sessions },
+      text: `✅ Cleared the DEV index — removed ${before.chunks} chunks, ${before.sources} source${before.sources === 1 ? "" : "s"}, and ${before.sessions} chat session${before.sessions === 1 ? "" : "s"}. Your source files were not touched.`,
+    } satisfies DoResult;
+  }
+
+  return {
+    kind: "message",
+    text: "Usage: /do dev clear — wipes the DEV index (chunks, sources, history) after you confirm with --confirmed. Source files are never deleted.",
+  } satisfies DoResult;
 }
 
 function statusText(status: ReturnType<typeof getRagStatus>): string {

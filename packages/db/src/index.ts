@@ -29,6 +29,7 @@ export {
   listSources,
   getSourceByPath,
   removeSource,
+  clearDevIndex,
   setSourceWatchInterval,
   setSourcePaused,
   touchSourceScanned,

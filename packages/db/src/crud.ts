@@ -197,6 +197,42 @@ export function removeSource(db: MnemosDb, path: string): { chunksPurged: number
   })();
 }
 
+/**
+ * DEV reset: wipe the whole RAG index (chunks + vectors), every source/file
+ * registration, all chat history, and verified answers — a clean slate for a
+ * demo. Does NOT touch the user's source FILES on disk, credentials, the PIN, or
+ * the Telegram pairing (only the active-session link is cleared). Returns the
+ * counts that existed before the wipe, for the confirmation message.
+ */
+export function clearDevIndex(db: MnemosDb): {
+  chunks: number; sources: number; files: number;
+  sessions: number; messages: number; verified: number;
+} {
+  return db.transaction(() => {
+    const n = (sql: string) => Number((prepared(db)(sql).get() as { c: number }).c);
+    const before = {
+      chunks: n(`SELECT COUNT(*) c FROM chunk`),
+      sources: n(`SELECT COUNT(*) c FROM source`),
+      files: n(`SELECT COUNT(*) c FROM file`),
+      sessions: n(`SELECT COUNT(*) c FROM session`),
+      messages: n(`SELECT COUNT(*) c FROM chat_message`),
+      verified: n(`SELECT COUNT(*) c FROM verified_answer`),
+    };
+    // Virtual (vec0) tables have no FK cascade — clear them explicitly first.
+    prepared(db)(`DELETE FROM vec_chunk`).run();
+    prepared(db)(`DELETE FROM vec_verified`).run();
+    // `source` cascades to file + chunk via foreign keys.
+    prepared(db)(`DELETE FROM source`).run();
+    prepared(db)(`DELETE FROM verified_answer`).run();
+    prepared(db)(`DELETE FROM chat_message`).run();
+    // Keep the Telegram pairing; just unlink whatever session it pointed at.
+    prepared(db)(`UPDATE telegram_chat SET session_id = NULL`).run();
+    prepared(db)(`DELETE FROM session`).run();
+    prepared(db)(`DELETE FROM audit_event`).run();
+    return before;
+  })();
+}
+
 // ============================================================================
 // Files
 // ============================================================================
