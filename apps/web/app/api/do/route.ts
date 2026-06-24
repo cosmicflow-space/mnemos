@@ -226,6 +226,12 @@ export async function POST(req: Request): Promise<Response> {
  * `--confirmed`. Web-only (the dispatcher for Telegram never routes here), and
  * it never touches source files on disk. The `dev` namespace is intentionally
  * open for future subcommands (e.g. `dev remove <file>` to drop one file).
+ *
+ * Scope note: a `/do rag` ingest already running in the background when `clear`
+ * is confirmed can re-add sources after the wipe (the worker is fire-and-forget,
+ * not cancellable). This is acceptable for a deliberate single-operator DEV reset
+ * — don't fire a clear mid-ingest — and avoids threading a cancellation token
+ * through the ingest path for a maintenance command. Re-run clear if it happens.
  */
 function handleDev(sessionId: string, arg: string): DoResult {
   const parts = arg.split(/\s+/).filter(Boolean);
@@ -239,7 +245,7 @@ function handleDev(sessionId: string, arg: string): DoResult {
         text:
           "⚠️ This will remove ALL your chat history, every chunk in the RAG, and all source/file references in the database. " +
           "Use this only when experimenting in DEV mode. It will NOT delete your source files.\n\n" +
-          "To proceed, run:  /do dev clear --confirmed",
+          "Reply with  --confirmed  to proceed.",
       } satisfies DoResult;
     }
     const before = clearDevIndex(getDb());

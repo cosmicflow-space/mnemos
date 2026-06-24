@@ -189,6 +189,8 @@ export default function ChatPage() {
   // PIN modal for the `/do rag` write, and whether a Telegram chat is paired
   // (so the sidebar can offer "Continue on phone").
   const [focus, setFocusState] = useState<FocusFile[] | null>(null);
+  // Armed by a `/do dev clear` warning; a bare "--confirmed" next runs the wipe.
+  const [pendingDevClear, setPendingDevClear] = useState(false);
   const [pinModal, setPinModal] = useState<{ mode: "verify" | "setup"; count: number } | null>(null);
   const [telegramPaired, setTelegramPaired] = useState(false);
   const threadRef = useRef<HTMLDivElement | null>(null);
@@ -732,15 +734,21 @@ export default function ChatPage() {
           pushNote(data.text);
           break;
         case "dev-confirm":
+          setPendingDevClear(true); // a bare "--confirmed" next will run the wipe
           pushNote(data.text);
           break;
         case "dev-cleared":
           // Reset the UI to a clean slate in place — no full reload, no flicker.
+          setPendingDevClear(false);
           setSessions([]);
           setSessionId(null);
           setFocusState(null);
           setSourceCount(0);
           setMessages([]);
+          setUsageTotals([]); // all-time cost is wiped too — clear the header readout
+          // Drop the now-deleted session id so a reload doesn't reattach to it
+          // (mirrors newChat()); a fresh id is minted on the next message.
+          if (typeof window !== "undefined") window.localStorage.removeItem(STORAGE_SESSION_KEY);
           pushNote(data.text);
           break;
         case "error":
@@ -756,8 +764,15 @@ export default function ChatPage() {
 
   async function send(e: FormEvent) {
     e.preventDefault();
-    const raw = input.trim();
+    let raw = input.trim();
     if (!raw || streaming) return;
+
+    // A bare "--confirmed" right after a `/do dev clear` warning runs the wipe.
+    // Anything else cancels the pending confirmation.
+    if (pendingDevClear) {
+      setPendingDevClear(false);
+      if (raw === "--confirmed") raw = "/do dev clear --confirmed";
+    }
 
     // The find → add → focus workflow commands (mirror the Telegram bot).
     if (/^\/(do|focus|done|reindex)(\s|$)/i.test(raw)) {

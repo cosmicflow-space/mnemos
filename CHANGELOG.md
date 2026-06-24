@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`/do dev clear` — a one-line clean slate for demos (web only).** Wipes every chunk, vector, source/file registration, and chat + audit history from the database in a single transaction, then resets the chat UI in place (sidebar, sources, focus, and the all-time cost readout) with no browser reload. Two-step by design — the command warns first and only runs when you reply `--confirmed` — and it **never** touches your source files on disk, your encrypted credentials, your PIN, or your Telegram pairing (only the active-session link is cleared). The `dev` namespace is intentionally web-only: the Telegram poller is query-only and has no path to it.
+
 ## [0.20.1] - 2026-06-16
 
 ### Fixed

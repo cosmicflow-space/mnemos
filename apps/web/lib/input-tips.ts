@@ -49,6 +49,7 @@ export const INPUT_COMMANDS: readonly InputCommand[] = [
   { cmd: "/focus <name>", desc: "Scope the chat to one indexed file by name (or /focus <n> for a numbered source).", short: "focus a file" },
   { cmd: "/done", desc: "Leave focus — back to searching all your files.", short: "exit focus" },
   { cmd: "/reindex", desc: "Re-extract the focused file (scanned PDFs run OCR).", short: "re-extract" },
+  { cmd: "/do dev clear", desc: "Web only — wipe the DEV index (chunks, sources, chat history) after confirming with --confirmed. Your source files are never deleted.", short: "wipe dev index" },
 ];
 
 const FRONTIER_NOTE =

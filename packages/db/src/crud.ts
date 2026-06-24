@@ -229,6 +229,18 @@ export function clearDevIndex(db: MnemosDb): {
     prepared(db)(`UPDATE telegram_chat SET session_id = NULL`).run();
     prepared(db)(`DELETE FROM session`).run();
     prepared(db)(`DELETE FROM audit_event`).run();
+    // The `/do` working-set tables (selection buffer, parked PIN action, rag
+    // status, focus) are created lazily by the web layer in the SAME db file and
+    // have no FK to `session`, so the cascade above never reaches them. Sweep any
+    // that exist — guarded by sqlite_master, since a core/db test may never have
+    // booted the web app that creates them.
+    const runtimeTables = (
+      prepared(db)(
+        `SELECT name FROM sqlite_master WHERE type='table'
+         AND name IN ('do_buffer','do_pending','do_rag_status','do_focus')`,
+      ).all() as Array<{ name: string }>
+    ).map((r) => r.name);
+    for (const t of runtimeTables) prepared(db)(`DELETE FROM ${t}`).run();
     return before;
   })();
 }
