@@ -25,7 +25,7 @@ const credentialSchema: CredentialSchema = {
 
 // When the prices below were last set. Surfaced in the UI so a stale rate is
 // obvious — providers change pricing; verify before relying on it.
-const PRICED_AS_OF = "2026-06-16";
+const PRICED_AS_OF = "2026-07-25";
 
 const KNOWN_MODELS: readonly ModelInfo[] = [
   {
@@ -43,8 +43,24 @@ const KNOWN_MODELS: readonly ModelInfo[] = [
     outputCostPer1M: 15.0,
   },
   {
+    // Intro pricing $2/$10 through 2026-08-31, then $3/$15.
+    id: "claude-sonnet-5",
+    displayName: "Claude Sonnet 5",
+    contextWindow: 1000000,
+    inputCostPer1M: 3.0,
+    outputCostPer1M: 15.0,
+  },
+  {
     id: "claude-opus-4-8",
     displayName: "Claude Opus 4.8",
+    contextWindow: 1000000,
+    inputCostPer1M: 5.0,
+    outputCostPer1M: 25.0,
+  },
+  {
+    // Released 2026-07-24 — near-Fable-5 capability at Opus 4.8 pricing.
+    id: "claude-opus-5",
+    displayName: "Claude Opus 5",
     contextWindow: 1000000,
     inputCostPer1M: 5.0,
     outputCostPer1M: 25.0,
