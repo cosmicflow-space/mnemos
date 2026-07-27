@@ -166,7 +166,7 @@ export default function TelegramGuidePage() {
           <Step n={8} title="Ask anything">
             <p>
               Just message the bot a question about your documents — like{" "}
-              <em>&quot;what are the Land Rover supplies?&quot;</em> — and you&apos;ll get an answer
+              <em>&quot;what was Q3 revenue?&quot;</em> — and you&apos;ll get an answer
               with sources, generated on your computer. That&apos;s it. 🎉
             </p>
             <p className="mt-2">

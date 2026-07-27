@@ -1,7 +1,7 @@
 {
   "tier": "read",
   "summary": "Fuzzy-find files under your home directory by name (any word order).",
-  "usage": "/do fs <name> — e.g. /do fs land rover",
+  "usage": "/do fs <name> — e.g. /do fs annual report",
   "args": { "kind": "single", "shape": "search", "required": true },
   "role": "producer"
 }

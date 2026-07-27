@@ -47,7 +47,7 @@ const VERB_RE = /^[a-z0-9_-]+$/;
 // A bare glob: letters/digits and . _ - * ? [ ] only. No '/', no '..', no quotes,
 // no whitespace — a NAME to match, never a path or query/shell syntax.
 const GLOB_RE = /^[A-Za-z0-9._*?[\]-]+$/;
-// A fuzzy search query: the glob set PLUS spaces, so "Land Rover" works. The verb
+// A fuzzy search query: the glob set PLUS spaces, so "annual report" works. The verb
 // tokenizes it. Still no '/', '\', '..', or quotes (validated below).
 const SEARCH_RE = /^[A-Za-z0-9 ._*?[\]-]+$/;
 
@@ -109,7 +109,7 @@ const TIMEOUT_MS = 30_000;
 const MAX_OUTPUT = 4 * 1024 * 1024;
 
 function validateArg(arg: string, shape: string): string | null {
-  if (!arg) return "add a name to search for, e.g. /do fs land rover";
+  if (!arg) return "add a name to search for, e.g. /do fs annual report";
   if (arg.length > 200) return "search term is too long";
   if (arg.includes("..") || arg.includes("/") || arg.includes("\\")) {
     return "use a file's name, not a path (no slashes)";

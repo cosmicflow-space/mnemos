@@ -18,15 +18,15 @@ Read this first; it's the *why*, and everything below serves it.
 
 **The workflow this enables.** On your computer you already have a hundred ways to find a file
 and a Sources panel to add a whole folder. **On your phone you don't** — and that's exactly
-where this matters. You're away from your desk, you half-remember a file's name ("the Land
-Rover VIN thing"), and you want to *find it, pull it into the index, and ask questions about
+where this matters. You're away from your desk, you half-remember a file's name ("the annual
+report thing"), and you want to *find it, pull it into the index, and ask questions about
 it.* That four-step arc is the feature:
 
 ```
-/do fs land rover      ① find it on disk — fuzzy, any word order   (read, free)
-/do rag 1              ② add it to the index — text/PDF/scanned     (write, PIN-gated)
-/focus land rover      ③ scope the chat to just that file
-"what is my VIN?"      ④ ask / summarize / explore — answered from that file alone
+/do fs annual report       ① find it on disk — fuzzy, any word order   (read, free)
+/do rag 1                  ② add it to the index — text/PDF/scanned     (write, PIN-gated)
+/focus annual report       ③ scope the chat to just that file
+"what was Q3 revenue?"     ④ ask / summarize / explore — answered from that file alone
 ```
 
 Steps ① and ④ are the adoption unlock: a vaguely-remembered name becomes a focused
@@ -62,7 +62,7 @@ until it passes that protocol and you have read it yourself.
 
 | Command | What it does | Tier |
 |---------|--------------|------|
-| `/do fs <name…>` | **Fuzzy** file-name hunt under `$HOME`. Spaces, camelCase, and any word order all work — `land rover`, `LandRover`, `Land*Rover*.pdf` all find `Land rover VIN and Sale.pdf`. Returns a numbered list. | read |
+| `/do fs <name…>` | **Fuzzy** file-name hunt under `$HOME`. Spaces, camelCase, and any word order all work — `annual report`, `AnnualReport`, `Annual*Report*.pdf` all find `Annual report 2026.pdf`. Returns a numbered list. | read |
 | `/do rag <sel>` | Add the picked files (`3` · `1 3` · `1-4` · `all`) to the index. Text PDFs, Office docs, **and scanned PDFs (OCR)** all extract. PIN-gated, reversible, auto-focuses on what you added. | write |
 | `/focus <name\|n>` | Scope the chat to one already-indexed file — by name, or by `<n>` from a citation/source list. | — |
 | `/done` | Leave focus; back to searching all your files. | — |
@@ -175,9 +175,9 @@ ships both `fs` (POSIX) and `fs.ps1` (Windows).
 
 **`fs` is a fuzzy hunt, identically on every OS.** Each script tokenizes the query the same
 way — split on camelCase, spaces, and any non-alphanumeric character, lowercase — then returns
-files whose name contains **every** token, in **any order**. So `land rover`, `LandRover`,
-`land_rover`, and `Land*Rover*.pdf` all find `Land rover VIN and Sale.pdf`, and `pearl` finds
-`InnerPearl.pdf`. (macOS seeds the candidate set from Spotlight for speed; Linux/Windows walk
+files whose name contains **every** token, in **any order**. So `annual report`, `AnnualReport`,
+`annual_report`, and `Annual*Report*.pdf` all find `Annual report 2026.pdf`, and `budget` finds
+`HomeBudget.pdf`. (macOS seeds the candidate set from Spotlight for speed; Linux/Windows walk
 the tree.)
 
 ---
@@ -278,16 +278,16 @@ starts a fresh conversation thread**, so a prior document's discussion can never
 new one.
 
 ```
-You:  what files mention the Land Rover?
+You:  what files mention the annual report?
 Bot:  …📎 Sources:
-      [1] Land rover VIN and Sale.pdf
+      [1] Annual report 2026.pdf
       [2] insurance-2024.pdf
       Reply /focus <n> to chat with just that document.
 You:  /focus 1
-Bot:  🎯 Now focused on Land rover VIN and Sale.pdf — questions are scoped to this file. /done to exit.
-You:  what is my VIN?
-Bot:  SALWA2VK7HA000000 …
-      🎯 Focused on Land rover VIN and Sale.pdf · /done to exit
+Bot:  🎯 Now focused on Annual report 2026.pdf — questions are scoped to this file. /done to exit.
+You:  what was the Q3 revenue?
+Bot:  $1.42M …
+      🎯 Focused on Annual report 2026.pdf · /done to exit
 ```
 
 ### Files with no readable text — honest, located, fixable

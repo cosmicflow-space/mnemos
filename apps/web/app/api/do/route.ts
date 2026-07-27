@@ -36,7 +36,7 @@ const DO_WEB_LIMIT = 200; // the web can render a longer match list than Telegra
 
 const Body = z.object({
   sessionId: z.string().min(1),
-  /** Text after "/do " — e.g. "fs land rover", "rag 1-3", "pin 123456", "". */
+  /** Text after "/do " — e.g. "fs annual report", "rag 1-3", "pin 123456", "". */
   input: z.string().max(2000).optional(),
   /** A 6-digit reply answering a pending PIN gate (the web PIN modal). */
   pin: z.string().regex(/^\d{6}$/).optional(),

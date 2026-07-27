@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node: 22+](https://img.shields.io/badge/Node-22%2B-339933.svg)](https://nodejs.org/)
-[![Status: v0.20](https://img.shields.io/badge/Status-v0.20-cyan.svg)](CHANGELOG.md)
+[![Status: v0.21](https://img.shields.io/badge/Status-v0.21-cyan.svg)](CHANGELOG.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-cyan.svg)](CONTRIBUTING.md)
 
 Built by **[Sam Muthu](https://sammuthu.com)** · [Read the project write-up →](https://sammuthu.com/ai-ml/mnemos)
@@ -130,13 +130,13 @@ Set it up in **Settings → 📲 Telegram** (there's a built-in [step-by-step gu
 On your computer you have a file browser and can add a whole folder. **On your phone you don't** — and that's the point. You're away from your desk, you half-remember a file's name, and you want to *find it, pull it into the index, and ask about it.* That four-step arc is the feature:
 
 ```
-/do fs land rover     ① find it — fuzzy, any word order
-/do rag 1             ② add it to the index (text, Office, or scanned PDFs via OCR)
-/focus land rover     ③ scope the chat to just that file
-"what is my VIN?"     ④ ask / summarize — answered from that file alone → SALWA2VK7HA000000
+/do fs annual report      ① find it — fuzzy, any word order
+/do rag 1                 ② add it to the index (text, Office, or scanned PDFs via OCR)
+/focus annual report      ③ scope the chat to just that file
+"what was Q3 revenue?"    ④ ask / summarize — answered from that file alone → $1.42M
 ```
 
-- **`/do fs <name>`** — a **fuzzy** file-name hunt under your home directory: `land rover`, `LandRover`, and `Land*Rover*.pdf` all find `Land rover VIN and Sale.pdf`; `pearl` finds `InnerPearl.pdf`. Returns a numbered list. Read-only — it sees *names*, never contents.
+- **`/do fs <name>`** — a **fuzzy** file-name hunt under your home directory: `annual report`, `AnnualReport`, `annualreport`, and `Annual*Report*.pdf` all find `Annual report 2026.pdf`; `budget` finds `HomeBudget.pdf`. Word order, spacing, and capitalization don't matter. Returns a numbered list. Read-only — it sees *names*, never contents.
 - **`/do rag <n>`** — add the files you picked, on demand. Extracts text PDFs, Office docs, **and scanned PDFs (OCR, where [poppler](https://poppler.freedesktop.org/) is installed)**; **upserts by content hash** (never a duplicate); runs in the background; auto-focuses on what you added.
 - **`/focus <name|n>`** — scope the chat to one indexed file (by name, or by `<n>` from a citation). **`/done`** returns to searching all files. A small focused file is loaded *whole* into context, so "summarize this" actually works.
 - **`/do dev clear`** *(web only)* — a one-line **clean slate** for demos: wipes every chunk, vector, source registration, and chat/audit history from the database, then resets the UI in place — no browser reload. It's two-step by design (you reply `--confirmed`) and **never deletes your source files on disk**, your API credentials, your PIN, or your Telegram pairing. Handy before handing the screen to someone new.

@@ -8,7 +8,7 @@ const existing = [
 
 describe("classifyContainment", () => {
   it("flags a subfolder of an existing source as 'inside' its parent", () => {
-    const c = classifyContainment("/Users/me/Documents/ipostal", existing);
+    const c = classifyContainment("/Users/me/Documents/reports", existing);
     expect(c).toEqual({ kind: "inside", parentPath: "/Users/me/Documents" });
   });
 

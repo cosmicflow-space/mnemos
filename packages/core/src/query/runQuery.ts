@@ -260,7 +260,7 @@ export async function* runQuery(
 
   // 2b. Metadata-chunk expansion. The synthetic per-file metadata chunk
   // (ordinal -1: path/size/mtime/type) is a strong lexical match for questions
-  // that name a file ("VIN in ipostal?") but holds no answer — so it can
+  // that name a file ("total in report.pdf?") but holds no answer — so it can
   // out-rank and crowd out its own file's content, especially in a large index.
   // When a file surfaced ONLY via its metadata chunk, splice that file's content
   // chunks in *immediately after* the metadata hit (not at the tail — so the

@@ -20,6 +20,14 @@ import { dirname, join } from "node:path";
 // stack frames break that lookup (fileName ends up undefined → `.indexOf`
 // crash inside bindings.js:178). Externalizing them sends the require through
 // Node's native loader where the stack is intact.
+//
+// Externalizing is necessary but NOT sufficient: a bundler can only externalize
+// what it can resolve from the app directory, and pnpm's isolated layout links
+// a package only into the workspace that declares it. So `apps/web` declares
+// better-sqlite3 and sqlite-vec directly even though it imports them through
+// @mnemos/db. Without that, Turbopack (`next dev --turbopack`, and the default
+// in newer Next) silently bundles them instead and every DB call fails with
+// "Could not locate the bindings file".
 
 export type MnemosDb = BetterSqliteDb;
 
@@ -37,8 +45,31 @@ const SCHEMA_PATH = join(
   "schema.sql",
 );
 
+/**
+ * better-sqlite3 ships a native addon compiled against ONE Node ABI. Installing
+ * with a different Node than the one that runs the server surfaces a raw
+ * ERR_DLOPEN_FAILED naming no remedy, so translate it into the fix.
+ */
+function openNative(path: string): BetterSqliteDb {
+  try {
+    return new Database(path);
+  } catch (err) {
+    // NODE_MODULE_VERSION is the definitive ABI marker. ERR_DLOPEN_FAILED alone
+    // is too broad — it also covers a missing dependent library, a wrong CPU
+    // architecture, or a code-signing refusal, none of which a rebuild fixes.
+    const detail = err instanceof Error ? err.message : String(err);
+    if (!detail.includes("NODE_MODULE_VERSION")) throw err;
+    throw new Error(
+      `better-sqlite3 was built for a different Node.js version than the one running Mnemos (${process.version}). ` +
+        `Rebuild it using the same Node you start the server with:\n` +
+        `  pnpm rebuild better-sqlite3`,
+      { cause: err },
+    );
+  }
+}
+
 export function openDb(opts: OpenDbOptions): MnemosDb {
-  const db = new Database(opts.path);
+  const db = openNative(opts.path);
   db.pragma("journal_mode = WAL");
   db.pragma("busy_timeout = 5000");
   db.pragma("foreign_keys = ON");

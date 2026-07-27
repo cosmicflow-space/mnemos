@@ -1,10 +1,11 @@
 #!/bin/sh
 # /do fs <name…> — fuzzy file-name hunt under $HOME.
 #
-# Accepts a NATURAL query: spaces ("Land Rover"), camelCase ("LandRover"),
-# separators ("land_rover"), or leftover glob chars ("Land*Rover*.pdf") all work.
-# The query is tokenized (split on camelCase / spaces / . _ - * ? [ ]) and a file
-# matches when its NAME contains EVERY token, case-insensitive and order-free.
+# Accepts a NATURAL query: spaces ("annual report"), camelCase ("AnnualReport"), fused
+# ("annualreport"), separators ("annual_report"), or leftover glob chars
+# ("Annual*Report*.pdf") all work. The query is tokenized (split on camelCase /
+# spaces / . _ - * ? [ ]) and a file matches when its name — compared with all
+# separators stripped — contains EVERY token, case-insensitive and order-free.
 # READ-only: it observes file names, never contents.
 #
 # $1 is pre-validated by the dispatcher (letters/digits/spaces and . _ - * ? [ ]
@@ -32,33 +33,57 @@ filter() {
     -e '/\.cache/' -e '/\.npm/' -e '/\.ssh/' -e '/\.gnupg/' -e '/\.aws/'
 }
 
-# Candidate set: file names containing the seed token. Spotlight fast-path.
+# Candidate set: file names containing $1. Spotlight fast-path.
 candidates() {
   if command -v mdfind >/dev/null 2>&1 && mdutil -s / 2>/dev/null | grep -q "Indexing enabled"; then
-    mdfind -onlyin "$HOME" "kMDItemFSName == '*$seed*'wc" 2>/dev/null
+    mdfind -onlyin "$HOME" "kMDItemFSName == '*$1*'wc" 2>/dev/null
   else
     find "$HOME" \( -name node_modules -o -name .git -o -name Library -o -name .ssh \
       -o -name .aws -o -name .gnupg -o -name .Trash -o -name .cache -o -name .npm \) -prune \
-      -o -type f -iname "*$seed*" -print 2>/dev/null
+      -o -type f -iname "*$1*" -print 2>/dev/null
   fi
 }
 
-# Keep regular files whose lowercased basename contains EVERY token; cap output.
-count=0
-candidates | filter | while IFS= read -r path; do
-  [ -f "$path" ] || continue
-  base=$(printf '%s' "${path##*/}" | tr 'A-Z' 'a-z')
-  ok=1
-  for t in $tokens; do
-    case "$base" in *"$t"*) ;; *) ok=0; break ;; esac
-  done
-  [ "$ok" = 1 ] || continue
-  count=$((count + 1))
-  if [ "$count" -gt "$limit" ]; then
-    echo "...more than $limit matches; add another word to narrow." >&2
-    break
-  fi
-  printf '%s\n' "$path"
-done
+# Keep regular files whose basename contains EVERY token. Separators are
+# stripped before comparison, so a fused query ("annualreport") still matches a
+# spaced file ("Annual report 2026.pdf").
+#
+# The trailing `head` bounds DISCOVERY, not just output: once it has taken
+# limit+1 lines it exits, and the closed pipe tears down the scan upstream. One
+# spare line above the cap is what tells the caller to print the "narrow it"
+# hint, so a broad query never walks the whole disk to then print 50 paths.
+hunt() {
+  candidates "$1" | filter | while IFS= read -r path; do
+    [ -f "$path" ] || continue
+    base=$(printf '%s' "${path##*/}" | tr -cd 'a-zA-Z0-9' | tr 'A-Z' 'a-z')
+    ok=1
+    for t in $tokens; do
+      case "$base" in *"$t"*) ;; *) ok=0; break ;; esac
+    done
+    [ "$ok" = 1 ] && printf '%s\n' "$path"
+  done | head -n "$((limit + 1))"
+}
+
+out=$(hunt "$seed")
+
+# A fused token cannot seed a file-name scan: nothing on disk is literally named
+# "*annualreport*" — the words are separated there. Retry seeded by the token's
+# first four characters, which survive contiguously in the common case
+# ("annualreport" → "annu" reaches "Annual report 2026.pdf"). Every token is
+# still required to match, so this widens the candidate set without loosening
+# the result. LIMIT: the seed must appear contiguously on disk, so a compound
+# whose first word is shorter than the prefix ("foobarbaz" vs "foo_bar_baz")
+# still misses — stripping happens only after candidates are collected.
+if [ -z "$out" ]; then
+  case "$seed" in
+    ?????*) out=$(hunt "$(printf '%s' "$seed" | cut -c1-4)") ;;
+  esac
+fi
+
+[ -n "$out" ] || exit 0
+printf '%s\n' "$out" | head -n "$limit"
+if [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" -gt "$limit" ]; then
+  echo "...more than $limit matches; add another word to narrow." >&2
+fi
 
 exit 0

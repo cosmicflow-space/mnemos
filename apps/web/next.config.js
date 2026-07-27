@@ -37,6 +37,13 @@ const nextConfig = {
   // bundle. Kept in sync with the webpack-callback list below — both layers
   // are needed because the declarative list doesn't apply to the RSC
   // compilation in Next 15.
+  //
+  // Every entry must ALSO be resolvable from this app directory, or the bundler
+  // cannot externalize it and bundles it instead. Under pnpm that means listing
+  // it in this app's package.json even when the import arrives through a
+  // workspace package (better-sqlite3 / sqlite-vec come via @mnemos/db).
+  // Turbopack (`next dev --turbopack`, and the default in newer Next) ignores
+  // the webpack callback below, so the declaration is the only layer left.
   serverExternalPackages: [
     "better-sqlite3",
     "sqlite-vec",

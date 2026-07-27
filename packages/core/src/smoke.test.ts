@@ -448,7 +448,7 @@ describe("co-retrieval: getContentChunksForFile", () => {
   }
 
   it("returns content chunks (ordinal >= 0) in document order, excluding the metadata chunk", () => {
-    const fileId = seedFile("vin.txt", [0, 1, 2]);
+    const fileId = seedFile("report.txt", [0, 1, 2]);
     const got = getContentChunksForFile(db, fileId, 5, 0.42);
     expect(got.map((c) => c.ordinal)).toEqual([0, 1, 2]); // no -1, in order
     expect(got.map((c) => c.text)).toEqual(["content 0", "content 1", "content 2"]);
@@ -501,7 +501,7 @@ describe("co-retrieval: getContentChunksForFile", () => {
       expect(isInventoryQuestion(q)).toBe(true);
     }
     for (const q of [
-      "what is my car VIN?",
+      "what was the Q3 revenue?",
       "summarize the field test report",
       "when was the spec last modified?",
     ]) {
@@ -541,9 +541,9 @@ describe("co-retrieval: runQuery splices content next to a metadata-only file hi
     // File A: metadata chunk sits on the query axis (closest); its content chunk
     // is orthogonal (far), so a small top-K won't retrieve the content directly.
     const srcA = addSource(db, "/tmp/run-A");
-    const fileA = upsertFile(db, { sourceId: srcA.id, path: "vin.txt", contentHash: "a", sizeBytes: 50, mtime: 1, loader: "plaintext" }).fileId;
-    insertChunk(db, { fileId: fileA, ordinal: -1, text: "metadata for vin.txt", startOffset: 0, endOffset: 0, embedding: axis(0) });
-    insertChunk(db, { fileId: fileA, ordinal: 0, text: "the VIN is XYZ123", startOffset: 0, endOffset: 17, embedding: axis(1) });
+    const fileA = upsertFile(db, { sourceId: srcA.id, path: "report.txt", contentHash: "a", sizeBytes: 50, mtime: 1, loader: "plaintext" }).fileId;
+    insertChunk(db, { fileId: fileA, ordinal: -1, text: "metadata for report.txt", startOffset: 0, endOffset: 0, embedding: axis(0) });
+    insertChunk(db, { fileId: fileA, ordinal: 0, text: "the total is 1.42M", startOffset: 0, endOffset: 17, embedding: axis(1) });
 
     // File B: a filler content chunk near the query axis — takes the other top-K slot.
     const srcB = addSource(db, "/tmp/run-B");
@@ -557,7 +557,7 @@ describe("co-retrieval: runQuery splices content next to a metadata-only file hi
     const chat = { chat: async function* () {} } as unknown as ChatProvider;
 
     let hits: Array<{ filePath: string; text: string }> | undefined;
-    for await (const ev of runQuery(db, embedder, chat, { query: "VIN in vin.txt?", sessionId: "s1", topK: 2 })) {
+    for await (const ev of runQuery(db, embedder, chat, { query: "revenue in report.txt?", sessionId: "s1", topK: 2 })) {
       if (ev.phase === "retrieved") {
         hits = ev.hits;
         break;
@@ -565,11 +565,11 @@ describe("co-retrieval: runQuery splices content next to a metadata-only file hi
     }
 
     expect(hits).toBeDefined();
-    const vinIdx = hits!.findIndex((h) => h.text.includes("the VIN is"));
+    const totalIdx = hits!.findIndex((h) => h.text.includes("the total is"));
     // The content chunk was co-retrieved even though it didn't rank in the top-2…
-    expect(vinIdx).toBeGreaterThanOrEqual(0);
+    expect(totalIdx).toBeGreaterThanOrEqual(0);
     // …and it sits immediately after its file's metadata chunk (adjacency, not tail).
-    expect(hits![vinIdx - 1]?.text).toContain("metadata for vin.txt");
+    expect(hits![totalIdx - 1]?.text).toContain("metadata for report.txt");
   });
 });
 

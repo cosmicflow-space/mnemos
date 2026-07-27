@@ -107,7 +107,7 @@ a shell command from that input (`sh -c "find … $1"` is forbidden — see §8)
 | `index` | a selector against the buffer: `3`, `1 3 5`, `1-4`, `all` | anything else |
 
 `search` (used by `fs`) is the friendly one — it allows **spaces** so a natural query like
-`land rover` reaches the verb, which then tokenizes it (§10). Neither `search` nor `glob` may
+`annual report` reaches the verb, which then tokenizes it (§10). Neither `search` nor `glob` may
 contain `/` or `\` — a search term is a *name*, not a path, so it can't be aimed outside the
 home tree. New shapes are added in code (with tests), not invented per verb.
 
@@ -208,10 +208,17 @@ Every verb ships with tests, and **you run it by hand once** before relying on i
 
 `~/.mnemos/do/fs` (a `read` producer, `search` shape) is a **fuzzy** file-name hunt under
 `$HOME`. It **tokenizes** the query (split on camelCase, spaces, and any non-alphanumeric char,
-lowercased) and returns files whose name contains **every** token, in any order. So
-`land rover`, `LandRover`, and `Land*Rover*.pdf` all find `Land rover VIN and Sale.pdf`, and
-`pearl` finds `InnerPearl.pdf`. macOS seeds candidates from Spotlight (`mdfind`) for speed;
-Linux walks with `find`. Both share one sensitive/noise filter and an output cap:
+lowercased) and returns files whose name contains **every** token, in any order. Names are
+compared with their **separators stripped**, so the fused `annualreport` matches too. So
+`annual report`, `AnnualReport`, `annual_report`, `annualreport`, and `Annual*Report*.pdf` all find
+`Annual report 2026.pdf`, and `budget` finds `HomeBudget.pdf`. Matching is **ASCII-oriented**:
+non-alphanumerics are dropped rather than transliterated, so an accented name won't answer an
+unaccented query. A fused query is resolved by re-seeding the scan with the token's first four
+characters, so it works whenever those four survive contiguously on disk (`annualreport` → `annu`);
+a compound whose first word is shorter than that (`foobarbaz` vs `foo_bar_baz`) still misses.
+macOS seeds candidates from
+Spotlight (`mdfind`) for speed; Linux walks with `find`. Both share one sensitive/noise filter
+and an output cap:
 
 ```sh
 #!/bin/sh
@@ -230,21 +237,36 @@ seed=$(printf '%s\n' $tokens | awk '{ if (length($0) > length(m)) m = $0 } END {
 filter() { grep -v -e '/node_modules/' -e '/Library/' -e '/\.git/' -e '/\.ssh/' -e '/\.aws/'; }
 candidates() {
   if command -v mdfind >/dev/null 2>&1 && mdutil -s / 2>/dev/null | grep -q "Indexing enabled"; then
-    mdfind -onlyin "$HOME" "kMDItemFSName == '*$seed*'wc" 2>/dev/null
+    mdfind -onlyin "$HOME" "kMDItemFSName == '*$1*'wc" 2>/dev/null
   else
     find "$HOME" \( -name node_modules -o -name .git -o -name Library \) -prune \
-      -o -type f -iname "*$seed*" -print 2>/dev/null
+      -o -type f -iname "*$1*" -print 2>/dev/null
   fi
 }
-n=0
-candidates | filter | while IFS= read -r path; do
-  [ -f "$path" ] || continue
-  base=$(printf '%s' "${path##*/}" | tr 'A-Z' 'a-z'); ok=1
-  for t in $tokens; do case "$base" in *"$t"*) ;; *) ok=0; break ;; esac; done
-  [ "$ok" = 1 ] || continue
-  n=$((n + 1)); [ "$n" -le "$limit" ] || { echo "…>$limit matches; add a word." >&2; break; }
-  printf '%s\n' "$path"
-done
+# Separators are stripped from the name before comparing, so a fused query
+# ("annualreport") still matches a spaced file ("Annual report 2026.pdf").
+# The trailing `head` bounds DISCOVERY: once it has taken limit+1 lines the
+# closed pipe tears down the scan upstream, so a broad query never walks the
+# whole disk. The spare line above the cap drives the overflow hint below.
+hunt() {
+  candidates "$1" | filter | while IFS= read -r path; do
+    [ -f "$path" ] || continue
+    base=$(printf '%s' "${path##*/}" | tr -cd 'a-zA-Z0-9' | tr 'A-Z' 'a-z'); ok=1
+    for t in $tokens; do case "$base" in *"$t"*) ;; *) ok=0; break ;; esac; done
+    [ "$ok" = 1 ] && printf '%s\n' "$path"
+  done | head -n "$((limit + 1))"
+}
+out=$(hunt "$seed")
+# A fused token cannot seed the scan (no file is literally named "*annualreport*");
+# retry seeded by its first 4 chars. Every token is still required to match.
+if [ -z "$out" ]; then
+  case "$seed" in ?????*) out=$(hunt "$(printf '%s' "$seed" | cut -c1-4)") ;; esac
+fi
+[ -n "$out" ] || exit 0
+printf '%s\n' "$out" | head -n "$limit"
+if [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" -gt "$limit" ]; then
+  echo "...more than $limit matches; add another word to narrow." >&2
+fi
 exit 0
 ```
 
@@ -259,7 +281,7 @@ exit 0
 {
   "tier": "read",
   "summary": "Fuzzy-find files under your home directory by name (any word order).",
-  "usage": "/do fs <name> — e.g. /do fs land rover",
+  "usage": "/do fs <name> — e.g. /do fs annual report",
   "args": { "kind": "single", "shape": "search", "required": true },
   "role": "producer"
 }
