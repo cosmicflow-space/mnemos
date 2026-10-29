@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.2] - 2026-10-29
+
 ### Fixed
 - **A fresh clone installs and runs on current Node releases, not just Node 22.** `pnpm install` failed outright on Node 26: `better-sqlite3` 11.x compiles against V8's C++ API, which Node 26 changed, so the native build errored before Mnemos could start — even though `engines` advertises `>=22`. `better-sqlite3` is now 13.x, which is built on N-API: one prebuilt binary loads on Node 22, 24, 26 and later, ships inside the package for macOS, Linux, and Windows on x64 and arm64 (no C++ toolchain needed there; other platforms still build from source), and no longer breaks when you switch Node versions. Verified on Node 22 and 26 with a clean frozen-lockfile install, the full lint/typecheck/test gate, a production build, and a live ingest + query. The mismatch hint on DB open now says `pnpm install`, which is what moves an older checkout onto the Node-independent build. The Next.js externals no longer list `bindings`, which 13.x no longer uses, and the comments explaining why the native packages must stay external now describe the real reason.
 - **`pnpm-workspace.yaml` no longer carries a placeholder value.** The `allowBuilds` entry for `@google/genai` held the literal text pnpm writes as a prompt; it is now `false` (the package's only install script is a no-op echo).
