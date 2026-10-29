@@ -14,20 +14,19 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-// NOTE: `better-sqlite3`, `sqlite-vec`, and `bindings` MUST be webpack-external
-// — see `webpack.externals` in `apps/web/next.config.js`. The `bindings`
-// package walks Error.stack to find its caller's .node addon; webpack-rewritten
-// stack frames break that lookup (fileName ends up undefined → `.indexOf`
-// crash inside bindings.js:178). Externalizing them sends the require through
-// Node's native loader where the stack is intact.
+// NOTE: `better-sqlite3` and `sqlite-vec` MUST stay server-external — see
+// `serverExternalPackages` in `apps/web/next.config.js`. Both load a native
+// binary by a path relative to their own install directory; bundled, that path
+// points into .next/ where no binary exists. Externalizing sends the require
+// through Node's loader, which keeps the real package path.
 //
 // Externalizing is necessary but NOT sufficient: a bundler can only externalize
 // what it can resolve from the app directory, and pnpm's isolated layout links
 // a package only into the workspace that declares it. So `apps/web` declares
 // better-sqlite3 and sqlite-vec directly even though it imports them through
 // @mnemos/db. Without that, Turbopack (`next dev --turbopack`, and the default
-// in newer Next) silently bundles them instead and every DB call fails with
-// "Could not locate the bindings file".
+// in newer Next) silently bundles them instead and every DB call fails because
+// the native binary cannot be found.
 
 export type MnemosDb = BetterSqliteDb;
 
@@ -46,9 +45,10 @@ const SCHEMA_PATH = join(
 );
 
 /**
- * better-sqlite3 ships a native addon compiled against ONE Node ABI. Installing
- * with a different Node than the one that runs the server surfaces a raw
- * ERR_DLOPEN_FAILED naming no remedy, so translate it into the fix.
+ * better-sqlite3 13+ is built on N-API, so one prebuilt binary loads on every
+ * supported Node. A checkout that still holds a pre-13 build (compiled against
+ * one Node ABI) surfaces a raw ERR_DLOPEN_FAILED naming no remedy when run under
+ * a different Node, so translate it into the fix.
  */
 function openNative(path: string): BetterSqliteDb {
   try {
@@ -61,8 +61,8 @@ function openNative(path: string): BetterSqliteDb {
     if (!detail.includes("NODE_MODULE_VERSION")) throw err;
     throw new Error(
       `better-sqlite3 was built for a different Node.js version than the one running Mnemos (${process.version}). ` +
-        `Rebuild it using the same Node you start the server with:\n` +
-        `  pnpm rebuild better-sqlite3`,
+        `Reinstall dependencies to pick up the Node-independent build:\n` +
+        `  pnpm install`,
       { cause: err },
     );
   }

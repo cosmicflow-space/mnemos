@@ -12,6 +12,9 @@ minimumReleaseAge: 2880
 # native compilation (better-sqlite3, sqlite-vec, sharp, node-llama-cpp)
 # plus transitive deps that pnpm flagged (esbuild, protobufjs).
 allowBuilds:
+  # better-sqlite3 13+ ships prebuilt N-API binaries (macOS/Linux/Windows,
+  # x64/arm64). Its implicit node-gyp build is a no-op when a prebuild matches
+  # the host and compiles from source only when none does — keep it allowed.
   better-sqlite3: true
   sqlite-vec: true
   node-llama-cpp: true
@@ -21,4 +24,5 @@ allowBuilds:
   # tesseract.js's only postinstall is `opencollective-postinstall` (a donation
   # nag, no native build) — intentionally skipped. OCR works fully without it.
   tesseract.js: false
-  '@google/genai': set this to true or false
+  # @google/genai's only install script is a no-op echo.
+  '@google/genai': false

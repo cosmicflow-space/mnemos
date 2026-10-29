@@ -140,7 +140,10 @@ node -e "const fs=require('node:fs'); const os=require('node:os'); const p=requi
 
 Installs every workspace package via pnpm. Native deps (`better-sqlite3`,
 `sqlite-vec`, `node-llama-cpp`, `sharp`) are allow-listed in
-`pnpm-workspace.yaml`, so their build scripts run automatically.
+`pnpm-workspace.yaml`, so their install scripts run automatically.
+`better-sqlite3` ships prebuilt binaries for macOS, Linux, and Windows on x64
+and arm64 that work with every supported Node version; on those platforms no
+compiler is needed. Elsewhere it builds from source (needs a C++ toolchain).
 
 ```sh check all
 node -e "const fs=require('node:fs'); process.exit(fs.existsSync('node_modules/.pnpm')?0:1)"

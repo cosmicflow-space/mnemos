@@ -23,9 +23,8 @@ const requireFromWeb = createRequire(
 // A bundler can only externalize a `serverExternalPackages` entry it can resolve
 // from the app directory, and pnpm's isolated layout links a package only into
 // the workspace that declares it. These two arrive through @mnemos/db, so
-// without a direct entry the bundler inlines them and `bindings` hunts for the
-// .node addon under .next/ — "Could not locate the bindings file" on every DB
-// call. The webpack callback in next.config.js does NOT save this: Turbopack
+// without a direct entry the bundler inlines them and the native .node binary
+// is looked up under .next/, where it does not exist — every DB call fails. The webpack callback in next.config.js does NOT save this: Turbopack
 // (default from Next 16) ignores it entirely.
 const NATIVE_EXTERNALS = ["better-sqlite3", "sqlite-vec"];
 

@@ -47,7 +47,6 @@ const nextConfig = {
   serverExternalPackages: [
     "better-sqlite3",
     "sqlite-vec",
-    "bindings",
     "node-llama-cpp",
     "@xenova/transformers",
     "onnxruntime-node",
@@ -59,18 +58,14 @@ const nextConfig = {
   ],
   webpack: (config, { isServer }) => {
     if (isServer) {
-      // The `bindings` package walks Error.stack to locate the calling
-      // module's .node addon (bindings.js line 178: `fileName.indexOf(...)`).
-      // If webpack bundles bindings OR its callers, the stack frames become
-      // `webpack-internal:///...` and fileName ends up undefined — the
-      // famous "Cannot read properties of undefined (reading 'indexOf')"
-      // failure on first DB open. Externalizing both bindings AND every
-      // native-addon package that loads it sends the require through Node's
-      // native loader, where Error.stack is intact.
+      // Native-addon packages locate their .node binary relative to their own
+      // install directory (better-sqlite3 13: `../prebuilds/<platform>.node`
+      // from its __dirname). Bundled, __dirname points into .next/ where no
+      // binary exists, so the first DB open fails. Externalizing sends the
+      // require through Node's loader, which keeps the real package path.
       const nativeExternals = [
         "better-sqlite3",
         "sqlite-vec",
-        "bindings",
         "node-llama-cpp",
         "onnxruntime-node",
         "sharp",
